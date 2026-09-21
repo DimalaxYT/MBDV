@@ -1,0 +1,18 @@
+<article class="slideover">
+  <header class="slideover-head">
+    <div>
+      <p class="slideover-eyebrow">Fiche entreprise</p>
+      <h2>Entreprise introuvable</h2>
+      <p class="slideover-sub">SIREN <code class="mono">{{ siren }}</code></p>
+    </div>
+    <button class="icon-btn" data-close-slideover title="Fermer">{{ icon('x', 17) }}</button>
+  </header>
+  <div class="slideover-body">
+    <div class="banner banner-error">
+      {{ icon('alert', 15) }}
+      <span>Impossible de récupérer cette fiche : la base officielle est injoignable
+      depuis cet environnement et aucune donnée locale (portefeuille ou historique)
+      ne correspond à ce SIREN.</span>
+    </div>
+  </div>
+</article>

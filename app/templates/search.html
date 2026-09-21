@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block titre_page %}Recherche - MBDV Prospection{% endblock %}
+{% block titre %}Recherche d'entreprises{% endblock %}
+{% block sous_titre %}{{ sous_titre }}{% endblock %}
+
+{% block content %}
+
+<form class="panel search-panel" method="get" action="/">
+  <div class="search-row">
+    <div class="field field-grow">
+      <label for="f-q">Dénomination, activité ou SIREN</label>
+      <input id="f-q" type="text" name="q" value="{{ p.q }}" placeholder="Ex. boulangerie Perrin, coiffure, 810764231" spellcheck="false">
+    </div>
+    <button type="submit" class="btn btn-ink btn-tall">
+      {{ icon('search', 15) }} Rechercher
+    </button>
+  </div>
+
+  <div class="filters-grid">
+    <div class="field">
+      <label for="f-dep">Departement</label>
+      <input id="f-dep" type="text" name="departement" value="{{ p.departement }}"
+             inputmode="numeric" pattern="[0-9A-Za-z]{1,3}" placeholder="44, 75, 971..." spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="f-cp">Code postal</label>
+      <input id="f-cp" type="text" name="code_postal" value="{{ p.code_postal }}"
+             inputmode="numeric" pattern="[0-9]{5}" placeholder="44000" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="f-sec">Grand secteur</label>
+      <select id="f-sec" name="section" data-placeholder="Tous les secteurs">
+        <option value="">Tous les secteurs</option>
+        {% for code, label in [
+          ('A', 'Agriculture, sylviculture et pêche'),
+          ('B', 'Industries extractives'),
+          ('C', 'Industrie manufacturière'),
+          ('D', 'Énergie'),
+          ('E', 'Eau, assainissement, déchets'),
+          ('F', 'Construction (artisans du bâtiment)'),
+          ('G', 'Commerce et réparation automobile'),
+          ('H', 'Transports et entreposage'),
+          ('I', 'Hébergement et restauration'),
+          ('J', 'Information et communication'),
+          ('K', 'Finance et assurance'),
+          ('L', 'Immobilier'),
+          ('M', 'Activités spécialisées, scientifiques'),
+          ('N', 'Services administratifs et de soutien'),
+          ('P', 'Enseignement'),
+          ('Q', 'Santé et action sociale'),
+          ('R', 'Arts, spectacles et loisirs'),
+          ('S', 'Autres services (coiffure, beauté…)'),
+        ] %}
+        <option value="{{ code }}" {% if p.section == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="f-naf">Code NAF precis</label>
+      <input id="f-naf" type="text" name="naf" value="{{ p.naf }}" list="naf-suggestions"
+             placeholder="56.10A" spellcheck="false">
+      <datalist id="naf-suggestions">
+        <option value="10.71C">Boulangerie</option>
+        <option value="56.10A">Restauration traditionnelle</option>
+        <option value="56.10C">Restauration rapide</option>
+        <option value="56.21Z">Traiteurs</option>
+        <option value="96.02A">Coiffure</option>
+        <option value="96.02B">Soins de beauté</option>
+        <option value="43.21A">Électricité</option>
+        <option value="43.22A">Plomberie</option>
+        <option value="43.32B">Menuiserie bois et PVC</option>
+        <option value="43.91A">Maçonnerie</option>
+        <option value="43.34A">Peinture et vitrerie</option>
+        <option value="45.20A">Garage automobile</option>
+        <option value="47.73Z">Pharmacies</option>
+        <option value="55.10Z">Hotels</option>
+        <option value="81.30Z">Paysagisme</option>
+        <option value="96.01Z">Pressing</option>
+      </datalist>
+    </div>
+    <div class="field">
+      <label for="f-eff">Effectif</label>
+      <select id="f-eff" name="effectif">
+        <option value="">Toutes tailles</option>
+        {% for code, label in [
+          ('00', '0 salarié'), ('01', '1 à 2 salariés'), ('02', '3 à 5 salariés'),
+          ('03', '6 à 9 salariés'), ('11', '10 à 19 salariés'), ('12', '20 à 49 salariés'),
+          ('21', '50 à 99 salariés'),
+        ] %}
+        <option value="{{ code }}" {% if p.effectif == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="toggle-row">
+    <label class="toggle {% if p.sans_site %}on{% endif %}">
+      <input type="checkbox" name="sans_site" value="1" {% if p.sans_site %}checked{% endif %}>
+      <span class="toggle-box"></span>
+      Afficher uniquement les entreprises sans site détecté
+    </label>
+    <label class="toggle {% if p.inclure_masquees %}on{% endif %}">
+      <input type="checkbox" name="inclure_masquees" value="1" {% if p.inclure_masquees %}checked{% endif %}>
+      <span class="toggle-box"></span>
+      Inclure les entreprises masquées
+    </label>
+    <label class="toggle {% if p.inclure_fermees %}on{% endif %}">
+      <input type="checkbox" name="inclure_fermees" value="1" {% if p.inclure_fermees %}checked{% endif %}>
+      <span class="toggle-box"></span>
+      Inclure les entreprises fermées
+    </label>
+  </div>
+</form>
+
+{% if erreur %}
+<div class="banner banner-error">
+  {{ icon('alert', 15) }} <span>{{ erreur }}</span>
+</div>
+{% endif %}
+
+{% if recherche_lancee and resultats %}
+  {% if resultats.demo %}
+  <div class="banner banner-info">
+    {{ icon('info', 15) }}
+    <span>Base officielle injoignable depuis cet environnement (reseau filtre).
+    Les résultats ci-dessous sont des <strong>données de démonstration</strong> ;
+    déployé sur votre machine, l'outil interroge la base INSEE / RNE en direct.</span>
+  </div>
+  {% endif %}
+
+  <section class="panel results-panel">
+    <header class="results-head">
+      <div class="results-count">
+        {% if p.sans_site %}
+          {% if resultats.suite_possible %}Au moins{% endif %}
+          <strong>{{ resultats.total_results }}</strong> entreprise{{ 's' if resultats.total_results > 1 else '' }}
+          sans site détecté{{ 's' if resultats.total_results > 1 else '' }}
+          <span class="results-note">sur {{ resultats.analysees }} analysees</span>
+        {% else %}
+          <strong>{{ resultats.total_results }}</strong> entreprise{{ 's' if resultats.total_results > 1 else '' }}
+        {% endif %}
+      </div>
+      <div class="results-actions">
+        {% if resultats['items'] %}
+        <a class="btn btn-ghost btn-sm" href="/export.csv?{{ qs_base }}">
+          {{ icon('download', 14) }} Exporter en CSV
+        </a>
+        {% endif %}
+      </div>
+    </header>
+
+    {% if resultats['items'] %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th class="col-name">Entreprise</th>
+            <th>Localité</th>
+            <th>Activité</th>
+            <th>Effectif</th>
+            <th>Site web</th>
+            <th>Suivi</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in resultats['items'] %}
+          <tr class="result-row {% if c.masquee %}is-hidden-row{% endif %}" data-siren="{{ c.siren }}"
+              data-snapshot="{{ c|tojson }}">
+            <td class="col-name">
+              <button class="row-link" data-detail="{{ c.siren }}">
+                <span class="row-name">{{ c.nom }}</span>
+                <span class="row-sub">
+                  {% if c.forme %}{{ c.forme }} &middot; {% endif %}<code class="mono">{{ c.siren }}</code>
+                </span>
+              </button>
+            </td>
+            <td>
+              <span class="cell-strong">{{ c.commune or '-' }}</span>
+              <span class="row-sub">{{ c.code_postal }}{% if c.departement %} &middot; dept. {{ c.departement }}{% endif %}</span>
+            </td>
+            <td>
+              <span class="cell-strong">{{ c.naf_label or 'Activité non détaillée' }}</span>
+              <span class="row-sub">NAF {{ c.naf_code or '-' }}</span>
+            </td>
+            <td><span class="cell-soft">{{ c.effectif }}</span></td>
+            <td class="col-site">{% include "partials/badge_site.html" %}</td>
+            <td class="col-statut">
+              {% if c.tracked %}
+                <span class="badge st-{{ c.statut }}">{{ statut_label[c.statut] }}</span>
+              {% else %}
+                <span class="dash">&mdash;</span>
+              {% endif %}
+            </td>
+            <td class="col-actions">
+              <div class="row-actions">
+                <button class="icon-btn follow-btn {% if c.tracked %}is-on{% endif %}"
+                        data-follow title="{% if c.tracked %}Retirer du portefeuille{% else %}Ajouter au portefeuille{% endif %}">
+                  {{ icon('bookmark', 15) }}
+                </button>
+                <button class="icon-btn recheck-btn" data-recheck
+                        data-nom="{{ c.nom }}" data-enseigne="{{ c.enseigne or '' }}"
+                        title="Revérifier la présence d'un site">
+                  {{ icon('refresh', 15) }}
+                </button>
+                <button class="btn btn-danger-ghost btn-sm hide-btn" data-hide>
+                  {{ icon('eye-off', 14) }} Masquer
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="results-foot">
+      <span class="page-info">Page {{ resultats.page }} sur {{ resultats.total_pages }}</span>
+      <div class="pager">
+        {% if resultats.page > 1 %}
+          <a class="pager-btn" href="/?{{ qs_base }}&page={{ resultats.page - 1 }}">{{ icon('chevron-left', 14) }} Précédente</a>
+        {% else %}
+          <span class="pager-btn is-disabled">{{ icon('chevron-left', 14) }} Précédente</span>
+        {% endif %}
+        {% if resultats.page < resultats.total_pages %}
+          <a class="pager-btn" href="/?{{ qs_base }}&page={{ resultats.page + 1 }}">Suivante {{ icon('chevron-right', 14) }}</a>
+        {% else %}
+          <span class="pager-btn is-disabled">Suivante {{ icon('chevron-right', 14) }}</span>
+        {% endif %}
+      </div>
+    </footer>
+    {% else %}
+    <div class="empty">
+      <p class="empty-title">Aucune entreprise ne correspond</p>
+      <p class="empty-desc">Élargissez la zone géographique, retirez des filtres de taille,
+      ou interrogez directement un SIREN pour retrouver une entreprise précise.</p>
+    </div>
+    {% endif %}
+  </section>
+
+{% elif recherche_lancee and not resultats %}
+  <div class="banner banner-error">{{ icon('alert', 15) }} <span>{{ erreur or 'La recherche a echoue.' }}</span></div>
+{% else %}
+
+  <section class="panel start-panel">
+    <div class="start-inner">
+      <h2>Prêt à prospecter</h2>
+      <p>Recherchez par nom, activité, secteur ou zone. L'outil vérifie ensuite pour
+      chaque entreprise la présence d'un site web et met en evidence celles qui n'en
+      ont pas détecté : vos futurs clients.</p>
+      <div class="start-chips">
+        <a class="chip" href="/?q=coiffure&departement=44&sans_site=1">Coiffures en Loire-Atlantique {{ icon('arrow-right', 13) }}</a>
+        <a class="chip" href="/?q=boulangerie&departement=16&sans_site=1">Boulangeries en Charente {{ icon('arrow-right', 13) }}</a>
+        <a class="chip" href="/?q=restaurant&departement=75&sans_site=1">Restaurants a Paris {{ icon('arrow-right', 13) }}</a>
+        <a class="chip" href="/?departement=24&section=F&sans_site=1">Artisans du batiment en Dordogne {{ icon('arrow-right', 13) }}</a>
+      </div>
+      <p class="start-note">
+        Astuce : le filtre <strong>sans site détecté</strong> analyse plusieurs pages de
+        résultats et ne conserve que les entreprises sans domaine vérifiable.
+        La détection peut être corrigée manuellement depuis chaque fiche.
+      </p>
+    </div>
+  </section>
+
+{% endif %}
+{% endblock %}

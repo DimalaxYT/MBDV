@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block titre_page %}Portefeuille - MBDV Prospection{% endblock %}
+{% block titre %}Portefeuille commercial{% endblock %}
+{% block sous_titre %}{{ sous_titre }}{% endblock %}
+
+{% block content %}
+
+<section class="stats-grid stats-grid-6">
+  {% for code, label in statuts_pipeline %}
+  <div class="stat-card">
+    <span class="stat-value">{{ compteurs[code] }}</span>
+    <span class="stat-label">{{ label }}</span>
+  </div>
+  {% endfor %}
+</section>
+
+<section class="panel">
+  {% if items %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th class="col-name">Entreprise</th>
+          <th>Localité</th>
+          <th>Activité</th>
+          <th>Site web</th>
+          <th>Statut commercial</th>
+          <th>Ajoutée</th>
+          <th class="col-actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in items %}
+        <tr class="result-row" data-siren="{{ c.siren }}" data-snapshot="{{ c|tojson }}">
+          <td class="col-name">
+            <button class="row-link" data-detail="{{ c.siren }}">
+              <span class="row-name">{{ c.nom }}</span>
+              <span class="row-sub"><code class="mono">{{ c.siren }}</code></span>
+            </button>
+          </td>
+          <td>
+            <span class="cell-strong">{{ c.commune or '-' }}</span>
+            <span class="row-sub">{{ c.code_postal }}</span>
+          </td>
+          <td>
+            <span class="cell-strong">{{ c.naf_label or c.naf_code or '-' }}</span>
+          </td>
+          <td class="col-site">{% include "partials/badge_site.html" %}</td>
+          <td>
+            <select class="select-compact" data-statut="{{ c.siren }}">
+              {% for code, label in statuts_pipeline %}
+              <option value="{{ code }}" {% if c.statut == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td>
+            <span class="cell-soft">{{ c.added_at|dt }}</span>
+            <span class="row-sub">par {{ c.added_by }}</span>
+          </td>
+          <td class="col-actions">
+            <div class="row-actions">
+              <button class="icon-btn follow-btn is-on" data-follow title="Retirer du portefeuille">
+                {{ icon('bookmark', 15) }}
+              </button>
+              <button class="btn btn-danger-ghost btn-sm hide-btn" data-hide>{{ icon('eye-off', 14) }} Masquer</button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <p class="empty-title">Le portefeuille est vide</p>
+    <p class="empty-desc">Depuis les résultats de recherche, ajoutez des entreprises au
+    portefeuille avec l'icône marque-page pour suivre la prise de contact et la signature.</p>
+    <a class="btn btn-ink" href="/">{{ icon('search', 14) }} Lancer une recherche</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

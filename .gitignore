@@ -1,0 +1,12 @@
+# Fichiers de données locaux (base SQLite, clé de session)
+data/
+*.sqlite3
+
+# Environnement Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node (polices téléchargées ponctuellement)
+node_modules/
+*.tgz
