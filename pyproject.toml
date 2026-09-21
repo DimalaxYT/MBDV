@@ -22,3 +22,4 @@ ignore = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+pythonpath = ["."]   # import direct du paquet app/, sans installation ni PYTHONPATH
