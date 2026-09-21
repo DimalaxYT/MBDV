@@ -37,7 +37,7 @@ def create_app() -> Flask:
     # Apercu affiche dans une iframe d'un autre site : les navigateurs traitent
     # alors le cookie comme un cookie tiers et le refusent en SameSite=Lax.
     # SameSite=None + Secure + Partitioned (CHIPS) est la combinaison acceptee.
-    embarque = _env_flag("MBDV_EMBEDDED_COOKIES")
+    embarque = _env_flag("MBDV_EMBEDDED_COOKIES") or _env_flag("MBDV_EMBEDDED_SESSION")
     app.config.update(
         SECRET_KEY=_load_or_create_secret(data_dir),
         SESSION_COOKIE_HTTPONLY=True,
@@ -48,6 +48,8 @@ def create_app() -> Flask:
         PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
         MAX_CONTENT_LENGTH=2 * 1024 * 1024,
         DATA_DIR=data_dir,
+        # Session transportee dans l'URL (jeton signe) : apercu en iframe tierce.
+        EMBEDDED_SESSION=embarque,
     )
     app.logger.setLevel(logging.INFO)
     # Flask installe son propre handler : sans cela, chaque ligne sort deux fois.
@@ -70,6 +72,15 @@ def create_app() -> Flask:
 
     from . import views
     app.register_blueprint(views.bp)
+
+    @app.after_request
+    def _en_tetes(reponse):
+        if embarque:
+            # Le jeton de session circule dans l'URL : pas de fuite par Referer,
+            # pas de mise en cache par un intermediaire.
+            reponse.headers.setdefault("Referrer-Policy", "same-origin")
+            reponse.headers.setdefault("Cache-Control", "no-store")
+        return reponse
 
     @app.errorhandler(HTTPException)
     def _erreur_http(exc):

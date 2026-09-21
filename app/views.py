@@ -28,6 +28,7 @@ from .auth import (
     login_required,
     logout,
     register_failed_attempt,
+    url_avec_jeton,
 )
 from .icons import icon
 
@@ -87,8 +88,14 @@ def _destination_sure(dest) -> str:
 @bp.route("/connexion", methods=["GET", "POST"])
 def connexion():
     if current_user():
-        return redirect(url_for("views.recherche"))
+        return redirect(url_avec_jeton(url_for("views.recherche")))
     erreur = None
+    if request.method == "GET":
+        # Trace utile pour diagnostiquer un apercu qui perd son cookie de session
+        # (cookie tiers refuse dans une iframe) : voir aussi auth._csrf_guard.
+        current_app.logger.info(
+            "Formulaire de connexion servi (cookie de session recu : %s, contexte : %r)",
+            bool(request.cookies.get("session")), request.headers.get("Sec-Fetch-Dest"))
     if request.method == "POST":
         username = (request.form.get("username") or "").strip().lower()
         password = request.form.get("password") or ""
@@ -98,7 +105,7 @@ def connexion():
             row = db.one("SELECT * FROM users WHERE username = ?", (username,))
             if row and db.verify_password(password, row["password_hash"]):
                 login(row)
-                return redirect(_destination_sure(request.args.get("next")))
+                return redirect(url_avec_jeton(_destination_sure(request.args.get("next"))))
             register_failed_attempt(username)
             erreur = "Identifiant ou mot de passe incorrect."
     return render_template("login.html", erreur=erreur)

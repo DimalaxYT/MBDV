@@ -7,6 +7,7 @@
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/main.css">
   <meta name="csrf" content="{{ csrf_token() }}">
+  <meta name="session-token" content="{{ session_token() }}">
 </head>
 <body class="app {% block body_class %}{% endblock %}" data-page="{{ page_id or '' }}">
 <div class="shell">

@@ -206,12 +206,88 @@ def test_page_erreur_soignee(client):
     assert "404" in corps and "Retour à la recherche" in corps
 
 
+@pytest.fixture()
+def app_embarque(tmp_path, monkeypatch):
+    """Application en mode apercu embarque (aucun cookie de session accepte)."""
+    monkeypatch.setenv("MBDV_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MBDV_EMBEDDED_SESSION", "1")
+    monkeypatch.setattr(detect, "_resout", lambda host: False)
+    monkeypatch.setattr(gov_api, "search", faux_search(
+        lambda page: [entreprise("848902672", "CARACOLE COIFFURE")]))
+    auth._RATE.clear()
+    application = create_app()
+    application.config.update(TESTING=True)
+    return application
+
+
+def _connexion_sans_cookie(client):
+    """Parcours d'apercu : le navigateur ne conserve aucun cookie."""
+    page = client.get("/connexion").get_data(as_text=True)
+    jeton = re.search(r'name="_csrf" value="([^"]+)"', page).group(1)
+    reponse = client.post("/connexion", data={"username": "admin",
+                                              "password": "MBDV-admin-2026", "_csrf": jeton})
+    assert reponse.status_code == 302
+    assert "_s=" in reponse.headers["Location"]
+    return reponse.headers["Location"]
+
+
+def test_apercu_embarque_connexion_sans_cookie(app_embarque):
+    client = app_embarque.test_client()
+    cible = _connexion_sans_cookie(client)
+    # Le client de test conserve le cookie : on repart d'un client vierge pour
+    # simuler un navigateur qui refuse le cookie de session.
+    vierge = app_embarque.test_client()
+    page = vierge.get(cible + "&q=coiffure")
+    assert page.status_code == 200
+    corps = page.get_data(as_text=True)
+    assert "CARACOLE COIFFURE" in corps            # session reconnue sans cookie
+    assert "Espace associés" not in corps
+    assert 'name="session-token" content=""' not in corps   # jeton propage au JS
+
+
+def test_apercu_embarque_post_sans_cookie(app_embarque):
+    client = app_embarque.test_client()
+    cible = _connexion_sans_cookie(client)
+    page = client.get(cible).get_data(as_text=True)
+    jeton_csrf = re.search(r'<meta name="csrf" content="([^"]+)"', page).group(1)
+    # une requete JSON doit passer avec le jeton d'URL et le CSRF signe
+    reponse = client.post("/api/suivre?_s=" + cible.split("_s=")[1],
+                          json={"snapshot": entreprise("848902672", "CARACOLE COIFFURE")},
+                          headers={"X-CSRF-Token": jeton_csrf})
+    assert reponse.status_code == 200, reponse.get_data(as_text=True)
+    assert reponse.get_json()["tracked"] is True
+
+
+def test_apercu_embarque_jeton_invalide_ignore(app_embarque):
+    client = app_embarque.test_client()
+    reponse = client.get("/?_s=nimportequoi")
+    assert reponse.status_code == 302   # pas de session ouverte -> redirection
+
+
+def test_apercu_embarque_en_tetes_de_reponse(app_embarque):
+    client = app_embarque.test_client()
+    reponse = client.get("/connexion")
+    assert reponse.headers.get("Referrer-Policy") == "same-origin"
+    assert reponse.headers.get("Cache-Control") == "no-store"
+
+
 def test_cookies_partitionnes_pour_apercu_embarque(tmp_path, monkeypatch):
+    """Mode apercu : cookie tiers accepte (CHIPS) et jeton d'URL en secours."""
     monkeypatch.setenv("MBDV_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("MBDV_EMBEDDED_COOKIES", "1")
     application = create_app()
-    page = application.test_client().get("/connexion", base_url="https://exemple.test")
-    cookie = page.headers.get("Set-Cookie", "")
+    assert application.config["SESSION_COOKIE_SAMESITE"] == "None"
+    assert application.config["SESSION_COOKIE_SECURE"] is True
+    assert application.config["SESSION_COOKIE_PARTITIONED"] is True
+    assert application.config["EMBEDDED_SESSION"] is True
+
+    client = application.test_client()
+    page = client.get("/connexion", base_url="https://exemple.test")
+    jeton = re.search(r'name="_csrf" value="([^"]+)"', page.get_data(as_text=True)).group(1)
+    reponse = client.post("/connexion", base_url="https://exemple.test",
+                          data={"username": "admin", "password": "MBDV-admin-2026",
+                                "_csrf": jeton})
+    cookie = reponse.headers.get("Set-Cookie", "")
     assert "Partitioned" in cookie
     assert "SameSite=None" in cookie
     assert "Secure" in cookie

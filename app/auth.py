@@ -3,11 +3,31 @@ import secrets
 import time
 from datetime import datetime, timezone
 from functools import wraps
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
-from flask import abort, jsonify, redirect, render_template, request, session, url_for
+from flask import (
+    abort,
+    current_app,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 PARIS_TZ = ZoneInfo("Europe/Paris")
+
+# Mode apercu embarque (MBDV_EMBEDDED_SESSION=1) : les navigateurs refusent les
+# cookies de session dans une iframe tierce, donc la session voyage dans l'URL
+# sous forme de jeton signe (parametre _s). A n'activer que pour un apercu.
+_JETON_SEL = "mbdv-session"
+_CSRF_SEL = "mbdv-csrf"
+JETON_DUREE = 60 * 60 * 24 * 7          # validite du jeton de session
+CSRF_DUREE = 60 * 60 * 12               # validite d'un jeton CSRF signe
+_META_JETON = 'meta name="session-token"'
 
 # 12 tentatives par identifiant et 40 tentatives par adresse IP, toutes les 5 minutes.
 # Les compteurs sont en memoire : ils sont remis a zero au redemarrage du service.
@@ -16,6 +36,69 @@ _RATE_LIMIT_USER = 12
 _RATE_LIMIT_IP = 40
 _RATE_WINDOW = 300
 _RATE_MAX_KEYS = 5000
+
+
+def embarque() -> bool:
+    """Vrai si l'application tourne en mode apercu embarque (session dans l'URL)."""
+    return bool(current_app.config.get("EMBEDDED_SESSION"))
+
+
+def _serialiseur(salt: str) -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=salt)
+
+
+def jeton_session() -> str:
+    """Jeton signe transportant la session dans l'URL (mode apercu).
+
+    Retourne une chaine vide hors mode apercu, ou si la session n'est pas ouverte.
+    """
+    if not embarque():
+        return ""
+    charge = {cle: session[cle] for cle in ("uid", "username", "display_name", "csrf")
+              if cle in session}
+    if not charge:
+        # Deja porteur d'un jeton (page anonyme ayant transite par l'URL).
+        return str(request.values.get("_s") or "")
+    return _serialiseur(_JETON_SEL).dumps(charge)
+
+
+def url_avec_jeton(url: str) -> str:
+    """Ajoute le jeton de session a une URL interne (mode apercu uniquement)."""
+    jeton = jeton_session()
+    if not jeton:
+        return url
+    separateur = "&" if "?" in url else "?"
+    return f"{url}{separateur}{urlencode({'_s': jeton})}"
+
+
+def _charge_session() -> None:
+    """Hydrate la session depuis le jeton d'URL quand aucun cookie n'est disponible."""
+    if not embarque() or "uid" in session:
+        return
+    jeton = request.values.get("_s")
+    if not jeton:
+        return
+    try:
+        donnees = _serialiseur(_JETON_SEL).loads(jeton, max_age=JETON_DUREE)
+    except (BadSignature, SignatureExpired):
+        return
+    if isinstance(donnees, dict):
+        session.update(donnees)
+
+
+def _csrf_signe_valide(sent: str) -> bool:
+    """Verifie un jeton CSRF signe (mode apercu), sans etat cote serveur."""
+    try:
+        donnees = _serialiseur(_CSRF_SEL).loads(sent, max_age=CSRF_DUREE)
+    except (BadSignature, SignatureExpired, TypeError):
+        return False
+    if not isinstance(donnees, dict):
+        return False
+    attendu = session.get("csrf", "")
+    envoye = str(donnees.get("csrf") or "")
+    if attendu:
+        return secrets.compare_digest(envoye, str(attendu))
+    return True   # page anonyme : la signature suffit
 
 
 def _client_ip() -> str:
@@ -62,12 +145,12 @@ def register_failed_attempt(username: str) -> None:
 
 
 def login(user_row) -> None:
-    """Ouvre la session. session.clear() invalide l'ancien jeton CSRF : le
-    nouveau est genere a la premiere page rendue (csrf_token)."""
+    """Ouvre la session (cookie, et jeton d'URL en mode apercu)."""
     session.clear()
     session["uid"] = user_row["id"]
     session["username"] = user_row["username"]
     session["display_name"] = user_row["display_name"]
+    session["csrf"] = secrets.token_hex(16)
     session.permanent = True
 
 
@@ -86,6 +169,9 @@ def current_user():
 
 
 def csrf_token() -> str:
+    if embarque():
+        # Sans cookie, le jeton doit etre verifiable sans etat : il est signe.
+        return _serialiseur(_CSRF_SEL).dumps({"csrf": session.get("csrf") or ""})
     token = session.get("csrf")
     if not token:
         token = session["csrf"] = secrets.token_hex(16)
@@ -104,20 +190,25 @@ def login_required(view):
 
 
 def init_app(app) -> None:
+    app.before_request(_charge_session)
+
     @app.before_request
     def _csrf_guard():
         if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
             return None
         sent = request.headers.get("X-CSRF-Token") or request.form.get("_csrf", "")
         good = session.get("csrf", "")
-        if good and sent and secrets.compare_digest(sent, good):
+        if embarque():
+            if sent and _csrf_signe_valide(sent):
+                return None
+        elif good and sent and secrets.compare_digest(sent, good):
             return None
         # Diagnostic : c'est ici qu'on voit un apercu heberge qui perd son cookie.
         app.logger.warning(
-            "Ecriture refusee (CSRF) sur %s — cookie de session envoye : %s, session "
-            "chargee : %s, jeton envoye : %s, contexte : dest=%r site=%r origine=%r "
-            "referent=%r",
-            request.path, bool(request.cookies.get("session")), bool(good), bool(sent),
+            "Ecriture refusee (CSRF) sur %s — mode apercu : %s, cookie de session "
+            "envoye : %s, session chargee : %s, jeton envoye : %s, contexte : dest=%r "
+            "site=%r origine=%r referent=%r",
+            request.path, embarque(), bool(request.cookies.get("session")), bool(good), bool(sent),
             request.headers.get("Sec-Fetch-Dest"), request.headers.get("Sec-Fetch-Site"),
             request.headers.get("Origin"), request.headers.get("Referer"),
         )
@@ -142,6 +233,7 @@ def init_app(app) -> None:
         return {
             "current_user": current_user(),
             "csrf_token": csrf_token,
+            "session_token": jeton_session,
         }
 
     _register_filters(app)

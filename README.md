@@ -121,19 +121,30 @@ eventuellement `MBDV_ADMIN_USER` / `MBDV_ASSOCIE_USER`,
 `MBDV_COOKIE_SECURE=1` (cookie de session uniquement en HTTPS : a activer des
 que le site est servi en HTTPS), `MBDV_TRUST_PROXY=1` (faire confiance a
 `X-Forwarded-For` / `X-Forwarded-Proto`, uniquement derriere un reverse proxy
-de confiance), `MBDV_EMBEDDED_COOKIES=1` (apercu affiche dans une iframe d'un
-autre site : passe le cookie de session en `SameSite=None; Secure; Partitioned`,
-sans quoi le navigateur le refuse et la connexion repond « Session expiree »).
+de confiance), `MBDV_EMBEDDED_SESSION=1` ou `MBDV_EMBEDDED_COOKIES=1` (apercu
+affiche dans une iframe d'un autre site : cookie de session en
+`SameSite=None; Secure; Partitioned` et jeton de session dans l'URL si le cookie
+est malgre tout refuse — voir la section suivante).
 
 ### Apercu affiche dans une iframe
 
 Si l'application est ouverte dans un cadre appartenant a un autre site (apercus
 heberges type e2b / Codespaces), le navigateur traite le cookie de session comme
 un cookie tiers et le refuse : le POST de connexion echoue avec « Session
-expiree ou requete non autorisee ». Deux solutions : ouvrir l'apercu dans un
-onglet dedie, ou demarrer le service avec `MBDV_EMBEDDED_COOKIES=1` (cookie
-`SameSite=None; Secure; Partitioned`). Le refus est journalise avec le detail de
-la requete pour identifier la cause.
+expiree ou requete non autorisee ». Deux solutions :
+
+1. **Ouvrir l'apercu dans un onglet dedie** (les cookies redeviennent des cookies
+   de premiere partie) ;
+2. **Demarrer le service avec `MBDV_EMBEDDED_SESSION=1`** : le cookie passe en
+   `SameSite=None; Secure; Partitioned` et, meme s'il reste refuse, l'application
+   fonctionne sans cookie — la session est transportee par un jeton signe dans
+   l'URL (`_s`), propage automatiquement aux liens, aux formulaires et aux
+   appels AJAX par `static/js/app.js`. Les pages sont alors servies avec
+   `Referrer-Policy: same-origin` et `Cache-Control: no-store`.
+
+Dans les deux cas, un refus d'ecriture est journalise avec le contexte de la
+requete (mode apercu, cookie recu ou non, en-tetes `Sec-Fetch-*`) pour identifier
+la cause en une ligne.
 
 Note : Netlify et Vercel ne conviennent pas tels quels (sites statiques /
 serverless JS sans processus Python ni disque persistant).

@@ -3,12 +3,19 @@
   "use strict";
 
   var CSRF = (document.querySelector('meta[name="csrf"]') || {}).content || "";
+  // Mode apercu embarque : la session voyage dans l'URL (cookies tiers refuses).
+  var SESSION = (document.querySelector('meta[name="session-token"]') || {}).content || "";
+
+  function withSession(url) {
+    if (!SESSION || url.indexOf("_s=") >= 0) return url;
+    return url + (url.indexOf("?") >= 0 ? "&" : "?") + "_s=" + encodeURIComponent(SESSION);
+  }
 
   // ------------------------------------------------------------------
   // Utilitaires
   // ------------------------------------------------------------------
   function post(url, data) {
-    return fetch(url, {
+    return fetch(withSession(url), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -71,7 +78,7 @@
   }
 
   function loadDetail(siren) {
-    return fetch("/entreprise/" + siren + "/detail", {
+    return fetch(withSession("/entreprise/" + siren + "/detail"), {
       headers: { "X-CSRF-Token": CSRF },
     })
       .then(function (r) {
@@ -272,6 +279,31 @@
       refreshSlideover(siren);
     });
   }
+
+  // ------------------------------------------------------------------
+  // Session dans l'URL (apercu embarque) : liens et formulaires
+  // ------------------------------------------------------------------
+  function completable(form) {
+    if (!SESSION || form.querySelector('input[name="_s"]')) return;
+    var champ = document.createElement("input");
+    champ.type = "hidden";
+    champ.name = "_s";
+    champ.value = SESSION;
+    form.appendChild(champ);
+  }
+
+  document.addEventListener("submit", function (ev) {
+    if (ev.target && ev.target.tagName === "FORM") completable(ev.target);
+  }, true);
+
+  document.addEventListener("click", function (ev) {
+    if (!SESSION || !ev.target || !ev.target.closest) return;
+    var lien = ev.target.closest("a[href]");
+    if (!lien) return;
+    var href = lien.getAttribute("href") || "";
+    if (href.charAt(0) !== "/" || href.indexOf("_s=") >= 0) return;
+    lien.setAttribute("href", withSession(href));
+  }, true);
 
   // ------------------------------------------------------------------
   // Delegation d'evenements
