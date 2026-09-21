@@ -4,6 +4,7 @@ Lancement :
     python run.py
 
 Variables d'environnement reconnues :
+    PORT                  port impose par la plateforme d'hebergement (Render...)
     MBDV_PORT             port d'ecoute (5050 par defaut)
     MBDV_HOST             interface d'ecoute (0.0.0.0 par defaut)
     MBDV_DATA_DIR         dossier de donnees (./data par defaut)
@@ -19,7 +20,7 @@ from app import create_app
 app = create_app()
 
 if __name__ == "__main__":
-    port = int(os.environ.get("MBDV_PORT", "5050"))
+    port = int(os.environ.get("PORT") or os.environ.get("MBDV_PORT") or "5050")
     host = os.environ.get("MBDV_HOST", "0.0.0.0")
     print(f"MBDV - Prospection  |  http://{host}:{port}")
     try:
