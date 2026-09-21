@@ -1,4 +1,5 @@
 """Application MBDV - prospection d'entreprises francaises sans site web."""
+import hashlib
 import logging
 import os
 import secrets
@@ -28,6 +29,27 @@ def _load_or_create_secret(data_dir: str) -> str:
     return secret
 
 
+def _empreinte_assets(dossier: str) -> str:
+    """Empreinte courte des fichiers statiques, ajoutee en ?v= aux URL /static/.
+
+    Sans elle, un navigateur - ou un cache intermediaire devant l'application -
+    peut continuer a servir un CSS ou un JS perime apres un deploiement : la page
+    s'affiche alors sans mise en forme. L'empreinte change des qu'un fichier change.
+    """
+    morceaux = []
+    for racine, _dossiers, fichiers in os.walk(dossier):
+        for nom in fichiers:
+            chemin = os.path.join(racine, nom)
+            try:
+                infos = os.stat(chemin)
+            except OSError:
+                continue
+            relatif = os.path.relpath(chemin, dossier).replace(os.sep, "/")
+            morceaux.append(f"{relatif}:{int(infos.st_mtime)}:{infos.st_size}")
+    brut = "|".join(sorted(morceaux)).encode("utf-8")
+    return hashlib.sha1(brut).hexdigest()[:10]  # noqa: S324 - empreinte de cache, pas de securite
+
+
 def create_app() -> Flask:
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data_dir = os.environ.get("MBDV_DATA_DIR", os.path.join(base_dir, "data"))
@@ -53,7 +75,24 @@ def create_app() -> Flask:
         # Jeu de demonstration (entreprises fictives) : jamais utilise par defaut,
         # seulement sur demande explicite (?demo=1) et si cette option est active.
         DEMO_ALLOWED=_env_flag("MBDV_DEMO"),
+        ASSET_VERSION=_empreinte_assets(app.static_folder),
     )
+    @app.context_processor
+    def _version_des_assets():
+        return {"asset_version": app.config["ASSET_VERSION"]}
+
+    @app.after_request
+    def _pas_de_cache_pour_les_assets(reponse):
+        """CSS et JS : aucun stockage intermediaire.
+
+        L'empreinte en ?v= suffit normalement, mais un cache intermediaire qui
+        conserverait une copie partielle du fichier laisserait la page sans mise
+        en forme. Ici, ces fichiers sont toujours revalides.
+        """
+        if request.path.startswith("/static/") and request.path.endswith((".css", ".js")):
+            reponse.headers["Cache-Control"] = "no-store, must-revalidate"
+        return reponse
+
     app.logger.setLevel(logging.INFO)
     # Flask installe son propre handler : sans cela, chaque ligne sort deux fois.
     app.logger.propagate = False

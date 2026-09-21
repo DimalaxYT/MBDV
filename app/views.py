@@ -108,7 +108,10 @@ def connexion():
         else:
             row = db.one("SELECT * FROM users WHERE username = ?", (username,))
             if row and db.verify_password(password, row["password_hash"]):
-                login(row)
+                # Case "rester connecte" du formulaire (cochee par defaut).
+                rester = str(request.form.get("rester_connecte") or "").lower() not in {
+                    "", "0", "non", "false", "off"}
+                login(row, rester_connecte=rester)
                 return redirect(url_avec_jeton(_destination_sure(request.args.get("next"))))
             register_failed_attempt(username)
             erreur = "Identifiant ou mot de passe incorrect."

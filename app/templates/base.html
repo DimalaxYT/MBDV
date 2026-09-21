@@ -9,6 +9,8 @@
     // Theme applique avant le premier rendu (aucun clignotement) : choix enregistre,
     // sinon preference du systeme.
     (function () {
+      // Sans JavaScript, aucun contenu ne doit rester invisible (.reveal).
+      document.documentElement.classList.add("js");
       try {
         var choix = localStorage.getItem("mbdv-theme");
         var sombre = choix ? choix === "dark"
@@ -19,8 +21,8 @@
       }
     })();
   </script>
-  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}?v={{ asset_version }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ asset_version }}">
   <meta name="csrf" content="{{ csrf_token() }}">
   <meta name="session-token" content="{{ session_token() }}">
 </head>
@@ -97,6 +99,6 @@
 <div id="modal-root"></div>
 <div id="toast-root" aria-live="polite"></div>
 <script type="application/json" id="raisons-masquage">{{ raisons_masquage|tojson }}</script>
-<script src="/static/js/app.js"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_version }}"></script>
 </body>
 </html>

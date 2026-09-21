@@ -4,12 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Connexion - MBDV Prospection</title>
-  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}?v={{ asset_version }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ asset_version }}">
   <meta name="csrf" content="{{ csrf_token() }}">
   <meta name="color-scheme" content="light dark">
   <script>
     (function () {
+      document.documentElement.classList.add("js");
       try {
         var choix = localStorage.getItem("mbdv-theme");
         var sombre = choix ? choix === "dark"
@@ -73,12 +74,19 @@
         <label for="f-pass">Mot de passe</label>
         <input id="f-pass" type="password" name="password" autocomplete="current-password" required>
       </div>
+      <label class="check" for="f-rester">
+        <input id="f-rester" type="checkbox" name="rester_connecte" value="1" checked>
+        <span>Rester connecté sur cet appareil
+          <small>Décoché, la session se termine dès la fermeture du navigateur.</small>
+        </span>
+      </label>
+
       <button type="submit" class="btn btn-ink btn-block">Se connecter</button>
       <p class="login-note">Accès protégé. En cas de perte de mot de passe, contactez votre associé.</p>
     </form>
   </section>
 
 </div>
-<script src="/static/js/app.js"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_version }}"></script>
 </body>
 </html>

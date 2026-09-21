@@ -1025,6 +1025,48 @@ body.login { background: var(--paper); }
 .login-card .btn { margin-top: 8px; height: 44px; }
 .login-note { margin-top: 20px; font-size: 12px; color: var(--faint); text-align: center; line-height: 1.55; }
 
+/* ---- Case a cocher (connexion) ---- */
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 4px 0 10px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+}
+.check input {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--card-2);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.check input:hover { border-color: var(--faint); }
+.check input:checked { background: var(--accent); border-color: var(--accent); }
+.check input:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid var(--ink-contrast);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.check input:focus-visible { outline: none; box-shadow: var(--ring); }
+.check:has(input:checked) { color: var(--ink); }
+.check small { display: block; margin-top: 3px; font-size: 11.5px; color: var(--faint); line-height: 1.5; }
+
 /* ---- Divers formulaires ---- */
 .stack-form { padding: 26px; display: flex; flex-direction: column; gap: 16px; }
 .form-actions { display: flex; justify-content: flex-end; }
@@ -1047,6 +1089,14 @@ body.login { background: var(--paper); }
   .login-hero { display: none; }
 }
 @media (max-width: 760px) {
+  .hero { padding: 26px 20px 24px; }
+  .hero-cta { gap: 8px; }
+  .hero-cta .btn { flex: 1 1 auto; justify-content: center; }
+  .widgets { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .widget { padding: 15px 15px 16px; }
+  .widget-value { font-size: 26px; }
+  .pip-row { grid-template-columns: 88px 1fr 28px; gap: 8px; }
+  .login-card { padding: 28px 22px 24px; }
   .filters-grid { grid-template-columns: 1fr 1fr; }
   .search-row { flex-direction: column; align-items: stretch; }
   .stats-grid, .stats-grid-4, .stats-grid-6 { grid-template-columns: 1fr 1fr; }
@@ -1079,8 +1129,9 @@ body.login { background: var(--paper); }
   to   { stroke-dashoffset: 0; }
 }
 
-/* Apparition au defilement : .reveal + .is-visible (IntersectionObserver) */
-.reveal { opacity: 0; }
+/* Apparition au defilement : .reveal + .is-visible (IntersectionObserver).
+   La classe .js est posee par <html> : sans JavaScript, rien ne reste invisible. */
+html.js .reveal { opacity: 0; }
 .reveal.is-visible {
   animation: levee 0.55s cubic-bezier(0.22, 0.7, 0.3, 1) both;
   animation-delay: var(--delai, 0ms);
@@ -1150,7 +1201,7 @@ body.login { background: var(--paper); }
 /* ---- Widgets d'indicateurs ---- */
 .widgets {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
   gap: 14px;
   margin-top: 16px;
 }
@@ -1379,8 +1430,13 @@ body.sidebar-hidden .sidebar-rail { display: block; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
-  .reveal { opacity: 1; }
+  html.js .reveal { opacity: 1; }
   .is-visible .pip-fill { width: max(var(--part, 0%), 3%); }
+}
+
+@media (max-width: 540px) {
+  .widgets { grid-template-columns: 1fr; }
+  .steps-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 1020px) {

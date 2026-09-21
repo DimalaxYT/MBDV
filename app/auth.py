@@ -25,7 +25,11 @@ PARIS_TZ = ZoneInfo("Europe/Paris")
 # sous forme de jeton signe (parametre _s). A n'activer que pour un apercu.
 _JETON_SEL = "mbdv-session"
 _CSRF_SEL = "mbdv-csrf"
-JETON_DUREE = 60 * 60 * 24 * 7          # validite du jeton de session
+# Duree du jeton d'URL (mode apercu) : elle suit la case "rester connecte" du
+# formulaire de connexion, faute de pouvoir poser un cookie de session ici.
+JETON_DUREE_LONGUE = 60 * 60 * 24 * 30  # "rester connecte" coche : 30 jours
+JETON_DUREE_COURTE = 60 * 60 * 12       # decoche : le temps d'une journee de travail
+JETON_DUREE = JETON_DUREE_LONGUE        # duree maximale acceptee a la lecture
 CSRF_DUREE = 60 * 60 * 12               # validite d'un jeton CSRF signe
 _META_JETON = 'meta name="session-token"'
 
@@ -47,6 +51,11 @@ def _serialiseur(salt: str) -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=salt)
 
 
+def duree_jeton() -> int:
+    """Duree de validite du jeton d'URL, selon le choix fait a la connexion."""
+    return JETON_DUREE_LONGUE if session.get("rester_connecte") else JETON_DUREE_COURTE
+
+
 def jeton_session() -> str:
     """Jeton signe transportant la session dans l'URL (mode apercu).
 
@@ -54,11 +63,19 @@ def jeton_session() -> str:
     """
     if not embarque():
         return ""
-    charge = {cle: session[cle] for cle in ("uid", "username", "display_name", "csrf")
+    # "rester_connecte" doit voyager avec la session : sans lui, les pages
+    # suivantes resigneraient un jeton court et l'utilisateur serait deconnecte
+    # au bout de 12 h malgre sa case cochee.
+    charge = {cle: session[cle] for cle in
+              ("uid", "username", "display_name", "csrf", "rester_connecte")
               if cle in session}
     if not charge:
         # Deja porteur d'un jeton (page anonyme ayant transite par l'URL).
         return str(request.values.get("_s") or "")
+    # itsdangerous n'accepte de duree qu'a la lecture : l'echeance voyage donc
+    # dans la charge utile, et c'est elle qui distingue "rester connecte" du
+    # simple maintien de session.
+    charge["exp"] = int(time.time()) + duree_jeton()
     return _serialiseur(_JETON_SEL).dumps(charge)
 
 
@@ -82,8 +99,13 @@ def _charge_session() -> None:
         donnees = _serialiseur(_JETON_SEL).loads(jeton, max_age=JETON_DUREE)
     except (BadSignature, SignatureExpired):
         return
-    if isinstance(donnees, dict):
-        session.update(donnees)
+    if not isinstance(donnees, dict):
+        return
+    echeance = donnees.pop("exp", None)
+    if echeance is not None and float(echeance) < time.time():
+        # Jeton emis sans "rester connecte" et arrive a echeance.
+        return
+    session.update(donnees)
 
 
 def _csrf_signe_valide(sent: str) -> bool:
@@ -144,14 +166,21 @@ def register_failed_attempt(username: str) -> None:
             _RATE.pop(cle, None)
 
 
-def login(user_row) -> None:
-    """Ouvre la session (cookie, et jeton d'URL en mode apercu)."""
+def login(user_row, rester_connecte: bool = True) -> None:
+    """Ouvre la session (cookie, et jeton d'URL en mode apercu).
+
+    `rester_connecte` vient de la case du formulaire de connexion : cochee, la
+    session survit a la fermeture du navigateur (cookie persistant de 30 jours,
+    jeton d'URL de 30 jours) ; decochee, elle s'arrete a la fermeture du
+    navigateur (cookie de session, jeton d'URL de 12 heures).
+    """
     session.clear()
     session["uid"] = user_row["id"]
     session["username"] = user_row["username"]
     session["display_name"] = user_row["display_name"]
     session["csrf"] = secrets.token_hex(16)
-    session.permanent = True
+    session["rester_connecte"] = bool(rester_connecte)
+    session.permanent = bool(rester_connecte)
 
 
 def logout() -> None:

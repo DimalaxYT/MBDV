@@ -88,12 +88,13 @@ def client(app):
 
 
 def connexion(client, username="admin", password="MBDV-admin-2026",  # noqa: S107
-              ip="127.0.0.1", **params):
+              ip="127.0.0.1", formulaire=None, **params):
     page = client.get("/connexion")
     token = re.search(r'name="_csrf" value="([^"]+)"', page.get_data(as_text=True)).group(1)
+    donnees = {"username": username, "password": password, "_csrf": token}
+    donnees.update(formulaire or {})
     return client.post("/connexion", query_string=params,
-                       data={"username": username, "password": password, "_csrf": token},
-                       environ_base={"REMOTE_ADDR": ip})
+                       data=donnees, environ_base={"REMOTE_ADDR": ip})
 
 
 def jeton(client, path="/"):
@@ -234,15 +235,17 @@ def app_embarque(tmp_path, monkeypatch):
     return application
 
 
-def _connexion_sans_cookie(client):
+def _connexion_sans_cookie(client, rester=None):
     """Parcours d'apercu : le navigateur ne conserve aucun cookie.
 
     Renvoie (url d'arrivee, jeton de session) — l'arrivee est la page d'accueil.
     """
     page = client.get("/connexion").get_data(as_text=True)
     jeton = re.search(r'name="_csrf" value="([^"]+)"', page).group(1)
-    reponse = client.post("/connexion", data={"username": "admin",
-                                              "password": "MBDV-admin-2026", "_csrf": jeton})
+    donnees = {"username": "admin", "password": "MBDV-admin-2026", "_csrf": jeton}
+    if rester is not None:
+        donnees["rester_connecte"] = rester
+    reponse = client.post("/connexion", data=donnees)
     assert reponse.status_code == 302
     cible = reponse.headers["Location"]
     assert "_s=" in cible
@@ -410,6 +413,120 @@ def test_barre_laterale_escamotable_presente(client):
     assert "ZONE_RAPPEL = 56" in js                    # rappel en approchant le bord
     assert "sidebar-hidden" in js
     assert "prefers-reduced-motion" in js
+
+
+def test_jeton_long_conserve_apres_plusieurs_pages(app_embarque):
+    """Case cochee : les pages suivantes resignent un jeton de 30 jours.
+
+    Regression : le choix ne voyageait pas dans le jeton, si bien que la page
+    suivante retombait sur la duree courte (12 h) malgre la case cochee.
+    """
+    import time
+
+    from itsdangerous import URLSafeTimedSerializer
+    client = app_embarque.test_client()
+    _, jeton = _connexion_sans_cookie(client, rester="1")
+    page = client.get("/accueil?_s=" + jeton).get_data(as_text=True)
+    nouveau = re.search(r'<meta name="session-token" content="([^"]+)"', page).group(1)
+    charge = URLSafeTimedSerializer(app_embarque.config["SECRET_KEY"],
+                                    salt="mbdv-session").loads(nouveau)
+    assert charge["rester_connecte"] is True
+    assert 29 * 86400 < charge["exp"] - time.time() <= 30 * 86400 + 60
+
+
+def test_jeton_court_sans_la_case(app_embarque):
+    """Case decochee : jeton de 12 h, renouvele a chaque page consultee."""
+    import time
+
+    from itsdangerous import URLSafeTimedSerializer
+    client = app_embarque.test_client()
+    _, jeton = _connexion_sans_cookie(client, rester="")     # case decochee
+    page = client.get("/accueil?_s=" + jeton).get_data(as_text=True)
+    nouveau = re.search(r'<meta name="session-token" content="([^"]+)"', page).group(1)
+    charge = URLSafeTimedSerializer(app_embarque.config["SECRET_KEY"],
+                                    salt="mbdv-session").loads(nouveau)
+    assert charge["rester_connecte"] is False
+    assert charge["exp"] - time.time() <= 12 * 3600 + 60
+
+
+def test_styles_et_scripts_jamais_mis_en_cache(client):
+    """CSS et JS servis sans cache intermediaire, avec l'empreinte demandee."""
+    from pathlib import Path
+    page = client.get("/connexion").get_data(as_text=True)
+    version = re.search(r"/static/css/main\.css\?v=([0-9a-f]{10})", page).group(1)
+
+    feuille = client.get(f"/static/css/main.css?v={version}")
+    assert feuille.status_code == 200
+    assert feuille.headers["Cache-Control"] == "no-store, must-revalidate"
+    corps = feuille.get_data(as_text=True)
+    assert corps == Path("app/static/css/main.css").read_text(encoding="utf-8")
+    # Garde-fou : la feuille servie contient bien toutes les regles de l'accueil,
+    # de la barre laterale et de la page de connexion.
+    for regle in (".widgets {", ".pip-track", ".step-card", ".sidebar-rail {",
+                  "body.sidebar-hidden .sidebar", ".check input:checked"):
+        assert regle in corps
+
+    script = client.get(f"/static/js/app.js?v={version}")
+    assert script.headers["Cache-Control"] == "no-store, must-revalidate"
+
+
+def test_version_des_assets_dans_les_url(client):
+    """CSS et JS sont appeles avec ?v=<empreinte> : evite de servir un fichier perime."""
+    page = client.get("/connexion").get_data(as_text=True)
+    versions = re.findall(r"/static/(?:css/main\.css|js/app\.js)\?v=([0-9a-f]{10})", page)
+    assert len(versions) == 2
+    assert len(set(versions)) == 1
+
+    accueil = client.get("/accueil")
+    assert accueil.status_code == 302            # page privee : redirection
+    connexion(client)
+    page = client.get("/accueil").get_data(as_text=True)
+    assert re.search(r"/static/css/main\.css\?v=[0-9a-f]{10}", page)
+
+
+def test_case_rester_connecte_cochee(client):
+    """Case "rester connecte" : cochee, le cookie de session est persistant."""
+    page = client.get("/connexion").get_data(as_text=True)
+    assert 'name="rester_connecte"' in page
+    assert 'value="1" checked' in page           # cochee par defaut
+
+    connexion(client, formulaire={"rester_connecte": "1"})
+    cookie = client.get_cookie("session")
+    assert cookie is not None
+    assert cookie.expires is not None            # cookie persistant
+
+
+def test_case_rester_connecte_decochee(app):
+    """Decochee : cookie de session, efface a la fermeture du navigateur."""
+    client = app.test_client()
+    connexion(client)                            # la case n'est pas envoyee
+    cookie = client.get_cookie("session")
+    assert cookie is not None
+    assert cookie.expires is None
+
+    with client.session_transaction() as sess:
+        assert sess.get("rester_connecte") is False
+
+
+def test_duree_du_jeton_selon_la_case(app):
+    """Mode apercu : le jeton d'URL suit lui aussi le choix fait a la connexion."""
+    from flask import session as fsession
+    with app.test_request_context("/"):
+        fsession["rester_connecte"] = True
+        assert auth.duree_jeton() == auth.JETON_DUREE_LONGUE == 30 * 24 * 3600
+        fsession["rester_connecte"] = False
+        assert auth.duree_jeton() == auth.JETON_DUREE_COURTE == 12 * 3600
+
+
+def test_contenu_visible_sans_javascript(client):
+    """Sans JavaScript, les elements d'apparition restent visibles (classe .js)."""
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    assert "html.js .reveal { opacity: 0; }" in css
+    assert "\n.reveal { opacity: 0; }" not in css
+    connexion(client)
+    page = client.get("/accueil").get_data(as_text=True)
+    assert "classList.add(\"js\")" in page     # posee avant le premier rendu
 
 
 def test_libelles_de_section_masques_en_barre_reduite(client):

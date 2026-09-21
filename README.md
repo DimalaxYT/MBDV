@@ -195,6 +195,13 @@ pyproject.toml          configuration ruff + pytest
 - **Barre laterale escamotable** (ecrans larges, pointeur precis) : apres 1,5 s sans
   survol elle se replie ; approcher le curseur du bord gauche (56 px) ou du rail
   orange la ramene. Elle reste ouverte tant que le clavier navigue dedans.
+- **Connexion** : case « Rester connecté sur cet appareil » (cochée par défaut).
+  Cochée : session de 30 jours ; décochée : la session s'arrête à la fermeture du
+  navigateur (jeton d'URL de 12 h en mode aperçu).
+- **Assets versionnés** : le CSS et le JS sont appelés avec une empreinte
+  (`?v=...`) recalculée à chaque changement et servis en `no-store`, pour qu'un
+  cache navigateur ou intermédiaire ne puisse pas figer une ancienne feuille de
+  style (page sans mise en forme).
 - Theme **clair / sombre** : bouton dans la barre superieure (et sur la page de
   connexion). Le choix est memorise dans le navigateur ; sans choix, la
   preference du systeme est suivie. Le theme est applique avant le premier rendu
