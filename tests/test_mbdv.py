@@ -181,6 +181,42 @@ def test_x_forwarded_for_non_usurpable(client, monkeypatch):
     assert "Trop de tentatives" in reponse.get_data(as_text=True)
 
 
+def test_formulaire_sans_cookie_reste_utilisable(client, caplog):
+    """Cookie de session perdu (apercu en iframe) : on reaffiche le formulaire."""
+    client.application.logger.propagate = True  # pour que caplog voie le journal
+    reponse = client.post("/connexion", data={"username": "admin", "password": "MBDV-admin-2026"})
+    corps = reponse.get_data(as_text=True)
+    assert reponse.status_code == 400
+    assert "Bad Request" not in corps
+    assert 'name="_csrf"' in corps            # un jeton neuf est fourni
+    assert "cookie de session" in corps       # message actionnable
+    assert "Ecriture refusee (CSRF)" in caplog.text
+
+
+def test_api_sans_cookie_repond_en_json(client):
+    reponse = client.post("/api/masquer", json={"siren": "123456789"})
+    assert reponse.status_code == 400
+    assert reponse.is_json and reponse.get_json()["ok"] is False
+
+
+def test_page_erreur_soignee(client):
+    reponse = client.get("/inexistant")
+    assert reponse.status_code == 404
+    corps = reponse.get_data(as_text=True)
+    assert "404" in corps and "Retour à la recherche" in corps
+
+
+def test_cookies_partitionnes_pour_apercu_embarque(tmp_path, monkeypatch):
+    monkeypatch.setenv("MBDV_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MBDV_EMBEDDED_COOKIES", "1")
+    application = create_app()
+    page = application.test_client().get("/connexion", base_url="https://exemple.test")
+    cookie = page.headers.get("Set-Cookie", "")
+    assert "Partitioned" in cookie
+    assert "SameSite=None" in cookie
+    assert "Secure" in cookie
+
+
 # --------------------------------------------------------------------------
 # Attribut data-snapshot : le bug qui cassait masquage / suivi / reverification
 # --------------------------------------------------------------------------

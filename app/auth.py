@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from functools import wraps
 from zoneinfo import ZoneInfo
 
-from flask import abort, redirect, request, session, url_for
+from flask import abort, jsonify, redirect, render_template, request, session, url_for
 
 PARIS_TZ = ZoneInfo("Europe/Paris")
 
@@ -106,13 +106,36 @@ def login_required(view):
 def init_app(app) -> None:
     @app.before_request
     def _csrf_guard():
-        if request.method != "POST":
-            return
+        if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+            return None
         sent = request.headers.get("X-CSRF-Token") or request.form.get("_csrf", "")
         good = session.get("csrf", "")
-        if not good or not sent or not secrets.compare_digest(sent, good):
-            abort(400, "Session expiree ou requete non autorisee. Rechargez la page.")
-        return
+        if good and sent and secrets.compare_digest(sent, good):
+            return None
+        # Diagnostic : c'est ici qu'on voit un apercu heberge qui perd son cookie.
+        app.logger.warning(
+            "Ecriture refusee (CSRF) sur %s — cookie de session envoye : %s, session "
+            "chargee : %s, jeton envoye : %s, contexte : dest=%r site=%r origine=%r "
+            "referent=%r",
+            request.path, bool(request.cookies.get("session")), bool(good), bool(sent),
+            request.headers.get("Sec-Fetch-Dest"), request.headers.get("Sec-Fetch-Site"),
+            request.headers.get("Origin"), request.headers.get("Referer"),
+        )
+        if request.path.startswith("/api/") or request.path.startswith("/entreprise/"):
+            return jsonify({"ok": False,
+                            "error": "Session expirée. Rechargez la page."}), 400
+        if request.path == "/connexion":
+            # Formulaire perime (page ouverte avant un redemarrage) ou cookie de
+            # session non conserve par le navigateur : on reaffiche le formulaire
+            # avec un jeton neuf plutot qu'une page "Bad Request" sans issue.
+            message = "Session expirée, merci de saisir vos identifiants à nouveau."
+            if not good:
+                message = ("Votre navigateur n'a pas conservé le cookie de session. "
+                           "Si la page est affichée dans un cadre, ouvrez-la dans un "
+                           "onglet dédié puis reconnectez-vous.")
+            return render_template("login.html", erreur=message), 400
+        abort(400, "Session expiree ou requete non autorisee. Rechargez la page.")
+        return None
 
     @app.context_processor
     def _inject():

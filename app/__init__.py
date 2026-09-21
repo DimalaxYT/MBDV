@@ -3,7 +3,8 @@ import logging
 import os
 import secrets
 
-from flask import Flask
+from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import HTTPException
 
 _DEFAULT_SECRET_FILE = "secret.key"  # noqa: S105 - nom de fichier, pas un secret
 
@@ -33,12 +34,17 @@ def create_app() -> Flask:
     os.makedirs(data_dir, exist_ok=True)
 
     app = Flask(__name__)
+    # Apercu affiche dans une iframe d'un autre site : les navigateurs traitent
+    # alors le cookie comme un cookie tiers et le refusent en SameSite=Lax.
+    # SameSite=None + Secure + Partitioned (CHIPS) est la combinaison acceptee.
+    embarque = _env_flag("MBDV_EMBEDDED_COOKIES")
     app.config.update(
         SECRET_KEY=_load_or_create_secret(data_dir),
         SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SAMESITE="None" if embarque else "Lax",
         # A activer (MBDV_COOKIE_SECURE=1) des que le site est servi en HTTPS.
-        SESSION_COOKIE_SECURE=_env_flag("MBDV_COOKIE_SECURE"),
+        SESSION_COOKIE_SECURE=embarque or _env_flag("MBDV_COOKIE_SECURE"),
+        SESSION_COOKIE_PARTITIONED=embarque,
         PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
         MAX_CONTENT_LENGTH=2 * 1024 * 1024,
         DATA_DIR=data_dir,
@@ -64,5 +70,14 @@ def create_app() -> Flask:
 
     from . import views
     app.register_blueprint(views.bp)
+
+    @app.errorhandler(HTTPException)
+    def _erreur_http(exc):
+        """Erreurs HTTP dans le style de l'application, et en JSON pour le JS."""
+        if request.path.startswith(("/api/", "/entreprise/")):
+            return jsonify({"ok": False, "error": exc.description or exc.name}), exc.code
+        return render_template(
+            "erreur.html", code=exc.code, titre=exc.name, message=exc.description
+        ), exc.code
 
     return app

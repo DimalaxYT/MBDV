@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block titre_page %}{{ code }} - MBDV Prospection{% endblock %}
+{% block titre %}{{ titre or 'Erreur' }}{% endblock %}
+{% block sous_titre %}{{ message }}{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="empty">
+    <p class="empty-title">{{ code }} — {{ titre or 'Erreur' }}</p>
+    <p class="empty-desc">{{ message }}</p>
+    <p><a class="btn btn-ink" href="/">Retour à la recherche</a></p>
+  </div>
+</section>
+{% endblock %}

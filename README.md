@@ -121,7 +121,19 @@ eventuellement `MBDV_ADMIN_USER` / `MBDV_ASSOCIE_USER`,
 `MBDV_COOKIE_SECURE=1` (cookie de session uniquement en HTTPS : a activer des
 que le site est servi en HTTPS), `MBDV_TRUST_PROXY=1` (faire confiance a
 `X-Forwarded-For` / `X-Forwarded-Proto`, uniquement derriere un reverse proxy
-de confiance).
+de confiance), `MBDV_EMBEDDED_COOKIES=1` (apercu affiche dans une iframe d'un
+autre site : passe le cookie de session en `SameSite=None; Secure; Partitioned`,
+sans quoi le navigateur le refuse et la connexion repond « Session expiree »).
+
+### Apercu affiche dans une iframe
+
+Si l'application est ouverte dans un cadre appartenant a un autre site (apercus
+heberges type e2b / Codespaces), le navigateur traite le cookie de session comme
+un cookie tiers et le refuse : le POST de connexion echoue avec « Session
+expiree ou requete non autorisee ». Deux solutions : ouvrir l'apercu dans un
+onglet dedie, ou demarrer le service avec `MBDV_EMBEDDED_COOKIES=1` (cookie
+`SameSite=None; Secure; Partitioned`). Le refus est journalise avec le detail de
+la requete pour identifier la cause.
 
 Note : Netlify et Vercel ne conviennent pas tels quels (sites statiques /
 serverless JS sans processus Python ni disque persistant).
