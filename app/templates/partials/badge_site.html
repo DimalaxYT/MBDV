@@ -1,0 +1,11 @@
+{% if c.site.status == 'aucun' %}
+  <span class="badge b-aucun" data-site-badge>
+    <span class="badge-dot"></span>{% if c.site.source == 'manuel_sans' %}Sans site — confirmé{% else %}Sans site détecté{% endif %}
+  </span>
+{% elif c.site.status == 'site' %}
+  <span class="badge b-site" data-site-badge title="Domaine détecté : {{ c.site.domain }}">
+    <span class="badge-dot"></span><span class="badge-domain">{{ c.site.domain }}</span>
+  </span>
+{% else %}
+  <span class="badge b-inconnu" data-site-badge><span class="badge-dot"></span>À vérifier</span>
+{% endif %}

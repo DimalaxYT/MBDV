@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block titre_page %}Panel staff - MBDV Prospection{% endblock %}
+{% block titre %}Panel staff{% endblock %}
+{% block sous_titre %}{{ sous_titre }}{% endblock %}
+
+{% block content %}
+
+<section class="stats-grid stats-grid-4">
+  <div class="stat-card">
+    <span class="stat-value">{{ stats.actives }}</span>
+    <span class="stat-label">Entreprises masquées</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-value">{{ stats.restaurees }}</span>
+    <span class="stat-label">Réaffichées</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-value">{{ stats.semaine }}</span>
+    <span class="stat-label">Masquées ces 7 jours</span>
+  </div>
+  <div class="stat-card stat-card-wide">
+    <span class="stat-value stat-value-sm">{{ stats.top_raison or '-' }}</span>
+    <span class="stat-label">Raison principale{% if stats.top_raison %} ({{ stats.top_raison_n }} cas){% endif %}</span>
+  </div>
+</section>
+
+<section class="panel">
+  <header class="filter-bar">
+    <nav class="tabs">
+      <a class="tab {% if etat == 'actives' %}active{% endif %}" href="/staff?etat=actives{% if q %}&q={{ q }}{% endif %}">Masquées</a>
+      <a class="tab {% if etat == 'restaurees' %}active{% endif %}" href="/staff?etat=restaurees{% if q %}&q={{ q }}{% endif %}">Réaffichées</a>
+      <a class="tab {% if etat == 'toutes' %}active{% endif %}" href="/staff?etat=toutes{% if q %}&q={{ q }}{% endif %}">Tout l'historique</a>
+    </nav>
+    <form class="filter-search" method="get" action="/staff">
+      <input type="hidden" name="etat" value="{{ etat }}">
+      <input type="search" name="q" value="{{ q }}" placeholder="Rechercher un nom, un SIREN, une note..." spellcheck="false">
+      <button type="submit" class="icon-btn">{{ icon('search', 15) }}</button>
+    </form>
+  </header>
+
+  {% if entrees %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th class="col-name">Entreprise</th>
+          <th>Raison du masquage</th>
+          <th>Masquée par</th>
+          <th>Date</th>
+          <th>Etat</th>
+          <th class="col-actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entrees %}
+        <tr class="{% if e.restored_at %}is-restored{% endif %}" data-hide-id="{{ e.id }}">
+          <td class="col-name">
+            <span class="row-name">{{ e.nom }}</span>
+            <span class="row-sub">
+              <code class="mono">{{ e.siren }}</code>
+              {% if e.commune %} &middot; {{ e.commune }}{% if e.code_postal %} ({{ e.code_postal }}){% endif %}{% endif %}
+            </span>
+          </td>
+          <td>
+            <span class="badge b-raison">{{ e.raison }}</span>
+            {% if e.details %}<span class="row-sub note-quote">{{ e.details }}</span>{% endif %}
+          </td>
+          <td>
+            <span class="cell-strong">{{ e.hidden_by }}</span>
+          </td>
+          <td><span class="cell-soft mono-sm">{{ e.hidden_at|dt }}</span></td>
+          <td>
+            {% if e.restored_at %}
+              <span class="badge b-restauree"><span class="badge-dot"></span>Réaffichée</span>
+              <span class="row-sub">le {{ e.restored_at|dt }} par {{ e.restored_by }}</span>
+            {% else %}
+              <span class="badge b-masquee"><span class="badge-dot"></span>Masquee</span>
+            {% endif %}
+          </td>
+          <td class="col-actions">
+            {% if not e.restored_at %}
+            <button class="btn btn-ghost btn-sm restore-btn" data-restore="{{ e.id }}">
+              {{ icon('restore', 14) }} Reafficher
+            </button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <p class="empty-title">Aucun masquage dans cette vue</p>
+    <p class="empty-desc">Lorsqu'un associé masque une entreprise depuis la recherche,
+    la raison, l'auteur et la date apparaissent ici.</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
