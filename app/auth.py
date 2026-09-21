@@ -184,7 +184,10 @@ def login_required(view):
         if current_user() is None:
             if request.path.startswith("/api/") or request.path.startswith("/entreprise/"):
                 abort(401)
-            return redirect(url_for("views.connexion", next=request.path))
+            # La racine n'a pas besoin de "next" : apres connexion on veut la page
+            # d'accueil (explication de l'outil), pas la recherche directement.
+            suite = "" if request.path == "/" else request.path
+            return redirect(url_for("views.connexion", next=suite or None))
         return view(*args, **kwargs)
     return wrapped
 

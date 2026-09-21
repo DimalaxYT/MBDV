@@ -334,6 +334,10 @@ def test_accueil_accessible_depuis_la_navigation(client):
     html = client.get("/").get_data(as_text=True)
     assert 'href="/accueil"' in html                # entree de menu + marque
     assert "Accueil" in html
+    # barre reduite : les icones doivent rester identifiables
+    for infobulle in ("Accueil", "Recherche d'entreprises", "Portefeuille commercial",
+                      "Panel staff", "Mon mot de passe"):
+        assert f'title="{infobulle}"' in html
 
 
 def test_accueil_protege_par_la_connexion(client):
@@ -345,6 +349,32 @@ def test_accueil_protege_par_la_connexion(client):
 def test_next_prime_sur_la_page_d_accueil(client):
     reponse = connexion(client, next="/staff")
     assert reponse.headers["Location"] == "/staff"
+
+
+def test_visite_de_la_racine_mene_a_l_accueil(client):
+    """Simple visite de / sans session : apres connexion, page d'accueil."""
+    reponse = client.get("/")
+    assert reponse.status_code == 302
+    assert reponse.headers["Location"] == "/connexion"      # pas de ?next=/
+    reponse = connexion(client)
+    assert reponse.headers["Location"] == "/accueil"
+
+
+def test_visite_d_une_page_precise_est_conservee(client):
+    reponse = client.get("/portefeuille")
+    assert reponse.headers["Location"] == "/connexion?next=/portefeuille"
+    assert connexion(client, next="/portefeuille").headers["Location"] == "/portefeuille"
+
+
+def test_libelles_de_section_masques_en_barre_reduite(client):
+    """Le libelle "Pilotage" debordait de la barre laterale reduite (68 px)."""
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    reduit = css.split("@media (max-width: 1020px) {")[1].split("\n}")[0]
+    assert ".nav-label { display: none; }" in reduit
+    assert ".sidebar-foot .nav-label" not in reduit     # ancienne regle trop etroite
+    assert ".nav-label { text-align: center" not in reduit
+    assert "overflow: hidden" in css.split(".sidebar {")[1][:400]
 
 
 # --------------------------------------------------------------------------

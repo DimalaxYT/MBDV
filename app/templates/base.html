@@ -36,23 +36,23 @@
 
     <nav class="nav">
       <span class="nav-label">Pilotage</span>
-      <a href="/accueil" class="nav-item {% if page_id == 'accueil' %}active{% endif %}">
+      <a href="/accueil" class="nav-item {% if page_id == 'accueil' %}active{% endif %}" title="Accueil">
         {{ icon('home') }} <span>Accueil</span>
       </a>
-      <a href="/" class="nav-item {% if page_id == 'recherche' %}active{% endif %}">
+      <a href="/" class="nav-item {% if page_id == 'recherche' %}active{% endif %}" title="Recherche d'entreprises">
         {{ icon('search') }} <span>Recherche</span>
       </a>
-      <a href="/portefeuille" class="nav-item {% if page_id == 'portefeuille' %}active{% endif %}">
+      <a href="/portefeuille" class="nav-item {% if page_id == 'portefeuille' %}active{% endif %}" title="Portefeuille commercial">
         {{ icon('briefcase') }} <span>Portefeuille</span>
       </a>
-      <a href="/staff" class="nav-item {% if page_id == 'staff' %}active{% endif %}">
+      <a href="/staff" class="nav-item {% if page_id == 'staff' %}active{% endif %}" title="Panel staff">
         {{ icon('shield') }} <span>Panel staff</span>
       </a>
     </nav>
 
     <div class="sidebar-foot">
       <span class="nav-label">Compte</span>
-      <a href="/mot-de-passe" class="nav-item nav-item-sm {% if page_id == 'motdepasse' %}active{% endif %}">
+      <a href="/mot-de-passe" class="nav-item nav-item-sm {% if page_id == 'motdepasse' %}active{% endif %}" title="Mon mot de passe">
         {{ icon('key') }} <span>Mot de passe</span>
       </a>
       <form method="post" action="/deconnexion">
