@@ -8,7 +8,7 @@ officielle est utilisee et ce jeu de donnees n'apparaît jamais.
 Les entreprises ci-dessous sont fictives mais realistes, et structurees
 exactement comme la sortie de gov_api.normalize_result().
 """
-from .gov_api import NAF_LABELS, NATURE_JURIDIQUE, EFFECTIFS, section_de
+from .gov_api import EFFECTIFS, NAF_LABELS, NATURE_JURIDIQUE, section_de
 
 
 def _e(siren, nom, forme_code, naf, date_creation, rue, cp, commune, dept, region,

@@ -5,16 +5,28 @@ import json
 import math
 import re
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from flask import (
-    Blueprint, Response, abort, jsonify, redirect, render_template, request,
-    session, url_for,
+    Blueprint,
+    Response,
+    abort,
+    current_app,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
 )
 
-from . import db, detect, demo_data, gov_api
+from . import db, demo_data, detect, gov_api
 from .auth import (
-    current_user, login, login_attempts_exhausted, login_required, logout,
+    current_user,
+    login,
+    login_attempts_exhausted,
+    login_required,
+    logout,
     register_failed_attempt,
 )
 from .icons import icon
@@ -60,6 +72,18 @@ def _inject_globales():
 # Connexion
 # --------------------------------------------------------------------------
 
+def _destination_sure(dest) -> str:
+    """Chemin interne uniquement : bloque les redirections ouvertes (//exemple.com)."""
+    secours = url_for("views.recherche")
+    texte = str(dest or "")
+    if not texte.startswith("/") or texte.startswith("//") or texte.startswith("/\\"):
+        return secours
+    analyse = urlparse(texte)
+    if analyse.scheme or analyse.netloc:
+        return secours
+    return texte
+
+
 @bp.route("/connexion", methods=["GET", "POST"])
 def connexion():
     if current_user():
@@ -74,10 +98,7 @@ def connexion():
             row = db.one("SELECT * FROM users WHERE username = ?", (username,))
             if row and db.verify_password(password, row["password_hash"]):
                 login(row)
-                dest = request.args.get("next") or url_for("views.recherche")
-                if not str(dest).startswith("/"):
-                    dest = url_for("views.recherche")
-                return redirect(dest)
+                return redirect(_destination_sure(request.args.get("next")))
             register_failed_attempt(username)
             erreur = "Identifiant ou mot de passe incorrect."
     return render_template("login.html", erreur=erreur)
@@ -130,53 +151,62 @@ def _chercher(p, max_pages: int):
             )
             return res, False
         except gov_api.ApiError:
+            current_app.logger.warning(
+                "API officielle injoignable : bascule sur le jeu de demonstration "
+                "(q=%r, departement=%r, page=%s).", p["q"], p["departement"], page)
             return demo_data.cherche(
                 q=p["q"], departement=p["departement"], code_postal=p["code_postal"],
                 section=p["section"], effectif=p["effectif"],
                 actives=not p["inclure_fermees"], page=page,
             ), True
 
-    premier, demo = recherche_source(p["page"])
     if not p["sans_site"]:
+        premier, demo = recherche_source(p["page"])
         items = [c for c in premier["items"] if p["inclure_masquees"] or c["siren"] not in masquees]
         detect.verifie_lot(items)
         return {
             "items": items, "total_results": premier["total_results"],
             "page": premier["page"], "total_pages": premier["total_pages"],
             "demo": demo, "analysees": len(premier["items"]),
+            "suite_possible": False,
         }
 
-    # Filtre "sans site" actif : on analyse plusieurs pages pour remplir la page
-    collectees = []
-    api_page = p["page"]
-    pages = 0
-    batch = premier
+    # Filtre "sans site" actif : on analyse toujours depuis la premiere page de
+    # l'API, sinon le jeu de resultats change d'une page a l'autre.
+    collectees: list = []
+    api_page = 1
+    analysees = 0
+    epuise = False
+    batch, demo = recherche_source(1)
     while True:
-        pages += 1
         detect.verifie_lot(batch["items"])
+        analysees += len(batch["items"])
         for c in batch["items"]:
             if not p["inclure_masquees"] and c["siren"] in masquees:
                 continue
             etat = detect.etat_effectif(c)
             if etat and etat["status"] == "aucun":
                 collectees.append(c)
-        if len(collectees) >= p["page"] * PER_PAGE:
+        epuise = api_page >= batch["total_pages"]
+        if len(collectees) >= p["page"] * PER_PAGE or epuise:
             break
-        if api_page >= batch["total_pages"] or pages >= max_pages:
+        if api_page >= max_pages:
             break
         api_page += 1
-        batch, _ = recherche_source(api_page)
+        batch, demo = recherche_source(api_page)
 
     total = len(collectees)
-    debut = (p["page"] - 1) * PER_PAGE
+    total_pages = max(1, math.ceil(total / PER_PAGE))
+    page = min(p["page"], total_pages)
+    debut = (page - 1) * PER_PAGE
     return {
         "items": collectees[debut:debut + PER_PAGE],
         "total_results": total,
-        "page": p["page"],
-        "total_pages": max(1, math.ceil(total / PER_PAGE)),
+        "page": page,
+        "total_pages": total_pages,
         "demo": demo,
-        "analysees": pages * PER_PAGE,
-        "suite_possible": api_page < batch["total_pages"] or pages < max_pages,
+        "analysees": analysees,
+        "suite_possible": not epuise,
     }
 
 
@@ -185,11 +215,13 @@ def _attache_etats(items):
     if not items:
         return items
     sirens = [c["siren"] for c in items]
+    # Les trous de la clause IN sont uniquement des "?" : aucune valeur concatenee.
+    trous = ",".join("?" * len(sirens))
     tracked = {r["siren"]: r for r in db.query(
-        f"SELECT * FROM tracked WHERE siren IN ({','.join('?' * len(sirens))})", sirens)}
+        f"SELECT * FROM tracked WHERE siren IN ({trous})", sirens)}  # noqa: S608
     masquees = {r["siren"] for r in db.query(
-        f"SELECT siren FROM hides WHERE restored_at IS NULL AND siren IN "
-        f"({','.join('?' * len(sirens))})", sirens)}
+        f"SELECT siren FROM hides WHERE restored_at IS NULL AND siren IN ({trous})",  # noqa: S608
+        sirens)}
     for c in items:
         etat = detect.etat_effectif(c)
         c["site"] = etat or {"status": "inconnu", "domain": None, "source": "dns",
@@ -228,6 +260,9 @@ def recherche():
             resultats["items"] = _attache_etats(resultats["items"])
             ctx["resultats"] = resultats
         except Exception:
+            current_app.logger.exception(
+                "Recherche en echec (q=%r, departement=%r, page=%s)",
+                p["q"], p["departement"], p["page"])
             ctx["erreur"] = ("Une erreur inattendue est survenue pendant la recherche. "
                              "Réessayez dans un instant.")
     return render_template("search.html", **ctx)
@@ -249,8 +284,10 @@ def export_csv():
         "SIREN", "SIRET siège", "Dénomination", "Forme juridique", "Code NAF",
         "Libellé activité", "Adresse", "Code postal", "Commune", "Département",
         "Région", "Effectif", "Date de création", "Dirigeant(s)",
-        "Site détecté", "Domaine", "Suivi", "Statut pipeline",
+        "Site détecté", "Domaine", "Suivi", "Statut pipeline", "Source des données",
     ])
+    source = ("Jeu de démonstration (entreprises fictives)" if res["demo"]
+              else "Base officielle INSEE / RNE")
     for c in items:
         dirigeants = " / ".join(d["nom"] for d in c["dirigeants"] if d["nom"])
         writer.writerow([
@@ -264,9 +301,11 @@ def export_csv():
             c["site"].get("domain") or "",
             "oui" if c.get("tracked") else "non",
             c.get("statut") or "",
+            source,
         ])
     donnees = "\ufeff" + tampon.getvalue()
-    nom_fichier = f"prospection-mbdv-{datetime.now(timezone.utc):%Y%m%d}.csv"
+    marqueur = "-DEMO" if res["demo"] else ""
+    nom_fichier = f"prospection-mbdv{marqueur}-{datetime.now(timezone.utc):%Y%m%d}.csv"
     return Response(
         donnees, mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename={nom_fichier}"},
@@ -314,6 +353,7 @@ def detail_entreprise(siren):
     try:
         company["site"] = detect.verifie(company)
     except Exception:
+        current_app.logger.exception("Detection de site impossible pour %s", siren)
         company["site"] = {"status": "inconnu", "domain": None, "source": "dns",
                            "checked_at": None}
     company["source"] = source
@@ -357,15 +397,19 @@ def api_masquer():
     if raison == "Autre" and not details:
         return jsonify({"ok": False, "error": "Précisez la raison (champ détails)."}), 400
     deja = db.one("SELECT id FROM hides WHERE siren = ? AND restored_at IS NULL", (siren,))
+    ecritures = []
     if not deja:
-        db.execute(
+        ecritures.append((
             "INSERT INTO hides (siren, nom, raison, details, snapshot, hidden_by, hidden_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
             (siren, nom, raison, details,
              json.dumps(d.get("snapshot") or {}, ensure_ascii=False),
              current_user()["username"], db.now_iso()),
-        )
-    db.execute("DELETE FROM tracked WHERE siren = ?", (siren,))
+        ))
+    # Masquage et retrait du portefeuille dans la meme transaction : jamais
+    # d'entreprise a la fois masquee et suivie.
+    ecritures.append(("DELETE FROM tracked WHERE siren = ?", (siren,)))
+    db.run_all(ecritures)
     return jsonify({"ok": True})
 
 
@@ -519,8 +563,10 @@ def staff():
         like = f"%{q}%"
         params += [like, like, like]
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    # "where" ne contient que des clauses fixes ; les valeurs passent par params.
     rows = db.query(
-        f"SELECT * FROM hides{where} ORDER BY hidden_at DESC LIMIT 300", params)
+        f"SELECT * FROM hides{where} ORDER BY hidden_at DESC LIMIT 300",  # noqa: S608
+        params)
 
     total_actives = db.one("SELECT COUNT(*) n FROM hides WHERE restored_at IS NULL")["n"]
     total_restaurees = db.one("SELECT COUNT(*) n FROM hides WHERE restored_at IS NOT NULL")["n"]

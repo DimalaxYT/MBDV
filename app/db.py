@@ -57,6 +57,9 @@ CREATE TABLE IF NOT EXISTS tracked (
 );
 """
 
+# Mots de passe livres dans le README : on alerte tant qu'ils n'ont pas ete changes.
+DEFAULT_PASSWORDS = {"MBDV-admin-2026", "MBDV-associe-2026"}
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -71,6 +74,9 @@ def _connect(path=None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    # Plusieurs threads waitress ecrivent dans le meme fichier : on attend le
+    # verrou plutot que de renvoyer "database is locked".
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -128,16 +134,18 @@ def _seed_users(app) -> None:
             os.environ.get("MBDV_ADMIN_USER", "admin"),
             os.environ.get("MBDV_ADMIN_PASSWORD", "MBDV-admin-2026"),
             "Dirigeant",
+            "MBDV_ADMIN_PASSWORD",
         ),
         (
             os.environ.get("MBDV_ASSOCIE_USER", "associe"),
             os.environ.get("MBDV_ASSOCIE_PASSWORD", "MBDV-associe-2026"),
             "Associe",
+            "MBDV_ASSOCIE_PASSWORD",
         ),
     ]
     conn = _connect(os.path.join(app.config["DATA_DIR"], "mbdv.sqlite3"))
     try:
-        for username, password, display in defaults:
+        for username, password, display, variable in defaults:
             if conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
                 continue
             conn.execute(
@@ -145,6 +153,12 @@ def _seed_users(app) -> None:
                 " VALUES (?, ?, ?, ?)",
                 (username, display, hash_password(password), now_iso()),
             )
+            if password in DEFAULT_PASSWORDS:
+                app.logger.warning(
+                    "Compte '%s' cree avec le mot de passe par defaut : changez-le "
+                    "depuis le menu Mot de passe (ou definissez %s avant le premier "
+                    "demarrage).", username, variable,
+                )
         conn.commit()
     finally:
         conn.close()
@@ -166,3 +180,15 @@ def execute(sql: str, params=()) -> None:
     db = get_db()
     db.execute(sql, params)
     db.commit()
+
+
+def run_all(statements) -> None:
+    """Execute plusieurs ecritures dans une seule transaction (tout ou rien)."""
+    db = get_db()
+    try:
+        for sql, params in statements:
+            db.execute(sql, params)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise

@@ -70,7 +70,8 @@ def icon(name: str, size: int = 16, cls: str = "") -> Markup:
     if body is None:
         return Markup("")
     classes = f"icon{(' ' + cls) if cls else ''}"
-    return Markup(
+    # Balises issues du dictionnaire _ICONS ci-dessus, jamais de donnee externe.
+    return Markup(  # noqa: S704
         f'<svg class="{classes}" width="{size}" height="{size}" viewBox="0 0 24 24"'
         f' fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"'
         f' stroke-linejoin="round" aria-hidden="true">{body}</svg>'

@@ -167,7 +167,7 @@
         <tbody>
           {% for c in resultats['items'] %}
           <tr class="result-row {% if c.masquee %}is-hidden-row{% endif %}" data-siren="{{ c.siren }}"
-              data-snapshot="{{ c|tojson }}">
+              data-snapshot='{{ c|tojson }}'>
             <td class="col-name">
               <button class="row-link" data-detail="{{ c.siren }}">
                 <span class="row-name">{{ c.nom }}</span>

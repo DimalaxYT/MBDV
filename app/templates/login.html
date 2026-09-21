@@ -34,7 +34,8 @@
   </section>
 
   <section class="login-pane">
-    <form class="login-card" method="post" action="{{ request.path }}">
+    <form class="login-card" method="post"
+          action="{{ url_for('views.connexion', next=request.args.get('next') or None) }}">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <h1>Espace associés</h1>
       <p class="login-sub">Connectez-vous pour accéder à la prospection.</p>

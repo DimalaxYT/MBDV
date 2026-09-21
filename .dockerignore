@@ -4,3 +4,8 @@ __pycache__/
 *.pyc
 .venv/
 *.tgz
+.github
+tests
+.ruff_cache
+.pytest_cache
+requirements-dev.txt

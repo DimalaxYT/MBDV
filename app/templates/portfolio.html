@@ -32,7 +32,8 @@
       </thead>
       <tbody>
         {% for c in items %}
-        <tr class="result-row" data-siren="{{ c.siren }}" data-snapshot="{{ c|tojson }}">
+        {# guillemets simples : tojson n'echappe pas le " (cf. app/static/js/app.js) #}
+        <tr class="result-row" data-siren="{{ c.siren }}" data-snapshot='{{ c|tojson }}'>
           <td class="col-name">
             <button class="row-link" data-detail="{{ c.siren }}">
               <span class="row-name">{{ c.nom }}</span>

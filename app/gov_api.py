@@ -80,7 +80,7 @@ REGIONS = {
     "06": "Mayotte", "11": "Île-de-France", "24": "Centre-Val de Loire",
     "27": "Bourgogne-Franche-Comté", "28": "Normandie", "32": "Hauts-de-France",
     "44": "Grand Est", "52": "Pays de la Loire", "53": "Bretagne",
-    "54": "Nouvelle-Aquitaine", "75": "Nouvelle-Aquitaine", "76": "Occitanie",
+    "75": "Nouvelle-Aquitaine", "76": "Occitanie",
     "84": "Auvergne-Rhône-Alpes", "93": "Provence-Alpes-Côte d'Azur", "94": "Corse",
 }
 
@@ -150,6 +150,10 @@ def _clean(value):
     return s or None
 
 
+def _sans_espaces(value) -> str:
+    return " ".join(str(value or "").upper().split())
+
+
 # Passage prefixe NAF (2 chiffres) -> lettre de section (NAF rev. 2)
 SECTION_PAR_PREFIXE = {
     "01": "A", "02": "A", "03": "A",
@@ -209,6 +213,14 @@ def normalize_result(r: dict) -> dict:
     dept = _clean(siege.get("departement"))
     region_code = _clean(siege.get("region"))
 
+    # Enseigne : denomination usuelle de l'etablissement (source SIRENE). Utile a la
+    # detection de site : "SARL DUPONT" peut exercer sous "Le Fournil d'Alice".
+    nom_principal = r.get("nom_complet") or r.get("nom_raison_sociale") or "Sans nom"
+    enseignes = [_clean(e) for e in (siege.get("liste_enseignes") or [])]
+    enseigne = _clean(siege.get("nom_commercial")) or next((e for e in enseignes if e), None)
+    if enseigne and _sans_espaces(enseigne) == _sans_espaces(nom_principal):
+        enseigne = None
+
     nature = _clean(r.get("nature_juridique"))
 
     dirigeants = []
@@ -231,7 +243,7 @@ def normalize_result(r: dict) -> dict:
     comp = r.get("complements") or {}
     return {
         "siren": r.get("siren"),
-        "nom": r.get("nom_complet") or r.get("nom_raison_sociale") or "Sans nom",
+        "nom": nom_principal,
         "sigle": _clean(r.get("sigle")),
         "forme": NATURE_JURIDIQUE.get(nature, f"Forme {nature}" if nature else None),
         "nature_code": nature,
@@ -253,7 +265,7 @@ def normalize_result(r: dict) -> dict:
         "region": REGIONS.get(region_code or "", region_code),
         "siret_siege": _clean(siege.get("siret")),
         "date_debut_activite": _clean(siege.get("date_debut_activite")),
-        "enseigne": None,
+        "enseigne": enseigne,
         "lat": siege.get("latitude"),
         "lng": siege.get("longitude"),
         "dirigeants": dirigeants,
@@ -281,6 +293,14 @@ _session = requests.Session()
 _session.headers.update({"User-Agent": "MBDV-Prospection/1.0 (outil interne associes)"})
 
 
+def _retry_after(resp, defaut: float) -> float:
+    """Delai a respecter apres un 429 (en-tete Retry-After), borne a 5 secondes."""
+    try:
+        return max(0.2, min(float(resp.headers.get("Retry-After", defaut)), 5.0))
+    except (TypeError, ValueError):
+        return defaut
+
+
 def _get(params: dict, tries: int = 3) -> dict:
     last_err = None
     for attempt in range(tries):
@@ -292,7 +312,7 @@ def _get(params: dict, tries: int = 3) -> dict:
             ) from exc  # erreur reseau : inutile de retenter immediatement
         if resp.status_code == 429:
             last_err = ApiError("Limite de requetes atteinte (7/seconde). Reessayez dans quelques secondes.")
-            time.sleep(1.2 * (attempt + 1))
+            time.sleep(_retry_after(resp, 1.2 * (attempt + 1)))
             continue
         if resp.status_code >= 500:
             last_err = ApiError(f"Service officiel indisponible (HTTP {resp.status_code}).")
