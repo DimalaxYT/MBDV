@@ -323,7 +323,7 @@ def test_connexion_ouvre_la_page_d_accueil(client):
     page = client.get("/accueil")
     assert page.status_code == 200
     corps = page.get_data(as_text=True)
-    assert "Comment ça marche" in corps
+    assert "Ce que fait l'outil, étape par étape" in corps
     assert "Aucune donnée inventée" in corps
     assert 'href="/"' in corps                      # bouton vers la recherche
     assert "Lancer une recherche" in corps
@@ -364,6 +364,52 @@ def test_visite_d_une_page_precise_est_conservee(client):
     reponse = client.get("/portefeuille")
     assert reponse.headers["Location"] == "/connexion?next=/portefeuille"
     assert connexion(client, next="/portefeuille").headers["Location"] == "/portefeuille"
+
+
+def test_page_d_accueil_widgets_et_animations(app, client):
+    """Widgets alimentes par la base reelle + animations d'apparition."""
+    connexion(client)
+    with base(client) as b:
+        b.execute("INSERT INTO site_cache (siren, status, domain, source, checked_at)"
+                  " VALUES ('111111111', 'aucun', NULL, 'dns', '2026-01-01T00:00:00Z')")
+        b.execute("INSERT INTO site_cache (siren, status, domain, source, checked_at)"
+                  " VALUES ('222222222', 'site', 'exemple.fr', 'dns', '2026-01-01T00:00:00Z')")
+        b.execute("INSERT INTO tracked (siren, snapshot, status, added_by, added_at)"
+                  " VALUES ('111111111', '{}', 'devis', 'admin', '2026-01-01T00:00:00Z')")
+    page = client.get("/accueil").get_data(as_text=True)
+    assert "Entreprises suivies" in page
+    assert "Sans site détecté" in page
+    assert "Le cycle commercial" in page
+    assert 'data-count="1"' in page                    # 1 sans-site, 1 suivie
+    assert page.count('class="widget reveal"') == 4
+    assert "pip-fill st-devis" in page                 # barre du statut reel
+    assert page.count("reveal") > 12                   # apparitions animees
+    assert "En quatre gestes" in page
+
+
+def test_pas_de_libelle_pilotage(client):
+    """Le libelle de section "Pilotage" a ete retire de la barre laterale."""
+    connexion(client)
+    html = client.get("/accueil").get_data(as_text=True)
+    assert "Pilotage" not in html
+    assert "Compte" in html                            # la section Compte reste
+
+
+def test_barre_laterale_escamotable_presente(client):
+    """Rail de rappel, regles CSS d'escamotage et logique JS."""
+    from pathlib import Path
+    connexion(client)
+    html = client.get("/accueil").get_data(as_text=True)
+    assert "data-sidebar-rail" in html
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    assert "body.sidebar-hidden .sidebar" in css
+    assert "body.sidebar-hidden .sidebar-rail" in css
+    assert "@media (prefers-reduced-motion: reduce)" in css
+    js = Path("app/static/js/app.js").read_text(encoding="utf-8")
+    assert "DELAI_ESCAMOTAGE = 1500" in js             # 1,5 s sans survol
+    assert "ZONE_RAPPEL = 56" in js                    # rappel en approchant le bord
+    assert "sidebar-hidden" in js
+    assert "prefers-reduced-motion" in js
 
 
 def test_libelles_de_section_masques_en_barre_reduite(client):

@@ -2,119 +2,179 @@
 
 {% block titre_page %}Accueil - MBDV Prospection{% endblock %}
 {% block titre %}Bienvenue dans MBDV Prospection{% endblock %}
-{% block sous_titre %}L'outil des associés pour trouver, qualifier et suivre les entreprises qui n'ont pas encore de site web{% endblock %}
+{% block sous_titre %}Trouver les entreprises sans site web, les qualifier, les convertir{% endblock %}
 
 {% block content %}
 
-<section class="panel home-hero">
-  <div class="home-hero-inner">
-    <p class="home-eyebrow">Espace associés</p>
-    <h2>Cibler les entreprises sans site web, <em>puis</em> les convertir.</h2>
-    <p class="home-lede">
+<section class="hero panel">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="hero-inner">
+    <p class="hero-eyebrow reveal">Espace associés</p>
+    <h2 class="hero-title reveal">
+      Cibler les entreprises <span class="hero-mark">sans site web</span>,<br>
+      puis les <em>convertir</em>.
+    </h2>
+    <p class="hero-lede reveal">
       MBDV interroge la base officielle des entreprises françaises (INSEE / RNE), vérifie
-      automatiquement la présence d'un site web pour chacune, et met en évidence celles qui
-      n'en ont pas — vos prospects. Un portefeuille partagé suit ensuite le cycle commercial,
-      et un journal staff garde la trace de chaque entreprise écartée.
+      automatiquement la présence d'un site web pour chacune et met en évidence celles qui
+      n'en ont pas. Le portefeuille partagé suit ensuite chaque prospect jusqu'à la signature.
     </p>
-    <div class="home-cta">
+    <div class="hero-cta reveal">
       <a class="btn btn-ink btn-tall" href="/">{{ icon('search', 15) }} Lancer une recherche</a>
-      <a class="btn btn-ghost btn-tall" href="/portefeuille">{{ icon('briefcase', 15) }} Voir le portefeuille</a>
+      <a class="btn btn-ghost btn-tall" href="/portefeuille">{{ icon('briefcase', 15) }} Portefeuille</a>
       <a class="btn btn-ghost btn-tall" href="/staff">{{ icon('shield', 15) }} Panel staff</a>
     </div>
+    <p class="hero-hint reveal">
+      Touche <kbd>/</kbd> dans la recherche pour viser le champ principal · détection relancée
+      à la demande depuis chaque fiche.
+    </p>
   </div>
 </section>
 
+<section class="widgets">
+  <article class="widget reveal">
+    <span class="widget-icon">{{ icon('bookmark', 16) }}</span>
+    <span class="widget-value" data-count="{{ stats.suivies }}">0</span>
+    <span class="widget-label">Entreprises suivies</span>
+    <span class="widget-note">{{ stats.a_contacter }} à contacter · {{ stats.clients }} client{{ 's' if stats.clients > 1 }}</span>
+  </article>
+  <article class="widget reveal">
+    <span class="widget-icon">{{ icon('ban', 16) }}</span>
+    <span class="widget-value" data-count="{{ stats.sans_site }}">0</span>
+    <span class="widget-label">Sans site détecté</span>
+    <span class="widget-note">
+      {% if stats.analysees %}
+      {{ taux_sans_site }} % des {{ stats.analysees }} entreprises analysées en cache
+      {% else %}
+      Sur les entreprises déjà analysées
+      {% endif %}
+    </span>
+  </article>
+  <article class="widget reveal">
+    <span class="widget-icon">{{ icon('globe', 16) }}</span>
+    <span class="widget-value" data-count="{{ stats.avec_site }}">0</span>
+    <span class="widget-label">Sites déjà en ligne</span>
+    <span class="widget-note">Écartées : elles ont déjà un site</span>
+  </article>
+  <article class="widget reveal">
+    <span class="widget-icon">{{ icon('eye-off', 16) }}</span>
+    <span class="widget-value" data-count="{{ stats.masquees }}">0</span>
+    <span class="widget-label">Masquées</span>
+    <span class="widget-note">Motif et auteur visibles au panel staff</span>
+  </article>
+</section>
+
+<div class="home-two-cols">
+  <section class="panel pip-block reveal">
+    <h2 class="home-title">Le cycle commercial</h2>
+    <p class="pip-lede">Chaque entreprise suivie avance dans le portefeuille, du premier appel à la signature.</p>
+    <ul class="pip">
+      {% for etape in pipeline %}
+      <li class="pip-row">
+        <span class="pip-label">{{ etape.label }}</span>
+        <span class="pip-track">
+          <span class="pip-fill st-{{ etape.code }}"
+                style="--part: {{ (100 * etape.n / pipeline_max)|round|int }}%"></span>
+        </span>
+        <span class="pip-count">{{ etape.n }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if not stats.suivies %}
+    <p class="pip-empty">
+      Aucune entreprise suivie pour l'instant : lancez une recherche, puis cliquez sur le
+      marque-page d'un résultat pour la faire entrer dans le portefeuille.
+    </p>
+    {% endif %}
+  </section>
+
+  <section class="panel guide reveal">
+    <h2 class="home-title">En quatre gestes</h2>
+    <ol class="guide-list">
+      <li>
+        <span class="guide-num">1</span>
+        <div><strong>Cherchez</strong> par nom, activité ou SIREN, et filtrez par
+        département, secteur, effectif.</div>
+      </li>
+      <li>
+        <span class="guide-num">2</span>
+        <div><strong>Activez « sans site détecté »</strong> : l'outil analyse plusieurs
+        pages et ne garde que les entreprises sans domaine vérifiable.</div>
+      </li>
+      <li>
+        <span class="guide-num">3</span>
+        <div><strong>Vérifiez la fiche</strong> : Revérifier relance l'analyse,
+        Confirmer sans site verrouille votre certitude.</div>
+      </li>
+      <li>
+        <span class="guide-num">4</span>
+        <div><strong>Suivez et exportez</strong> : marque-page pour entrer au portefeuille,
+        CSV pour sortir les coordonnées.</div>
+      </li>
+    </ol>
+  </section>
+</div>
+
 <section class="home-section">
-  <h2 class="home-title">Comment ça marche</h2>
+  <h2 class="home-title reveal">Ce que fait l'outil, étape par étape</h2>
   <div class="steps-grid">
-    <article class="step-card">
+    <article class="step-card reveal">
       <span class="step-num">01 · Rechercher</span>
       <h3>Filtrer la base officielle</h3>
       <p>
         Dénomination, activité, SIREN, département, code postal, grand secteur, code NAF
-        précis, tranche d'effectif. Les données viennent de l'API
-        <code class="mono">recherche-entreprises.api.gouv.fr</code> : rien n'est inventé.
+        précis, tranche d'effectif. Source :
+        <code class="mono">recherche-entreprises.api.gouv.fr</code> — rien n'est inventé.
       </p>
     </article>
-    <article class="step-card">
+    <article class="step-card reveal">
       <span class="step-num">02 · Détecter</span>
       <h3>Chercher un site web</h3>
       <p>
-        Pour chaque entreprise, l'outil construit les domaines probables à partir de la
-        raison sociale et de l'enseigne (en <code class="mono">.fr</code>,
-        <code class="mono">.com</code>, <code class="mono">.net</code>) puis tente une
-        résolution DNS. Un domaine qui répond est un indice fort d'un site existant.
+        Pour chaque résultat, l'outil construit les domaines probables à partir de la raison
+        sociale et de l'enseigne (<code class="mono">.fr</code>, <code class="mono">.com</code>,
+        <code class="mono">.net</code>) puis tente une résolution DNS.
       </p>
     </article>
-    <article class="step-card">
+    <article class="step-card reveal">
       <span class="step-num">03 · Vérifier</span>
       <h3>Confirmer à la main</h3>
       <p>
         La détection reste un indice : depuis la fiche, <strong>Revérifier</strong> relance
         l'analyse et <strong>Confirmer sans site</strong> verrouille votre certitude.
-        Les résultats sont mis en cache 30 jours.
+        Résultats conservés en cache 30 jours.
       </p>
     </article>
-    <article class="step-card">
+    <article class="step-card reveal">
       <span class="step-num">04 · Écarter</span>
       <h3>Masquer avec un motif</h3>
       <p>
-        Doublon, entreprise déjà équipée, hors cible, déjà contactée… Chaque masquage
-        demande une raison et alimente le <strong>panel staff</strong> : auteur, date,
-        précisions, remise d'affichage éventuelle.
+        Doublon, entreprise déjà équipée, hors cible, déjà contactée… Chaque masquage exige
+        une raison et alimente le <strong>panel staff</strong> : auteur, date, précisions,
+        remise d'affichage.
       </p>
     </article>
-    <article class="step-card">
+    <article class="step-card reveal">
       <span class="step-num">05 · Suivre</span>
       <h3>Faire avancer le portefeuille</h3>
       <p>
-        Ajoutez un prospect au portefeuille et faites-le progresser :
-        {% for code, label in statuts_pipeline %}<span class="badge st-{{ code }}">{{ label }}</span>{% if not loop.last %} → {% endif %}{% endfor %}
+        Du premier contact à la signature :
+        {% for code, label in statuts_pipeline %}<span class="badge st-{{ code }}">{{ label }}</span>{% endfor %}
       </p>
     </article>
-    <article class="step-card">
+    <article class="step-card reveal">
       <span class="step-num">06 · Exporter</span>
       <h3>Sortir les données</h3>
       <p>
         Export CSV de la page de résultats (format Excel français, séparateur
-        <code class="mono">;</code>) : coordonnées, activité, effectif, dirigeants, état
-        du site détecté et statut commercial.
+        <code class="mono">;</code>) : coordonnées, activité, effectif, dirigeants, état du
+        site détecté et statut commercial.
       </p>
     </article>
   </div>
 </section>
 
-<section class="home-two-cols">
-  <article class="panel home-block">
-    <h2 class="home-title">Dans une fiche entreprise</h2>
-    <ul class="home-list">
-      <li><strong>Identification</strong> — SIREN, SIRET du siège, forme juridique, date de création, établissements.</li>
-      <li><strong>Localisation</strong> — adresse du siège, département, région, repérage sur carte.</li>
-      <li><strong>Activité</strong> — code NAF et libellé, tranche d'effectif, début d'activité.</li>
-      <li><strong>Dirigeants</strong> — nom, qualité, année de naissance (source INPI).</li>
-      <li><strong>Finances</strong> — dernier chiffre d'affaires et résultat net publiés.</li>
-      <li><strong>Repères</strong> — RGE, Qualiopi, bio, ESS, société à mission, association…</li>
-    </ul>
-  </article>
-
-  <article class="panel home-block">
-    <h2 class="home-title">Bon à savoir</h2>
-    <ul class="home-list">
-      <li><strong>Aucune donnée inventée.</strong> Si la base officielle est injoignable,
-        l'outil le dit et n'affiche rien. Un jeu de démonstration (entreprises fictives)
-        n'est servi que sur demande explicite, et toujours annoncé comme tel.</li>
-      <li><strong>La détection est heuristique.</strong> Un site peut exister sous un
-        domaine imprévisible ; un domaine peut répondre sans héberger de site. D'où la
-        vérification manuelle en un clic.</li>
-      <li><strong>Deux accès distincts</strong> — chacun son identifiant et son mot de
-        passe, un portefeuille commun. Les mots de passe sont stockés hachés (scrypt).</li>
-      <li><strong>Sessions et écritures protégées</strong> — jeton CSRF sur chaque
-        enregistrement, sessions signées, limitation des tentatives de connexion.</li>
-    </ul>
-  </article>
-</section>
-
-<section class="panel home-block">
+<section class="panel home-block reveal">
   <h2 class="home-title">Pour démarrer tout de suite</h2>
   <div class="start-chips">
     <a class="chip" href="/?q=coiffure&departement=44&sans_site=1">Coiffures en Loire-Atlantique {{ icon('arrow-right', 13) }}</a>
@@ -122,11 +182,22 @@
     <a class="chip" href="/?q=restaurant&departement=75&sans_site=1">Restaurants à Paris {{ icon('arrow-right', 13) }}</a>
     <a class="chip" href="/?departement=24&section=F&sans_site=1">Artisans du bâtiment en Dordogne {{ icon('arrow-right', 13) }}</a>
   </div>
-  <p class="home-foot">
-    Astuce : le filtre <strong>sans site détecté</strong> analyse plusieurs pages de
-    résultats et ne garde que les entreprises sans domaine vérifiable. Dans la recherche,
-    la touche <kbd>/</kbd> place le curseur dans le champ principal.
-  </p>
+</section>
+
+<section class="panel home-block reveal">
+  <h2 class="home-title">Bon à savoir</h2>
+  <ul class="home-list">
+    <li><strong>Aucune donnée inventée.</strong> Si la base officielle est injoignable,
+      l'outil le dit et n'affiche rien. Un jeu de démonstration (entreprises fictives)
+      n'est servi que sur demande explicite, et toujours annoncé comme tel.</li>
+    <li><strong>La détection est heuristique.</strong> Un site peut exister sous un domaine
+      imprévisible ; un domaine peut répondre sans héberger de site. D'où la vérification
+      manuelle en un clic depuis chaque fiche.</li>
+    <li><strong>Deux accès distincts.</strong> Chacun son identifiant et son mot de passe,
+      un portefeuille commun. Mots de passe stockés hachés (scrypt).</li>
+    <li><strong>Écritures protégées.</strong> Jeton CSRF sur chaque enregistrement, sessions
+      signées, limitation des tentatives de connexion.</li>
+  </ul>
 </section>
 
 {% endblock %}

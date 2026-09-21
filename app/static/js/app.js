@@ -318,6 +318,108 @@
   }, true);
 
   // ------------------------------------------------------------------
+  // Animations d'apparition et compteurs (page d'accueil)
+  // ------------------------------------------------------------------
+  function animerCompteur(el) {
+    var cible = parseInt(el.dataset.count, 10);
+    if (isNaN(cible)) return;
+    if (reduitMouvement() || cible === 0) { el.textContent = cible; return; }
+    var debut = null;
+    var duree = 750;
+    function pas(temps) {
+      if (debut === null) debut = temps;
+      var avance = Math.min(1, (temps - debut) / duree);
+      var adouci = 1 - Math.pow(1 - avance, 3);          // ease-out cubique
+      el.textContent = Math.round(cible * adouci);
+      if (avance < 1) window.requestAnimationFrame(pas);
+    }
+    window.requestAnimationFrame(pas);
+  }
+
+  function reduitMouvement() {
+    return typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function reveler(el) {
+    if (el.classList.contains("is-visible")) return;
+    el.classList.add("is-visible");
+    var compteurs = el.querySelectorAll("[data-count]");
+    for (var i = 0; i < compteurs.length; i++) animerCompteur(compteurs[i]);
+  }
+
+  function preparerAnimations() {
+    var elements = document.querySelectorAll(".reveal");
+    if (!elements.length) return;
+    // decalage progressif pour un effet de vague plutot qu'un bloc qui saute
+    for (var i = 0; i < elements.length; i++) {
+      var rang = elements[i].parentNode ? Array.prototype.indexOf.call(
+        elements[i].parentNode.children, elements[i]) : 0;
+      elements[i].style.setProperty("--delai", Math.min(rang, 6) * 70 + "ms");
+    }
+    if (reduitMouvement() || !("IntersectionObserver" in window)) {
+      for (var j = 0; j < elements.length; j++) reveler(elements[j]);
+      return;
+    }
+    var observateur = new IntersectionObserver(function (entrees) {
+      entrees.forEach(function (entree) {
+        if (entree.isIntersecting) {
+          reveler(entree.target);
+          observateur.unobserve(entree.target);
+        }
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.1 });
+    for (var k = 0; k < elements.length; k++) observateur.observe(elements[k]);
+  }
+
+  // ------------------------------------------------------------------
+  // Barre laterale escamotable : masquee apres 1,5 s sans survol, rappelee
+  // des que le curseur approche du bord gauche (ecrans larges uniquement)
+  // ------------------------------------------------------------------
+  var DELAI_ESCAMOTAGE = 1500;
+  var ZONE_RAPPEL = 56;      // px depuis le bord gauche : seuil de reapparition
+
+  function initBarreLaterale() {
+    var barre = document.querySelector(".sidebar");
+    if (!barre || typeof window.matchMedia !== "function") return;
+    var large = window.matchMedia("(min-width: 1021px) and (pointer: fine)");
+    if (!large.matches) return;
+
+    var dernierContact = Date.now();
+    var survole = false;
+
+    function proche(ev) {
+      // ouverte : on surveille le survol de la barre elle-meme ;
+      // fermee : une approche du bord gauche la rappelle
+      return typeof ev.clientX === "number" && ev.clientX <= ZONE_RAPPEL;
+    }
+
+    document.addEventListener("mousemove", function (ev) {
+      var cible = ev.target;
+      var dansBarre = barre.contains(cible) || barre === cible;
+      var pres = proche(ev) || dansBarre;
+      survole = pres;
+      if (pres) {
+        dernierContact = Date.now();
+        if (document.body.classList.contains("sidebar-hidden")) {
+          document.body.classList.remove("sidebar-hidden");
+        }
+      }
+    });
+
+    document.addEventListener("mouseleave", function () { survole = false; });
+
+    // Boucle legere plutot qu'un minuteur recree a chaque mouvement de souris.
+    window.setInterval(function () {
+      var focusDedans = barre.contains(document.activeElement);
+      if (survole || focusDedans) { dernierContact = Date.now(); return; }
+      if (Date.now() - dernierContact > DELAI_ESCAMOTAGE) {
+        document.body.classList.add("sidebar-hidden");
+      }
+    }, 250);
+  }
+
+  // ------------------------------------------------------------------
   // Theme clair / sombre
   // ------------------------------------------------------------------
   function appliquerTheme(sombre) {
@@ -368,6 +470,8 @@
 
   // Les raisons de masquage sont transmises par la page de recherche
   document.addEventListener("DOMContentLoaded", function () {
+    preparerAnimations();
+    initBarreLaterale();
     var holder = document.getElementById("raisons-masquage");
     if (holder) {
       try { window.MBDV_RAISONS = JSON.parse(holder.textContent); } catch (e) { /* ignore */ }

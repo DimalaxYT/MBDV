@@ -128,12 +128,39 @@ def deconnexion():
 @bp.route("/accueil")
 @login_required
 def accueil():
+    """Page d'accueil : explication de l'outil et indicateurs reels de l'equipe."""
+    def compte(sql, params=()):
+        return db.one(sql, params)["n"]
+
+    suivies = compte("SELECT COUNT(*) n FROM tracked")
+    par_statut = {r["status"]: r["n"] for r in db.query(
+        "SELECT status, COUNT(*) n FROM tracked GROUP BY status")}
+    pipeline = [
+        {"code": code, "label": label, "n": par_statut.get(code, 0)}
+        for code, label in STATUTS_PIPELINE
+    ]
+    max_pipeline = max([etape["n"] for etape in pipeline] + [1])
+
+    stats = {
+        "suivies": suivies,
+        "a_contacter": par_statut.get("a_contacter", 0),
+        "masquees": compte("SELECT COUNT(*) n FROM hides WHERE restored_at IS NULL"),
+        "sans_site": compte("SELECT COUNT(*) n FROM site_cache WHERE status = 'aucun'"),
+        "avec_site": compte("SELECT COUNT(*) n FROM site_cache WHERE status = 'site'"),
+        "analysees": compte("SELECT COUNT(*) n FROM site_cache"),
+        "clients": par_statut.get("client", 0),
+    }
     return render_template(
         "accueil.html",
         page_id="accueil",
         titre="Bienvenue dans MBDV Prospection",
         sous_titre=("L'outil des associés pour trouver, qualifier et suivre les "
                     "entreprises qui n'ont pas encore de site web"),
+        stats=stats,
+        pipeline=pipeline,
+        pipeline_max=max_pipeline,
+        taux_sans_site=(round(100 * stats["sans_site"] / stats["analysees"])
+                        if stats["analysees"] else 0),
     )
 
 

@@ -187,6 +187,14 @@ pyproject.toml          configuration ruff + pytest
 
 ## Interface
 
+- **Page d'accueil** apres connexion : hero anime, quatre indicateurs reels
+  (entreprises suivies, sans site detecte, sites deja en ligne, masquees), barres du
+  cycle commercial alimentees par le portefeuille, guide en quatre gestes, detail des
+  etapes et points de vigilance. Apparitions au defilement et compteurs animes
+  (desactives si `prefers-reduced-motion`).
+- **Barre laterale escamotable** (ecrans larges, pointeur precis) : apres 1,5 s sans
+  survol elle se replie ; approcher le curseur du bord gauche (56 px) ou du rail
+  orange la ramene. Elle reste ouverte tant que le clavier navigue dedans.
 - Theme **clair / sombre** : bouton dans la barre superieure (et sur la page de
   connexion). Le choix est memorise dans le navigateur ; sans choix, la
   preference du systeme est suivie. Le theme est applique avant le premier rendu
