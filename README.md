@@ -40,6 +40,11 @@ par les variables d'environnement `MBDV_ADMIN_USER`, `MBDV_ADMIN_PASSWORD`,
 
 ### Recherche
 
+- En l'absence de reseau sortant (apercu heberge, machine isolee), l'outil bascule
+  sur un jeu de **demonstration** de 39 entreprises fictives reparties dans
+  24 departements (dont Paris et la petite couronne 92 / 93 / 94). L'origine est
+  affichee en bandeau, et une recherche hors de ces departements l'explique
+  explicitement au lieu d'afficher un resultat vide trompeur.
 - Source : API publique **Recherche d'entreprises** du gouvernement
   (`recherche-entreprises.api.gouv.fr`, donnees INSEE / RNE, licence ouverte,
   sans cle d'API). Aucune donnee n'est inventee.

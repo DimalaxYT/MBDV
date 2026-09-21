@@ -495,6 +495,42 @@ def test_recherche_bascule_en_demonstration_avec_bandeau(client, monkeypatch):
     assert "données de démonstration" in html
 
 
+def test_jeu_de_demonstration_couvre_l_ile_de_france():
+    from app import demo_data
+    for departement in ("75", "92", "93", "94"):
+        assert demo_data.cherche(departement=departement)["items"], departement
+    assert len(demo_data.DEPARTEMENTS) == len(set(demo_data.DEPARTEMENTS))
+    assert sorted(demo_data.DEPARTEMENTS) == demo_data.DEPARTEMENTS
+
+
+def test_jeu_de_demonstration_coherent():
+    from app import demo_data
+    sirens = [e["siren"] for e in demo_data.DEMO_COMPANIES]
+    assert len(sirens) == len(set(sirens))                      # pas de doublon
+    assert all(len(s) == 9 and s.isdigit() for s in sirens)
+    assert all(e["naf_label"] for e in demo_data.DEMO_COMPANIES)  # activite lisible
+    assert all(e["enseigne"] is None or isinstance(e["enseigne"], str)
+               for e in demo_data.DEMO_COMPANIES)
+    example = demo_data.DEMO_COMPANIES[0]
+    assert set(example) == set(entreprise("000000000", "X"))     # meme contrat que l'API
+    # les fiches rendues sont des copies : le jeu partage ne doit pas etre enrichi
+    fiche = demo_data.par_siren(example["siren"])
+    fiche["site"] = {"status": "aucun"}
+    assert "site" not in demo_data.par_siren(example["siren"])
+    assert "site" not in demo_data.cherche(q="")["items"][0]
+
+
+def test_resultat_vide_en_demonstration_explique_la_limite(client, monkeypatch):
+    monkeypatch.setattr(gov_api, "search", _api_hors_service)
+    connexion(client)
+    html = client.get("/?departement=2A&q=coiffure").get_data(as_text=True)
+    assert "Aucune entreprise fictive dans cette zone" in html      # pas de faux vide
+    assert "jeu de démonstration" in html
+    assert "Aucune n'est située dans le département 2A" in html
+    assert "Département 94" in html                                  # raccourcis proposes
+    assert "Aucune entreprise ne correspond" not in html              # message reel absent
+
+
 def test_export_csv_signale_la_demonstration(client, monkeypatch):
     monkeypatch.setattr(gov_api, "search", _api_hors_service)
     connexion(client)

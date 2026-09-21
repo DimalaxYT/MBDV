@@ -252,6 +252,9 @@ def recherche():
         "recherche_lancee": _a_des_criteres(p),
         "resultats": None,
         "erreur": None,
+        # Utile pour expliquer un resultat vide en mode demonstration.
+        "departements_demo": demo_data.DEPARTEMENTS,
+        "nb_demo": len(demo_data.DEMO_COMPANIES),
     }
     qs = {k: v for k, v in {
         "q": p["q"], "departement": p["departement"], "code_postal": p["code_postal"],
