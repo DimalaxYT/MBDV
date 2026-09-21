@@ -77,6 +77,39 @@ Tout est stocke dans `data/` (base SQLite + cle de sessions), hors Git :
 
 Supprimez le dossier pour repartir de zero (les comptes sont recrees).
 
+## Deploiement
+
+L'application ecoute sur la variable `PORT` des plateformes d'hebergement
+(fallback `MBDV_PORT`, sinon 5050) et sur `0.0.0.0`.
+
+### Render
+
+- Build Command : *(vide)*
+- Start Command : `pip install -r requirements.txt && python3 run.py`
+- Ajouter un Disk (Settings > Disks), monte sur `/data`, puis la variable
+  d'environnement `MBDV_DATA_DIR=/data` pour que la base survive aux deploiements.
+
+### Railway / Heroku-like
+
+Le `Procfile` fourni (`web: python3 run.py`) est detecte automatiquement ;
+sinon Start Command : `pip install -r requirements.txt && python3 run.py`.
+
+### alwaysdata (hebergeur francais)
+
+Creer un site de type « Application Python », commande de demarrage :
+`python3 run.py`, repertoire `/www`. Definir `MBDV_DATA_DIR` sur un chemin
+persistant (le home du compte, ex. `/home/<compte>/data`). alwaysdata utilise
+le port qu'il fournit via l'interface, fixer `MBDV_PORT` en consequence.
+
+### Variables d'environnement utiles en production
+
+`MBDV_ADMIN_PASSWORD`, `MBDV_ASSOCIE_PASSWORD` (mots de passe initiaux),
+eventuellement `MBDV_ADMIN_USER` / `MBDV_ASSOCIE_USER`,
+`MBDV_DATA_DIR` (dossier de la base, par defaut `./data`).
+
+Note : Netlify et Vercel ne conviennent pas tels quels (sites statiques /
+serverless JS sans processus Python ni disque persistant).
+
 ## Note sur l'environnement d'apercu
 
 L'environnement d'execution fourni avec ce projet filtre le reseau sortant et
