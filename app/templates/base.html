@@ -3,13 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>{% block titre_page %}MBDV - Prospection{% endblock %}</title>
+  <script>
+    // Theme applique avant le premier rendu (aucun clignotement) : choix enregistre,
+    // sinon preference du systeme.
+    (function () {
+      try {
+        var choix = localStorage.getItem("mbdv-theme");
+        var sombre = choix ? choix === "dark"
+          : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = sombre ? "dark" : "light";
+      } catch (e) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/main.css">
   <meta name="csrf" content="{{ csrf_token() }}">
   <meta name="session-token" content="{{ session_token() }}">
 </head>
-<body class="app {% block body_class %}{% endblock %}" data-page="{{ page_id or '' }}">
+<body class="app {% block body_class %}{% endblock %}" data-page="{{ page_id or '' }}"
+      {% if p and p.demo %}data-demo="1"{% endif %}>
 <div class="shell">
 
   <aside class="sidebar">
@@ -58,7 +74,14 @@
         <h1>{% block titre %}{% endblock %}</h1>
         <p>{% block sous_titre %}{% endblock %}</p>
       </div>
-      <div class="topbar-side">{% block topbar_side %}{% endblock %}</div>
+      <div class="topbar-side">
+        {% block topbar_side %}{% endblock %}
+        <button type="button" class="icon-btn theme-btn" data-theme-toggle
+                title="Basculer en mode sombre / clair"
+                aria-label="Basculer en mode sombre ou clair">
+          {{ icon('sun', 17, 'icon-sun') }} {{ icon('moon', 17, 'icon-moon') }}
+        </button>
+      </div>
     </header>
     <div class="content">
       {% block content %}{% endblock %}

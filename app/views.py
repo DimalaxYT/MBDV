@@ -54,6 +54,10 @@ STATUTS_PIPELINE = [
     ("sans_suite", "Sans suite"),
 ]
 
+class BaseIndisponible(Exception):
+    """La base officielle est injoignable et le mode demonstration n'a pas ete demande."""
+
+
 PER_PAGE = 25
 MAX_PAGES_EXPANSION = 6   # pages API analysees quand le filtre "sans site" est actif
 MAX_PAGES_EXPORT = 4
@@ -132,6 +136,8 @@ def _params_recherche():
         "sans_site": request.args.get("sans_site") == "1",
         "inclure_masquees": request.args.get("inclure_masquees") == "1",
         "inclure_fermees": request.args.get("inclure_fermees") == "1",
+        # Jeu de demonstration : uniquement sur demande explicite.
+        "demo": request.args.get("demo") == "1" and bool(current_app.config["DEMO_ALLOWED"]),
         "page": max(1, request.args.get("page", 1, type=int) or 1),
     }
 
@@ -157,10 +163,17 @@ def _chercher(p, max_pages: int):
                 effectif=p["effectif"], actives=not p["inclure_fermees"],
             )
             return res, False
-        except gov_api.ApiError:
-            current_app.logger.warning(
-                "API officielle injoignable : bascule sur le jeu de demonstration "
-                "(q=%r, departement=%r, page=%s).", p["q"], p["departement"], page)
+        except gov_api.ApiError as exc:
+            # Aucune donnee inventee : soit l'utilisateur a explicitement demande le
+            # jeu de demonstration, soit la recherche echoue en le disant.
+            if not p.get("demo"):
+                current_app.logger.warning(
+                    "API officielle injoignable (q=%r, departement=%r, page=%s)",
+                    p["q"], p["departement"], page)
+                raise BaseIndisponible(str(exc)) from exc
+            current_app.logger.info(
+                "Jeu de demonstration utilise a la demande (q=%r, departement=%r)",
+                p["q"], p["departement"])
             return demo_data.cherche(
                 q=p["q"], departement=p["departement"], code_postal=p["code_postal"],
                 section=p["section"], effectif=p["effectif"],
@@ -255,6 +268,7 @@ def recherche():
         # Utile pour expliquer un resultat vide en mode demonstration.
         "departements_demo": demo_data.DEPARTEMENTS,
         "nb_demo": len(demo_data.DEMO_COMPANIES),
+        "demo_disponible": bool(current_app.config["DEMO_ALLOWED"]),
     }
     qs = {k: v for k, v in {
         "q": p["q"], "departement": p["departement"], "code_postal": p["code_postal"],
@@ -262,13 +276,19 @@ def recherche():
         "sans_site": "1" if p["sans_site"] else "",
         "inclure_masquees": "1" if p["inclure_masquees"] else "",
         "inclure_fermees": "1" if p["inclure_fermees"] else "",
+        "demo": "1" if p["demo"] else "",
     }.items() if v}
     ctx["qs_base"] = urlencode(qs)
+    # Lien vers le jeu de demonstration (entreprises fictives), sur demande explicite.
+    ctx["demo_liens"] = urlencode({**qs, "demo": "1"})
     if ctx["recherche_lancee"]:
         try:
             resultats = _chercher(p, MAX_PAGES_EXPANSION)
             resultats["items"] = _attache_etats(resultats["items"])
             ctx["resultats"] = resultats
+        except BaseIndisponible as exc:
+            ctx["erreur"] = ("La base officielle (recherche-entreprises.api.gouv.fr) est "
+                             f"injoignable depuis cet environnement. {exc}")
         except Exception:
             current_app.logger.exception(
                 "Recherche en echec (q=%r, departement=%r, page=%s)",
@@ -285,7 +305,10 @@ def export_csv():
     if not _a_des_criteres(p):
         abort(400)
     p["sans_site"] = request.args.get("sans_site") == "1"
-    res = _chercher(p, MAX_PAGES_EXPORT)
+    try:
+        res = _chercher(p, MAX_PAGES_EXPORT)
+    except BaseIndisponible as exc:
+        abort(503, f"Export impossible : la base officielle est injoignable. {exc}")
     items = _attache_etats(res["items"])
 
     tampon = io.StringIO()
@@ -326,17 +349,18 @@ def export_csv():
 # Fiche entreprise (panneau lateral)
 # --------------------------------------------------------------------------
 
-def _entreprise_complete(siren: str):
-    """Recherche l'entreprise : API officielle, sinon demo, sinon instantane local."""
+def _entreprise_complete(siren: str, demo_autorise: bool = False):
+    """Recherche l'entreprise : API officielle, sinon instantane local (jamais inventee)."""
     try:
         c = gov_api.fetch_by_siren(str(siren))
         if c:
             return c, "api"
     except gov_api.ApiError:
         pass
-    c = demo_data.par_siren(siren)
-    if c:
-        return c, "demo"
+    if demo_autorise:
+        c = demo_data.par_siren(siren)
+        if c:
+            return c, "demo"
     row = db.one("SELECT snapshot FROM tracked WHERE siren = ?", (siren,))
     if row:
         try:
@@ -357,7 +381,8 @@ def _entreprise_complete(siren: str):
 def detail_entreprise(siren):
     if not re.fullmatch(r"\d{9}", siren or ""):
         abort(404)
-    company, source = _entreprise_complete(siren)
+    demo = request.args.get("demo") == "1" and bool(current_app.config["DEMO_ALLOWED"])
+    company, source = _entreprise_complete(siren, demo_autorise=demo)
     if not company:
         return render_template("partials/detail_indisponible.html", siren=siren), 200
     try:

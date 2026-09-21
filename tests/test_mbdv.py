@@ -73,6 +73,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setenv("MBDV_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.delenv("MBDV_TRUST_PROXY", raising=False)
     monkeypatch.delenv("MBDV_COOKIE_SECURE", raising=False)
+    monkeypatch.delenv("MBDV_DEMO", raising=False)   # jeu fictif desactive par defaut
     # Ni DNS ni API : tout est deterministe et hors ligne.
     monkeypatch.setattr(detect, "_resout", lambda host: False)
     auth._RATE.clear()
@@ -204,6 +205,19 @@ def test_page_erreur_soignee(client):
     assert reponse.status_code == 404
     corps = reponse.get_data(as_text=True)
     assert "404" in corps and "Retour à la recherche" in corps
+
+
+@pytest.fixture()
+def app_demo(tmp_path, monkeypatch):
+    """Application ou le jeu de demonstration peut etre demande explicitement."""
+    monkeypatch.setenv("MBDV_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MBDV_DEMO", "1")
+    monkeypatch.setattr(detect, "_resout", lambda host: False)
+    monkeypatch.setattr(gov_api, "search", _api_hors_service)
+    auth._RATE.clear()
+    application = create_app()
+    application.config.update(TESTING=True)
+    return application
 
 
 @pytest.fixture()
@@ -488,11 +502,33 @@ def _api_hors_service(*args, **kwargs):
     raise gov_api.ApiError("injoignable")
 
 
-def test_recherche_bascule_en_demonstration_avec_bandeau(client, monkeypatch):
+def test_base_injoignable_aucune_donnee_inventee(client, monkeypatch):
+    """Sans demande explicite : erreur claire, jamais d'entreprises fictives."""
     monkeypatch.setattr(gov_api, "search", _api_hors_service)
     connexion(client)
     html = client.get("/?q=coiffure&departement=44").get_data(as_text=True)
-    assert "données de démonstration" in html
+    assert "injoignable" in html
+    assert "données de démonstration" not in html
+    assert "result-row" not in html                      # aucun resultat affiche
+    assert "CARACOLE COIFFURE" not in html               # le jeu fictif n'est pas servi
+
+
+def test_jeu_de_demonstration_sur_demande_client(app_demo):
+    """Avec MBDV_DEMO=1 et ?demo=1 : jeu fictif affiche, et clairement annonce."""
+    client = app_demo.test_client()
+    connexion(client)
+    html = client.get("/?q=coiffure&departement=44&demo=1").get_data(as_text=True)
+    assert "CARACOLE COIFFURE" in html
+    assert "ne sont pas réels" in html
+
+
+def test_jeu_de_demonstration_refuse_sans_option(client, monkeypatch):
+    """?demo=1 sans MBDV_DEMO : la base reste la seule source."""
+    monkeypatch.setattr(gov_api, "search", _api_hors_service)
+    connexion(client)
+    html = client.get("/?q=coiffure&departement=44&demo=1").get_data(as_text=True)
+    assert "injoignable" in html
+    assert "CARACOLE COIFFURE" not in html
 
 
 def test_jeu_de_demonstration_couvre_l_ile_de_france():
@@ -520,10 +556,10 @@ def test_jeu_de_demonstration_coherent():
     assert "site" not in demo_data.cherche(q="")["items"][0]
 
 
-def test_resultat_vide_en_demonstration_explique_la_limite(client, monkeypatch):
-    monkeypatch.setattr(gov_api, "search", _api_hors_service)
+def test_resultat_vide_en_demonstration_explique_la_limite(app_demo):
+    client = app_demo.test_client()
     connexion(client)
-    html = client.get("/?departement=2A&q=coiffure").get_data(as_text=True)
+    html = client.get("/?departement=2A&q=coiffure&demo=1").get_data(as_text=True)
     assert "Aucune entreprise fictive dans cette zone" in html      # pas de faux vide
     assert "jeu de démonstration" in html
     assert "Aucune n'est située dans le département 2A" in html
@@ -531,10 +567,19 @@ def test_resultat_vide_en_demonstration_explique_la_limite(client, monkeypatch):
     assert "Aucune entreprise ne correspond" not in html              # message reel absent
 
 
-def test_export_csv_signale_la_demonstration(client, monkeypatch):
+def test_export_csv_refuse_sans_base(client, monkeypatch):
+    """La base est injoignable : l'export echoue au lieu d'exporter du fictif."""
     monkeypatch.setattr(gov_api, "search", _api_hors_service)
     connexion(client)
     reponse = client.get("/export.csv?q=coiffure&departement=44")
+    assert reponse.status_code == 503
+    assert "CARACOLE COIFFURE" not in reponse.get_data(as_text=True)
+
+
+def test_export_csv_signale_la_demonstration(app_demo):
+    client = app_demo.test_client()
+    connexion(client)
+    reponse = client.get("/export.csv?q=coiffure&departement=44&demo=1")
     corps = reponse.get_data(as_text=True)
     assert reponse.status_code == 200
     assert "Source des données" in corps
@@ -551,6 +596,64 @@ def test_export_csv_officiel(client, monkeypatch):
     assert "Base officielle INSEE / RNE" in corps
     assert "DEMO" not in reponse.headers["Content-Disposition"]
     assert "CARACOLE COIFFURE" in corps
+
+
+# --------------------------------------------------------------------------
+# Interface : interrupteurs et theme clair / sombre
+# --------------------------------------------------------------------------
+
+def test_interrupteurs_pilotent_leur_etat_visuel(client, monkeypatch):
+    """Le style doit suivre la case cochee (:has(input:checked)), pas seulement
+    la classe rendue par le serveur : c'est ce qui donnait l'impression que les
+    interrupteurs ne repondaient pas au clic."""
+    monkeypatch.setattr(gov_api, "search", faux_search(
+        lambda page: [entreprise("848902672", "CARACOLE COIFFURE")]))
+    connexion(client)
+    html = client.get("/?q=coiffure").get_data(as_text=True)
+    assert 'name="sans_site"' in html and 'name="inclure_masquees"' in html
+    assert 'name="inclure_fermees"' in html
+    # aucun interrupteur actif : pas de classe "on"
+    assert '<label class="toggle ">' in html or '<label class="toggle">' in html
+
+    coche = client.get("/?q=coiffure&sans_site=1&inclure_fermees=1").get_data(as_text=True)
+    assert coche.count('class="toggle on"') == 2
+    assert coche.count('checked') >= 2
+
+    css = client.get("/static/css/main.css").get_data(as_text=True)
+    assert ".toggle:has(input:checked)" in css
+    assert ".toggle:has(input:checked) .toggle-box::after" in css
+    assert "opacity: 0" in css.split(".toggle input {")[1][:200]
+
+
+def test_bouton_de_theme_present_et_javascript(client):
+    connexion(client)
+    html = client.get("/").get_data(as_text=True)
+    assert "data-theme-toggle" in html
+    assert 'meta name="color-scheme"' in html
+    assert "mbdv-theme" in html                     # choix memorise avant peinture
+    js = client.get("/static/js/app.js").get_data(as_text=True)
+    assert "appliquerTheme" in js
+    assert "prefers-color-scheme" in js
+    css = client.get("/static/css/main.css").get_data(as_text=True)
+    assert 'html[data-theme="dark"]' in css
+    for jeton in ("--paper:", "--card:", "--ink:", "--accent:", "--line:"):
+        assert jeton in css.split('html[data-theme="dark"]')[1]
+
+
+def test_bouton_de_theme_sur_la_page_de_connexion(client):
+    html = client.get("/connexion").get_data(as_text=True)
+    assert "data-theme-toggle" in html and "mbdv-theme" in html
+
+
+def test_couleurs_en_dur_absentes_des_regles_hors_theme():
+    """Les regles hors bloc de theme ne doivent plus coder les couleurs en dur."""
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    # on retire les deux blocs de jetons : ce sont eux qui portent les couleurs
+    clair = re.sub(r":root \{.*?\n\}", "", css, count=1, flags=re.S)
+    clair = clair.split("   Theme sombre")[0]
+    for couleur in ("#b3a996", "#d8d0bf", "#fbf7ee", "#f0dcd0", "#7c2a17"):
+        assert couleur not in clair, couleur
 
 
 # --------------------------------------------------------------------------

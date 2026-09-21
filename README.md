@@ -40,11 +40,14 @@ par les variables d'environnement `MBDV_ADMIN_USER`, `MBDV_ADMIN_PASSWORD`,
 
 ### Recherche
 
-- En l'absence de reseau sortant (apercu heberge, machine isolee), l'outil bascule
-  sur un jeu de **demonstration** de 39 entreprises fictives reparties dans
-  24 departements (dont Paris et la petite couronne 92 / 93 / 94). L'origine est
-  affichee en bandeau, et une recherche hors de ces departements l'explique
-  explicitement au lieu d'afficher un resultat vide trompeur.
+- **Aucune donnee inventee par defaut.** Si la base officielle est injoignable,
+  la recherche echoue en le disant (et l'export CSV est refuse) au lieu d'afficher
+  des entreprises fictives.
+- Un jeu de **demonstration** (39 entreprises fictives, 24 departements) existe
+  pour tester l'interface : il n'est servi que sur demande explicite
+  (`?demo=1`) et seulement si l'option est active (`MBDV_DEMO=1`). Il est alors
+  annonce en bandeau (« ces resultats ne sont pas reels ») et le fichier exporte
+  porte le suffixe `-DEMO`.
 - Source : API publique **Recherche d'entreprises** du gouvernement
   (`recherche-entreprises.api.gouv.fr`, donnees INSEE / RNE, licence ouverte,
   sans cle d'API). Aucune donnee n'est inventee.
@@ -181,6 +184,16 @@ tests/                  tests pytest (application, securite, detection, export)
 pyproject.toml          configuration ruff + pytest
 .github/workflows/ci.yml  lint et tests a chaque push / pull request
 ```
+
+## Interface
+
+- Theme **clair / sombre** : bouton dans la barre superieure (et sur la page de
+  connexion). Le choix est memorise dans le navigateur ; sans choix, la
+  preference du systeme est suivie. Le theme est applique avant le premier rendu
+  (pas de clignotement) : `html[data-theme]` + jetons CSS redefinis.
+- Interrupteurs de filtre (« sans site detecte », « inclure les masquees »,
+  « inclure les fermees ») : etat visuel pilote par la case cochee
+  (`.toggle:has(input:checked)`), donc reactif au clic et accessible au clavier.
 
 ## Qualite
 

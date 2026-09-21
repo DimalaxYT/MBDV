@@ -50,6 +50,9 @@ def create_app() -> Flask:
         DATA_DIR=data_dir,
         # Session transportee dans l'URL (jeton signe) : apercu en iframe tierce.
         EMBEDDED_SESSION=embarque,
+        # Jeu de demonstration (entreprises fictives) : jamais utilise par defaut,
+        # seulement sur demande explicite (?demo=1) et si cette option est active.
+        DEMO_ALLOWED=_env_flag("MBDV_DEMO"),
     )
     app.logger.setLevel(logging.INFO)
     # Flask installe son propre handler : sans cela, chaque ligne sort deux fois.

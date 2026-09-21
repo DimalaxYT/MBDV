@@ -5,10 +5,14 @@
   var CSRF = (document.querySelector('meta[name="csrf"]') || {}).content || "";
   // Mode apercu embarque : la session voyage dans l'URL (cookies tiers refuses).
   var SESSION = (document.querySelector('meta[name="session-token"]') || {}).content || "";
+  var DEMO = document.body.dataset.demo === "1";
 
   function withSession(url) {
-    if (!SESSION || url.indexOf("_s=") >= 0) return url;
-    return url + (url.indexOf("?") >= 0 ? "&" : "?") + "_s=" + encodeURIComponent(SESSION);
+    var ajouts = [];
+    if (SESSION && url.indexOf("_s=") < 0) ajouts.push("_s=" + encodeURIComponent(SESSION));
+    if (DEMO && url.indexOf("demo=") < 0) ajouts.push("demo=1");
+    if (!ajouts.length) return url;
+    return url + (url.indexOf("?") >= 0 ? "&" : "?") + ajouts.join("&");
   }
 
   // ------------------------------------------------------------------
@@ -284,12 +288,20 @@
   // Session dans l'URL (apercu embarque) : liens et formulaires
   // ------------------------------------------------------------------
   function completable(form) {
-    if (!SESSION || form.querySelector('input[name="_s"]')) return;
-    var champ = document.createElement("input");
-    champ.type = "hidden";
-    champ.name = "_s";
-    champ.value = SESSION;
-    form.appendChild(champ);
+    if (SESSION && !form.querySelector('input[name="_s"]')) {
+      var champ = document.createElement("input");
+      champ.type = "hidden";
+      champ.name = "_s";
+      champ.value = SESSION;
+      form.appendChild(champ);
+    }
+    if (DEMO && !form.querySelector('input[name="demo"]')) {
+      var marqueur = document.createElement("input");
+      marqueur.type = "hidden";
+      marqueur.name = "demo";
+      marqueur.value = "1";
+      form.appendChild(marqueur);
+    }
   }
 
   document.addEventListener("submit", function (ev) {
@@ -297,13 +309,37 @@
   }, true);
 
   document.addEventListener("click", function (ev) {
-    if (!SESSION || !ev.target || !ev.target.closest) return;
+    if ((!SESSION && !DEMO) || !ev.target || !ev.target.closest) return;
     var lien = ev.target.closest("a[href]");
     if (!lien) return;
     var href = lien.getAttribute("href") || "";
     if (href.charAt(0) !== "/" || href.indexOf("_s=") >= 0) return;
     lien.setAttribute("href", withSession(href));
   }, true);
+
+  // ------------------------------------------------------------------
+  // Theme clair / sombre
+  // ------------------------------------------------------------------
+  function appliquerTheme(sombre) {
+    document.documentElement.dataset.theme = sombre ? "dark" : "light";
+    try { localStorage.setItem("mbdv-theme", sombre ? "dark" : "light"); } catch (e) { /* ignore */ }
+  }
+
+  document.addEventListener("click", function (ev) {
+    if (!ev.target.closest || !ev.target.closest("[data-theme-toggle]")) return;
+    appliquerTheme(document.documentElement.dataset.theme !== "dark");
+  });
+
+  // Si aucun choix n'a ete fait, suivre les changements de preference systeme.
+  if (window.matchMedia) {
+    var requete = window.matchMedia("(prefers-color-scheme: dark)");
+    var suivre = function (ev) {
+      var choix = null;
+      try { choix = localStorage.getItem("mbdv-theme"); } catch (e) { choix = null; }
+      if (!choix) document.documentElement.dataset.theme = ev.matches ? "dark" : "light";
+    };
+    if (requete.addEventListener) requete.addEventListener("change", suivre);
+  }
 
   // ------------------------------------------------------------------
   // Delegation d'evenements
@@ -340,7 +376,13 @@
 
   document.addEventListener("change", function (ev) {
     var select = ev.target.closest("[data-statut]");
-    if (select) actionStatut(select);
+    if (select) { actionStatut(select); return; }
+    // Interrupteurs : le style suit :checked, on garde aussi la classe "on"
+    // pour les navigateurs sans :has().
+    var interrupteur = ev.target.closest(".toggle");
+    if (interrupteur && ev.target.type === "checkbox") {
+      interrupteur.classList.toggle("on", ev.target.checked);
+    }
   });
 
   document.addEventListener("keydown", function (ev) {

@@ -7,8 +7,26 @@
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/main.css">
   <meta name="csrf" content="{{ csrf_token() }}">
+  <meta name="color-scheme" content="light dark">
+  <script>
+    (function () {
+      try {
+        var choix = localStorage.getItem("mbdv-theme");
+        var sombre = choix ? choix === "dark"
+          : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = sombre ? "dark" : "light";
+      } catch (e) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
 </head>
 <body class="login">
+<button type="button" class="icon-btn theme-btn theme-float" data-theme-toggle
+        title="Basculer en mode sombre / clair"
+        aria-label="Basculer en mode sombre ou clair">
+  {{ icon('sun', 17, 'icon-sun') }} {{ icon('moon', 17, 'icon-moon') }}
+</button>
 <div class="login-grid">
 
   <section class="login-hero">
@@ -61,5 +79,6 @@
   </section>
 
 </div>
+<script src="/static/js/app.js"></script>
 </body>
 </html>

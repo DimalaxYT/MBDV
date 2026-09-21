@@ -115,7 +115,14 @@
 
 {% if erreur %}
 <div class="banner banner-error">
-  {{ icon('alert', 15) }} <span>{{ erreur }}</span>
+  {{ icon('alert', 15) }}
+  <span>{{ erreur }}
+    {% if demo_disponible and not p.demo %}
+    <br>Aucune donnée n'est inventée : vous pouvez afficher un
+    <a class="text-link" href="/?{{ demo_liens }}">jeu de démonstration</a>
+    ({{ nb_demo }} entreprises fictives) pour tester l'interface.
+    {% endif %}
+  </span>
 </div>
 {% endif %}
 
@@ -123,8 +130,9 @@
   {% if resultats.demo %}
   <div class="banner banner-info">
     {{ icon('info', 15) }}
-    <span>Base officielle injoignable depuis cet environnement (réseau filtré).
-    Les résultats ci-dessous sont des <strong>données de démonstration</strong> :
+    <span>Base officielle injoignable depuis cet environnement (réseau filtré) :
+    <strong>ces résultats ne sont pas réels</strong>. Jeu de démonstration affiché à
+    votre demande —
     {{ nb_demo }} entreprises fictives, dans {{ departements_demo|length }} départements
     seulement ({{ departements_demo[:6]|join(', ') }}…). Déployé sur votre machine,
     l'outil interroge la base INSEE / RNE en direct.</span>
