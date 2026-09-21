@@ -154,7 +154,7 @@ def test_api_et_fiche_protegees(client):
 def test_redirection_ouverte_bloquee(app):
     for cible in ("//evil.example.com", "https://evil.example.com", "\\\\evil.example.com"):
         reponse = connexion(app.test_client(), next=cible)
-        assert reponse.headers["Location"] == "/", cible
+        assert reponse.headers["Location"] == "/accueil", cible
 
 
 def test_retour_apres_connexion_conserve(client):
@@ -235,23 +235,28 @@ def app_embarque(tmp_path, monkeypatch):
 
 
 def _connexion_sans_cookie(client):
-    """Parcours d'apercu : le navigateur ne conserve aucun cookie."""
+    """Parcours d'apercu : le navigateur ne conserve aucun cookie.
+
+    Renvoie (url d'arrivee, jeton de session) — l'arrivee est la page d'accueil.
+    """
     page = client.get("/connexion").get_data(as_text=True)
     jeton = re.search(r'name="_csrf" value="([^"]+)"', page).group(1)
     reponse = client.post("/connexion", data={"username": "admin",
                                               "password": "MBDV-admin-2026", "_csrf": jeton})
     assert reponse.status_code == 302
-    assert "_s=" in reponse.headers["Location"]
-    return reponse.headers["Location"]
+    cible = reponse.headers["Location"]
+    assert "_s=" in cible
+    return cible, cible.split("_s=")[1]
 
 
 def test_apercu_embarque_connexion_sans_cookie(app_embarque):
     client = app_embarque.test_client()
-    cible = _connexion_sans_cookie(client)
+    cible, jeton = _connexion_sans_cookie(client)
+    assert cible.startswith("/accueil")
     # Le client de test conserve le cookie : on repart d'un client vierge pour
     # simuler un navigateur qui refuse le cookie de session.
     vierge = app_embarque.test_client()
-    page = vierge.get(cible + "&q=coiffure")
+    page = vierge.get("/?_s=" + jeton + "&q=coiffure")
     assert page.status_code == 200
     corps = page.get_data(as_text=True)
     assert "CARACOLE COIFFURE" in corps            # session reconnue sans cookie
@@ -261,11 +266,11 @@ def test_apercu_embarque_connexion_sans_cookie(app_embarque):
 
 def test_apercu_embarque_post_sans_cookie(app_embarque):
     client = app_embarque.test_client()
-    cible = _connexion_sans_cookie(client)
-    page = client.get(cible).get_data(as_text=True)
+    _, jeton = _connexion_sans_cookie(client)
+    page = client.get("/?_s=" + jeton).get_data(as_text=True)
     jeton_csrf = re.search(r'<meta name="csrf" content="([^"]+)"', page).group(1)
     # une requete JSON doit passer avec le jeton d'URL et le CSRF signe
-    reponse = client.post("/api/suivre?_s=" + cible.split("_s=")[1],
+    reponse = client.post("/api/suivre?_s=" + jeton,
                           json={"snapshot": entreprise("848902672", "CARACOLE COIFFURE")},
                           headers={"X-CSRF-Token": jeton_csrf})
     assert reponse.status_code == 200, reponse.get_data(as_text=True)
@@ -305,6 +310,41 @@ def test_cookies_partitionnes_pour_apercu_embarque(tmp_path, monkeypatch):
     assert "Partitioned" in cookie
     assert "SameSite=None" in cookie
     assert "Secure" in cookie
+
+
+# --------------------------------------------------------------------------
+# Page d'accueil apres connexion
+# --------------------------------------------------------------------------
+
+def test_connexion_ouvre_la_page_d_accueil(client):
+    reponse = connexion(client)
+    assert reponse.status_code == 302
+    assert reponse.headers["Location"] == "/accueil"
+    page = client.get("/accueil")
+    assert page.status_code == 200
+    corps = page.get_data(as_text=True)
+    assert "Comment ça marche" in corps
+    assert "Aucune donnée inventée" in corps
+    assert 'href="/"' in corps                      # bouton vers la recherche
+    assert "Lancer une recherche" in corps
+
+
+def test_accueil_accessible_depuis_la_navigation(client):
+    connexion(client)
+    html = client.get("/").get_data(as_text=True)
+    assert 'href="/accueil"' in html                # entree de menu + marque
+    assert "Accueil" in html
+
+
+def test_accueil_protege_par_la_connexion(client):
+    reponse = client.get("/accueil")
+    assert reponse.status_code == 302
+    assert reponse.headers["Location"].endswith("/connexion?next=/accueil")
+
+
+def test_next_prime_sur_la_page_d_accueil(client):
+    reponse = connexion(client, next="/staff")
+    assert reponse.headers["Location"] == "/staff"
 
 
 # --------------------------------------------------------------------------

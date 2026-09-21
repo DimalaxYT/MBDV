@@ -1053,6 +1053,110 @@ body.login { background: var(--paper); }
 }
 
 /* ==========================================================================
+   Page d'accueil (explication de l'outil)
+   ========================================================================== */
+.home-hero { padding: 34px 34px 32px; }
+.home-hero-inner { max-width: 760px; }
+.home-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.home-hero h2 {
+  font-family: var(--font-display);
+  font-size: 33px;
+  font-weight: 620;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  margin: 10px 0 12px;
+}
+.home-hero h2 em { color: var(--accent); font-style: italic; }
+.home-lede { color: var(--ink-2); font-size: 14.5px; line-height: 1.65; }
+.home-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+
+.home-section { margin-top: 26px; }
+.home-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 620;
+  margin-bottom: 12px;
+}
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px;
+}
+.step-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+  padding: 18px 18px 20px;
+}
+.step-num {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.step-card h3 {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 620;
+  margin: 9px 0 7px;
+}
+.step-card p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.step-card .badge { margin: 0 2px; }
+
+.home-two-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 26px;
+}
+.home-block { padding: 22px 24px 24px; }
+.home-list { display: flex; flex-direction: column; gap: 10px; }
+.home-list li {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  padding-left: 16px;
+  position: relative;
+}
+.home-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.home-list strong { color: var(--ink); }
+.home-foot { margin-top: 14px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+.home-foot kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--card-2);
+  color: var(--ink-2);
+}
+.home-block:last-child { margin-top: 16px; }
+.panel + .home-section { margin-top: 26px; }
+
+@media (max-width: 1020px) {
+  .home-two-cols { grid-template-columns: 1fr; }
+}
+
+/* ==========================================================================
    Theme sombre
    Le theme est pose par un script inline (base.html) : <html data-theme="dark">,
    ce qui evite tout clignotement au chargement.

@@ -79,7 +79,7 @@ def _inject_globales():
 
 def _destination_sure(dest) -> str:
     """Chemin interne uniquement : bloque les redirections ouvertes (//exemple.com)."""
-    secours = url_for("views.recherche")
+    secours = url_for("views.accueil")
     texte = str(dest or "")
     if not texte.startswith("/") or texte.startswith("//") or texte.startswith("/\\"):
         return secours
@@ -92,7 +92,7 @@ def _destination_sure(dest) -> str:
 @bp.route("/connexion", methods=["GET", "POST"])
 def connexion():
     if current_user():
-        return redirect(url_avec_jeton(url_for("views.recherche")))
+        return redirect(url_avec_jeton(url_for("views.accueil")))
     erreur = None
     if request.method == "GET":
         # Trace utile pour diagnostiquer un apercu qui perd son cookie de session
@@ -119,6 +119,22 @@ def connexion():
 def deconnexion():
     logout()
     return redirect(url_for("views.connexion"))
+
+
+# --------------------------------------------------------------------------
+# Accueil (page d'explication, affichee juste apres la connexion)
+# --------------------------------------------------------------------------
+
+@bp.route("/accueil")
+@login_required
+def accueil():
+    return render_template(
+        "accueil.html",
+        page_id="accueil",
+        titre="Bienvenue dans MBDV Prospection",
+        sous_titre=("L'outil des associés pour trouver, qualifier et suivre les "
+                    "entreprises qui n'ont pas encore de site web"),
+    )
 
 
 # --------------------------------------------------------------------------
