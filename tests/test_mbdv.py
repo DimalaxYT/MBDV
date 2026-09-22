@@ -614,6 +614,27 @@ def test_animation_de_changement_de_page(client):
     assert "pageshow" in js                               # retour arriere sans barre bloquee
 
 
+def test_surlignage_couvre_toute_la_ligne_en_barre_reduite(client):
+    """Regle le bug "seule la moitie de la phrase est surlignee".
+
+    Les libelles etaient positionnes hors du flux : la boite de l'element
+    s'arretait a l'icone, donc le fond et le trait d'accent ne couvraient que
+    l'icone. Les lignes sont maintenant elargies avec le panneau et les libelles
+    restent dans le flux.
+    """
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    compacte = css.split("@media (max-width: 900px) {")[1].split("\n}\n")[0]
+
+    assert ".nav-item span, .user-meta {\n    position: absolute" not in compacte
+    assert "position: absolute" in compacte                 # uniquement le fond du panneau
+    assert compacte.count("position: absolute") == 1
+    assert ".brand, .nav-item, .user-card {\n    width: 68px;" in compacte
+    assert ".sidebar:hover .brand, .sidebar:hover .nav-item, .sidebar:hover .user-card," in compacte
+    assert "width: 234px; }" in compacte                    # elargis avec le panneau
+    assert "transition: width 0.26s" in compacte
+
+
 def test_barre_laterale_compacte_garde_les_icones(client):
     """Barre reduite : les icones restent visibles, seul le fond se deplie.
 
@@ -628,7 +649,10 @@ def test_barre_laterale_compacte_garde_les_icones(client):
     assert "width: 68px" in compacte
     assert "flex: 0 0 68px" in compacte
     assert "translateX(-166px)" not in compacte
-    assert "transition: width" not in compacte           # aucune largeur animee
+    # La largeur de la BARRE n'est plus animee (elle restait couteuse). Seules les
+    # lignes s'elargissent, dans une barre en position fixe : la page, elle, ne
+    # bouge pas d'un pixel.
+    assert "position: fixed" in compacte
 
     # c'est le fond (::before) qui glisse pour reveler les libelles
     assert ".sidebar::before" in compacte
@@ -636,9 +660,8 @@ def test_barre_laterale_compacte_garde_les_icones(client):
     assert ".sidebar:hover::before" in compacte
     assert ".sidebar:focus-within::before" in compacte
 
-    # les libelles sont hors du flux (aucun decalage) et reveles en fondu
+    # les libelles sont reveles en fondu, sans sortir de la boite de la ligne
     assert "opacity: 0" in compacte
-    assert "position: absolute" in compacte
     assert ".main { margin-left: 68px; }" in compacte
     assert ".brand-text, .brand-sub" not in compacte
     # Seul le bloc de connexion a le droit de disparaitre : pas les libelles de nav.
@@ -697,7 +720,8 @@ def test_benefice_du_portefeuille(app):
 
     csrf = jeton(client, "/portefeuille")
     reponse = client.post("/portefeuille/montant", data={
-        "_csrf": csrf, "siren": "111111111", "montant": "4500", "signe_le": "2026-09-10"})
+        "_csrf": csrf, "siren": "111111111", "montant": "4500",
+        "signe_le": "2026-09-10", "heure": "14:30"})
     assert reponse.status_code == 302
     assert "montant=ok" in reponse.headers["Location"]
     client.post("/portefeuille/montant", data={
@@ -716,6 +740,77 @@ def test_benefice_du_portefeuille(app):
     assert 'value="4500"' in page                       # montant du client 1
     assert 'value="2026-09-10"' in page                 # sa date de paiement
     assert 'value="1500"' in page                        # centimes tronques, sans arrondi
+    assert 'value="14:30"' in page                       # heure de l'encaissement
+    assert "10/09/2026 à 14:30" in page or "à 14:30" in page
+
+
+def test_encaissement_date_et_heure(app, client):
+    """L'heure est acceptee et affichee ; un datetime-local complet aussi."""
+    connexion(client)
+    with base(client) as b:
+        b.execute("INSERT INTO tracked (siren, snapshot, status, added_by, added_at)"
+                  " VALUES ('111111111', ?, 'client', 'admin', '2026-01-01T00:00:00Z')",
+                  (json.dumps(entreprise("111111111", "Alpha")),))
+    csrf = jeton(client, "/portefeuille")
+
+    client.post("/portefeuille/montant", data={
+        "_csrf": csrf, "siren": "111111111", "montant": "1200",
+        "signe_le": "2026-05-04", "heure": "09:15"})
+    page = client.get("/portefeuille").get_data(as_text=True)
+    assert "04/05/2026 à 09:15" in page
+    # le graphique place bien l'encaissement sur le mois de mai
+    mai = re.search(r'<title>mai 2026 : ([^<]+)</title>', page)
+    assert mai and "1\u202f200" in mai.group(1)
+
+    # champ datetime-local (les deux valeurs dans le meme champ)
+    client.post("/portefeuille/montant", data={
+        "_csrf": csrf, "siren": "111111111", "montant": "1300", "signe_le": "2026-06-01T18:45"})
+    page = client.get("/portefeuille").get_data(as_text=True)
+    assert "01/06/2026 à 18:45" in page
+
+    # heure invalide refusee, montant inchange
+    reponse = client.post("/portefeuille/montant", data={
+        "_csrf": csrf, "siren": "111111111", "montant": "9999",
+        "signe_le": "2026-06-01", "heure": "99:99"})
+    assert "montant_erreur=date" in reponse.headers["Location"]
+    with app.app_context():
+        from app import db
+        assert db.one("SELECT montant_cents FROM tracked WHERE siren = '111111111'"
+                      )["montant_cents"] == 130000
+
+    # montant a 0 : l'encaissement est efface
+    client.post("/portefeuille/montant", data={
+        "_csrf": csrf, "siren": "111111111", "montant": "0", "signe_le": ""})
+    with app.app_context():
+        from app import db
+        assert db.one("SELECT montant_cents FROM tracked WHERE siren = '111111111'"
+                      )["montant_cents"] == 0
+
+
+def test_encaissement_depuis_le_panel_staff(app):
+    """Le dirigeant encaisse un client sans quitter le panel staff."""
+    client = app.test_client()
+    connexion(client)
+    with app.app_context():
+        from app import db
+        db.execute("INSERT INTO tracked (siren, snapshot, status, added_by, added_at)"
+                   " VALUES ('111111111', ?, 'client', 'admin', '2026-01-01T00:00:00Z')",
+                   (json.dumps(entreprise("111111111", "Alpha")),))
+    page = client.get("/staff").get_data(as_text=True)
+    assert 'name="action" value="benefice"' in page
+    assert 'name="heure"' in page                          # heure modifiable sur place
+
+    reponse = client.post("/staff/portefeuille", data={
+        "_csrf": jeton(client, "/staff"), "action": "benefice", "siren": "111111111",
+        "montant": "2500", "signe_le": "2026-04-02", "heure": "11:05"})
+    assert reponse.status_code == 302
+    assert "pf=montant" in reponse.headers["Location"]
+
+    page = client.get(reponse.headers["Location"]).get_data(as_text=True)
+    assert "Bénéfice enregistré" in page
+    assert "02/04/2026 à 11:05" in page
+    assert "2\u202f500" in page or "2 500" in page
+    assert 'value="2500"' in page                          # champ pre-rempli
 
 
 def test_montant_refuse_si_invalide_ou_hors_portefeuille(app, client):

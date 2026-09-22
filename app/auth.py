@@ -329,6 +329,22 @@ def _fmt_eur(value) -> str:
     return f"{'-' if neg else ''}{s} \u20ac"
 
 
+def _fmt_moment(value) -> str:
+    """'2026-09-12T14:30' -> '12/09/2026 à 14:30' ; '2026-09-12' -> '12/09/2026'."""
+    if not value:
+        return "-"
+    texte = str(value)
+    jour = texte[:10]
+    try:
+        dt = datetime.strptime(jour, "%Y-%m-%d")
+    except ValueError:
+        return texte
+    rendu = dt.strftime("%d/%m/%Y")
+    if len(texte) >= 16 and texte[10] == "T":
+        return f"{rendu} à {texte[11:16]}"
+    return rendu
+
+
 def _fmt_centimes(value) -> str:
     """1 250 000 centimes -> '12 500 €' (arrondi a l'euro, espace fine insecable)."""
     try:
@@ -345,3 +361,4 @@ def _register_filters(app) -> None:
     app.add_template_filter(_fmt_date, "frdate")
     app.add_template_filter(_fmt_eur, "eur")
     app.add_template_filter(_fmt_centimes, "euros")
+    app.add_template_filter(_fmt_moment, "moment")

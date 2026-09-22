@@ -622,7 +622,8 @@ def benefice_du_portefeuille():
         montant = int(ligne["montant_cents"] or 0)
         total_cents += montant
         date = (ligne["signe_le"] or "")[:10]
-        # Montant sans date exploitable : on le compte sur le mois courant.
+        # `signe_le` est une date locale (heure de Paris) : le mois se lit
+        # directement dessus. Sans date exploitable : mois courant.
         valide = len(date) >= 7 and date[:4].isdigit() and date[5:7].isdigit()
         cle = date[:7] if valide else db.now_iso()[:7]
         par_mois[cle] = par_mois.get(cle, 0) + montant
@@ -700,41 +701,82 @@ def portefeuille():
     )
 
 
-@bp.route("/portefeuille/montant", methods=["POST"])
-@login_required
-def portefeuille_montant():
-    """Enregistre le benefice encaisse pour une entreprise suivie."""
-    siren = (request.form.get("siren") or "").strip()
-    montant = (request.form.get("montant") or "").strip().replace("\u202f", "").replace(" ", "")
-    date = (request.form.get("signe_le") or "").strip()
-    if not re.fullmatch(r"\d{9}", siren):
+def _montant_en_centimes(brut: str):
+    """'4 500,50' -> 450050. Renvoie None si le texte n'est pas un montant valide."""
+    texte = (brut or "").replace("\u202f", "").replace("\u00a0", "").replace(" ", "")
+    texte = texte.replace(",", ".")
+    if not texte:
+        return 0                    # champ vide : montant retire
+    try:
+        centimes = int(round(float(texte) * 100))
+    except ValueError:
+        return None
+    if centimes < 0 or centimes > 100_000_000_00:      # 0 a 1 milliard d'euros
+        return None
+    return centimes
+
+
+def _quand_encaissement(date_brute: str, heure_brute: str = ""):
+    """Assemble la date et l'heure saisies en 'AAAA-MM-JJTHH:MM' (heure de Paris).
+
+    Accepte aussi un champ `datetime-local` complet dans `date_brute`, et une date
+    seule (l'heure vaut alors 00:00). Renvoie (valeur, erreur).
+    """
+    date_txt = (date_brute or "").strip()
+    heure_txt = (heure_brute or "").strip()
+    if not date_txt and not heure_txt:
+        return None, None                     # aucune date : l'encaissement est date du jour
+    if "T" in date_txt:                       # <input type="datetime-local">
+        date_txt, _, heure_dans_date = date_txt.partition("T")
+        heure_txt = heure_txt or heure_dans_date
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_txt):
+        return None, "date"
+    try:
+        datetime.strptime(date_txt, "%Y-%m-%d")
+    except ValueError:
+        return None, "date"
+    heure_txt = (heure_txt or "00:00").strip()[:5]
+    if not re.fullmatch(r"\d{2}:\d{2}", heure_txt):
+        return None, "date"
+    try:
+        datetime.strptime(heure_txt, "%H:%M")
+    except ValueError:
+        return None, "date"
+    return f"{date_txt}T{heure_txt}", None
+
+
+def _enregistre_encaissement(siren: str, montant_brut: str, date_brute: str,
+                             heure_brute: str = "", redirection=None):
+    """Enregistre le benefice d'une entreprise suivie. Renvoie la redirection."""
+    redirection = redirection or url_for("views.portefeuille", montant="ok")
+    if not re.fullmatch(r"\d{9}", siren or ""):
         return redirect(url_avec_jeton(url_for("views.portefeuille", montant_erreur="siren")))
     if not db.one("SELECT id FROM tracked WHERE siren = ?", (siren,)):
         return redirect(url_avec_jeton(url_for("views.portefeuille", montant_erreur="absent")))
 
-    erreur = None
-    centimes = 0
-    if montant:
-        montant = montant.replace(",", ".")
-        try:
-            centimes = int(round(float(montant) * 100))
-        except ValueError:
-            erreur = "montant"
-        if centimes < 0:
-            erreur = "montant"
-        if centimes > 100_000_000_00:        # garde-fou : 1 milliard d'euros
-            erreur = "montant"
-    if date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
-        erreur = "date"
+    centimes = _montant_en_centimes(montant_brut)
+    if centimes is None:
+        return redirect(url_avec_jeton(url_for("views.portefeuille", montant_erreur="montant")))
+    quand, erreur = _quand_encaissement(date_brute, heure_brute)
     if erreur:
-        return redirect(url_avec_jeton(
-            url_for("views.portefeuille", montant_erreur=erreur)))
+        return redirect(url_avec_jeton(url_for("views.portefeuille", montant_erreur=erreur)))
 
     db.execute("UPDATE tracked SET montant_cents = ?, signe_le = ? WHERE siren = ?",
-               (centimes, date or None, siren))
+               (centimes, quand, siren))
     current_app.logger.info("Benefice de %s enregistre par %s : %s centimes (%s)",
-                            siren, session.get("username"), centimes, date or "sans date")
-    return redirect(url_avec_jeton(url_for("views.portefeuille", montant="ok")))
+                            siren, session.get("username"), centimes, quand or "sans date")
+    return redirect(url_avec_jeton(redirection))
+
+
+@bp.route("/portefeuille/montant", methods=["POST"])
+@login_required
+def portefeuille_montant():
+    """Enregistre (ou efface) le benefice encaisse pour une entreprise suivie."""
+    return _enregistre_encaissement(
+        (request.form.get("siren") or "").strip(),
+        request.form.get("montant") or "",
+        request.form.get("signe_le") or "",
+        request.form.get("heure") or "")
 
 
 # --------------------------------------------------------------------------
@@ -856,7 +898,7 @@ def staff():
 @bp.route("/staff/portefeuille", methods=["POST"])
 @admin_required
 def staff_portefeuille():
-    """Ajoute ou retire une entreprise du portefeuille depuis le panel staff."""
+    """Ajoute, retire ou valorise une entreprise du portefeuille (panel staff)."""
     action = request.form.get("action") or ""
     siren = (request.form.get("siren") or "").strip()
     etat = _etat_staff(request.form.get("etat"))
@@ -875,6 +917,13 @@ def staff_portefeuille():
         current_app.logger.info("Portefeuille : %s retire par %s",
                                 siren, session.get("username"))
         return redirect(retour({"pf": "retire"}))
+
+    if action == "benefice":
+        # Meme enregistrement que depuis le portefeuille, mais reste sur le panel.
+        return _enregistre_encaissement(
+            siren, request.form.get("montant") or "", request.form.get("signe_le") or "",
+            request.form.get("heure") or "",
+            redirection=url_for("views.staff", etat=etat, q=q or None, pf="montant"))
 
     if action != "ajouter":
         return redirect(retour({"pf_erreur": "action"}))

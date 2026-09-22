@@ -103,8 +103,9 @@
 <section class="panel staff-portefeuille">
   <h2 class="panel-title">{{ icon('briefcase', 17) }} Portefeuille de l'équipe</h2>
   <p class="panel-lede">
-    Ajoutez une entreprise au portefeuille en saisissant son SIREN (9 chiffres), ou
-    retirez-en une d'un clic. Les entreprises déjà suivies gardent leur statut et leur
+    Ajoutez une entreprise au portefeuille en saisissant son SIREN (9 chiffres),
+    renseignez pour chacune le <strong>bénéfice encaissé avec sa date et son heure</strong>
+    (montant à 0 pour l'effacer), ou retirez-en une d'un clic. Les entreprises déjà suivies gardent leur statut et leur
     bénéfice. Total encaissé : <strong>{{ benefice.total_cents|euros }}</strong>.
     {% if demo %}<br><strong>Mode démonstration :</strong> les fiches ajoutées depuis le
     jeu fictif ne sont pas des entreprises réelles
@@ -115,6 +116,7 @@
   <div class="banner banner-ok">
     {{ icon('check', 15) }} <span>
       {% if pf_ok == 'ajoute' %}Entreprise ajoutée au portefeuille.
+      {% elif pf_ok == 'montant' %}Bénéfice enregistré : montant, date et heure pris en compte.
       {% else %}Entreprise retirée du portefeuille.{% endif %}
     </span>
   </div>
@@ -156,11 +158,27 @@
           &middot; {{ statut_label.get(c.statut, c.statut) }}
           &middot; ajoutée par {{ c.ajoute_par }}</span>
       </span>
-      {% if c.montant_cents %}
-      <span class="pf-montant">{{ c.montant_cents|euros }}
-        {% if c.signe_le %}<span class="row-sub">le {{ c.signe_le|frdate }}</span>{% endif %}
+      <form class="pf-encaissement" method="post" action="/staff/portefeuille" data-chargement>
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="benefice">
+        <input type="hidden" name="siren" value="{{ c.siren }}">
+        <input type="hidden" name="etat" value="{{ etat }}">
+        {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+        <input class="input-montant" type="number" name="montant" min="0" step="0.01"
+               value="{{ c.montant_cents // 100 if c.montant_cents else '' }}" placeholder="0"
+               aria-label="Montant encaissé en euros pour {{ c.nom }}">
+        <input class="input-date" type="date" name="signe_le"
+               value="{{ (c.signe_le or '')[:10] }}"
+               aria-label="Date du paiement pour {{ c.nom }}">
+        <input class="input-heure" type="time" name="heure"
+               value="{{ (c.signe_le or '')[11:16] or '12:00' }}"
+               aria-label="Heure du paiement pour {{ c.nom }}">
+        <button class="btn btn-ghost btn-sm" type="submit"
+                title="Enregistrer le bénéfice">{{ icon('check', 14) }}</button>
+      </form>
+      <span class="pf-montant">{{ c.montant_cents|euros if c.montant_cents else '' }}
+        {% if c.signe_le %}<span class="row-sub">{{ c.signe_le|moment }}</span>{% endif %}
       </span>
-      {% endif %}
       <form method="post" action="/staff/portefeuille">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <input type="hidden" name="action" value="retirer">

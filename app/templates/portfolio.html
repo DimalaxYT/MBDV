@@ -51,6 +51,41 @@
     </div>
   </div>
 
+  {% if items %}
+  <form class="encaissement-form" method="post" action="/portefeuille/montant" data-chargement>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="field">
+      <label for="enc-entreprise">Entreprise encaissée</label>
+      <select id="enc-entreprise" name="siren" required>
+        {% for c in items %}
+        <option value="{{ c.siren }}" {% if c.montant_cents %}data-montant="{{ c.montant_cents // 100 }}"
+                data-quand="{{ (c.signe_le or '')[:16] }}" {% endif %}>{{ c.nom }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field field-montant">
+      <label for="enc-montant">Montant encaissé (€)</label>
+      <input id="enc-montant" type="number" name="montant" min="0" step="0.01"
+             placeholder="4500" required>
+    </div>
+    <div class="field">
+      <label for="enc-date">Date</label>
+      <input id="enc-date" type="date" name="signe_le" required>
+    </div>
+    <div class="field field-heure">
+      <label for="enc-heure">Heure</label>
+      <input id="enc-heure" type="time" name="heure" value="12:00" required>
+    </div>
+    <button type="submit" class="btn btn-ink btn-tall">
+      {{ icon('wallet', 15) }} Enregistrer
+    </button>
+  </form>
+  <p class="form-note encaissement-note">
+    Le montant remplace celui déjà enregistré pour cette entreprise (0 pour l'effacer).
+    La date et l'heure servent au graphique ci-dessous.
+  </p>
+  {% endif %}
+
   {% if benefice.maximum_cents %}
   <figure class="graph">
     <figcaption class="graph-legend">
@@ -108,7 +143,7 @@
           <th>Site web</th>
           <th>Statut commercial</th>
           <th>Ajoutée</th>
-          <th class="col-benefice">Bénéfice gagné</th>
+          <th class="col-benefice">Bénéfice gagné <span class="th-note">(€ — date, heure)</span></th>
           <th class="col-actions"></th>
         </tr>
       </thead>
@@ -151,9 +186,17 @@
               <input class="input-date" type="date" name="signe_le"
                      value="{{ (c.signe_le or '')[:10] }}"
                      aria-label="Date du paiement pour {{ c.nom }}">
+              <input class="input-heure" type="time" name="heure"
+                     value="{{ (c.signe_le or '')[11:16] or '12:00' }}"
+                     aria-label="Heure du paiement pour {{ c.nom }}">
               <button class="btn btn-ghost btn-sm" type="submit"
                       title="Enregistrer le bénéfice">{{ icon('check', 14) }}</button>
             </form>
+            <span class="row-sub montant-vu">
+              {% if c.montant_cents %}Encaissé : {{ c.montant_cents|euros }}
+              {% if c.signe_le %} le {{ c.signe_le|moment }}{% endif %}
+              {% else %}Aucun montant enregistré{% endif %}
+            </span>
           </td>
           <td class="col-actions">
             <div class="row-actions">

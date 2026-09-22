@@ -214,8 +214,11 @@ pyproject.toml          configuration ruff + pytest
   10,4 Ko, JS 22,7 Ko -> 6,3 Ko) et le CSS/JS versionne est garde par le
   navigateur (`?v=<empreinte>`, un an) : une page suivante ne coute plus que
   quelques kilo-octets.
-- **Bénéfice** : chaque entreprise suivie peut porter un montant encaissé et sa date
-  (colonne « Bénéfice gagné » du portefeuille, montants stockés en centimes). Le
+- **Bénéfice** : chaque entreprise suivie porte un montant encaissé avec sa **date et
+  son heure**. On le renseigne à trois endroits : le formulaire « Enregistrer un
+  encaissement » en haut du portefeuille (choix de l'entreprise, montant, date, heure),
+  la colonne « Bénéfice gagné » du tableau, ou directement dans le panel staff sur la
+  ligne de l'entreprise. Montants stockés en centimes, heure en heure de Paris. Le
   portefeuille affiche le total, les clients signés, le panier moyen, le mois en
   cours et un graphique des 12 derniers mois (barres + courbe de cumul, en SVG,
   sans dépendance).
