@@ -1,0 +1,12 @@
+{# Cellule « Référent » : qui s'occupe de cette entreprise, et de quoi il dispose.
+   Rendu aussi bien a l'affichage de la page qu'apres une action (innerHTML). #}
+{% if not c.pris_par %}
+<button class="link-btn" data-prendre="{{ c.siren }}" data-mine="0">Je m'en occupe</button>
+{% elif c.prise_par_moi %}
+<span class="cell-strong">vous</span>
+<button class="link-btn link-sub" data-prendre="{{ c.siren }}" data-mine="1"
+        title="Remettre cette entreprise dans la file commune">laisser</button>
+{% else %}
+<span class="cell-strong">{{ c.pris_par }}</span>
+{% if c.pris_le_texte %}<span class="row-sub">depuis le {{ c.pris_le_texte }}</span>{% endif %}
+{% endif %}

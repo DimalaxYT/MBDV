@@ -97,26 +97,25 @@ cycle commercial : a contacter, contacte, en discussion, devis envoye, client,
 sans suite. Le portefeuille est un tableau de lecture : il affiche le statut, la
 couleur du site detecte et le benefice gagne (saisi au panel staff).
 
-### Tableau de bord d'equipe (`/suivi`)
+### Appels a passer (`/suivi`)
 
-Page commune aux deux associes, pour ne pas appeler la meme entreprise en meme
-temps : chaque entreprise suivie n'a qu'**un referent a la fois**.
+Page commune aux deux associes : un **repertoire**, une ligne par entreprise en
+attente d'appel, du plus urgent au moins urgent (retards, puis aujourd'hui, puis
+relances a venir). Les clients signes, les affaires classees et les entreprises
+masquees ne figurent pas dans la liste.
 
-- **Appels a passer**, du plus urgent au moins urgent : retards d'abord, puis
-  les appels du jour, puis les relances a venir. Les clients signes, les affaires
-  classees et les entreprises masquees sortent de la file.
-- Chaque ligne est un **dossier pret a appeler** : identite (SIREN, enseigne),
-  activite, adresse, effectif, date de creation, dirigeant, etat du site web,
-  liens annuaire officiel / domaine / carte, note d'equipe et historique des
-  appels. Le bouton « Fiche complete » ouvre le dossier detaille.
-- **« Je m'en occupe »** attribue l'entreprise (le collegue voit qui s'en
-  occupe, seul le referent ou le dirigeant peut la rendre a l'equipe).
-- **« Appel passé »** enregistre le compte rendu, la date et l'heure de l'appel,
-  le prochain appel a passer, fait passer le statut de « A contacter » a
-  « Contacte » (jamais l'inverse) et attribue l'entreprise si elle etait libre.
-- **Note d'equipe** modifiable sans compter d'appel.
-- Cartes d'equipe en tete : entreprises travaillees et appels passes sur 7 jours
-  par chacun, plus le nombre d'entreprises sans referent.
+- Colonnes : entreprise (SIREN, commune), activite, etat du site web, **referent**,
+  dernier appel et prochain appel. Le nom ouvre le dossier complet (adresse,
+  dirigeant, effectif, liens, carte) : rien a choisir avant d'appeler.
+- Une entreprise n'a qu'**un referent a la fois** : « Je m'en occupe » la prend,
+  « laisser » la remet dans la file commune. Seul le referent ou le dirigeant
+  peut la liberer ; le nom du referent et la date de prise sont affiches.
+- « Appel passe » ouvre une petite fenetre : compte rendu, prochain appel
+  (facultatif). L'appel est compte et date, la ligne se met a jour sur place, le
+  statut passe de « A contacter » a « Contacte » (jamais l'inverse) et
+  l'entreprise est attribuee si elle etait libre.
+- En tete, trois compteurs (en retard, aujourd'hui, a venir, sans referent) et,
+  en pied, la charge de chacun (entreprises travaillees, appels des 7 derniers jours).
 
 Actions JSON : `POST /api/suivi/prendre` (`siren`, `prendre`),
 `POST /api/suivi/appel` (`siren`, `note`, `relance_le`) et

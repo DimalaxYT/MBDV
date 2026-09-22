@@ -1672,30 +1672,37 @@ def test_suivi_protege_par_la_connexion(client):
     assert "/connexion" in client.get("/suivi").headers["Location"]
 
 
-def test_suivi_reunit_le_dossier_de_chaque_appel(client):
-    """Chaque appel a passer arrive avec son dossier complet, pret a etre appele."""
+def test_suivi_est_un_repertoire_une_ligne_par_entreprise(client):
+    """Un tableau simple : une ligne par entreprise en attente, rien de plus."""
     connexion(client)
     _suivie(client, "111111111", "Alpha Coiffure", "a_contacter")
     _suivie(client, "222222222", "Beta Menuiserie", "client")          # plus d'appel
     _suivie(client, "333333333", "Gamma Toiture", "sans_suite")        # classe
     page = client.get("/suivi").get_data(as_text=True)
 
-    assert "Tableau de bord d'équipe" in page
+    assert "Appels à passer" in page
+    assert "En attente d'appel (1)" in page
     assert "Alpha Coiffure" in page
     assert "Beta Menuiserie" not in page        # cliente : rien a appeler
     assert "Gamma Toiture" not in page          # classee : rien a appeler
-    # dossier : identite, activite, localisation, effectif, dirigeant, site, liens
-    for attendu in ("111111111", "Coiffure", "Alpha Coiffure",
-                    "Effectif", "Dirigeant", "Activité", "Adresse",
-                    "annuaire-entreprises.data.gouv.fr/entreprise/111111111",
-                    "Aucun appel enregistré", "Personne pour l’instant"):
+    # les colonnes essentielles, pour decider d'un appel d'un seul regard
+    for attendu in ("Entreprise", "Activité", "Site web", "Référent",
+                    "Dernier appel", "À rappeler", "Appel passé"):
         assert attendu in page, attendu
-    # sans note : le message d'amorcage, pas une case vide
-    assert "Aucune note d’équipe pour l’instant." in page
-    # et les trois actions sont disponibles
-    assert 'data-prendre="111111111"' in page
-    assert 'data-form="appel" data-siren="111111111"' in page
-    assert 'data-form="note" data-siren="111111111"' in page
+    # une seule ligne de tableau, porteuse de tout ce qu'il faut
+    assert page.count('class="result-row"') == 1
+    assert 'data-siren="111111111"' in page
+    assert "111111111" in page and "Coiffure" in page
+    assert '<span class="cell-soft" data-dernier>—</span>' in page
+    assert 'data-appels>—<' in page
+    # le reste se fait sur la ligne : prendre, appel passe ; le dossier est a un clic
+    assert 'data-prendre="111111111"' in page and 'data-mine="0"' in page
+    assert 'data-appel="111111111"' in page
+    assert 'data-detail="111111111"' in page
+    # l'ancien affichage en cartes a disparu
+    for disparu in ('class="appel-carte"', 'class="equipe-card"', "appel-dossier",
+                    'data-form="appel"'):
+        assert disparu not in page, disparu
 
 
 def test_suivi_ordonne_les_retards_en_tete(client):
@@ -1775,6 +1782,11 @@ def test_appel_enregistre_avec_compte_rendu_et_relance(client):
     assert etat["prise_par_moi"] is True                    # l'appel attribue l'entreprise
     assert etat["pris_label"].startswith("Prise par vous")
     assert etat["badge_html"].startswith("<span class=\"badge")
+    # la ligne du repertoire est decrite par ces libelles, deja calcules
+    assert etat["referent_html"].startswith("<span class=\"cell-strong\">vous</span>")
+    jour = _aujourd_hui_paris()                       # AAAA-MM-JJ
+    assert etat["dernier_appel"] == f"{jour[8:10]}/{jour[5:7]}/{jour[:4]}"
+    assert etat["appels_label"] == "1 appel(s)"
 
     with base(client) as b:
         ligne = b.one("SELECT * FROM tracked WHERE siren = ?", ("111111111",))
@@ -1832,6 +1844,8 @@ def test_note_d_equipe_sans_appel(client):
     assert etat["appels"] == 0
     assert etat["historique"] == "Aucun appel enregistré"
     assert etat["statut"] == "a_contacter"
+    assert etat["appels_label"] == "—" and etat["dernier_appel"] == "—"
+    # la note part au formulaire d'appel de la ligne (relecture avant l'appel)
     page = client.get("/suivi").get_data(as_text=True)
     assert "Telephone : 02 40 00 00 00" in page
     # la note reste modifiable et suit le compte rendu du prochain appel
@@ -1851,7 +1865,8 @@ def test_suivi_masque_les_entreprises_masquees(client):
                   " '2026-01-03T09:00:00Z')")
     page = client.get("/suivi").get_data(as_text=True)
     assert "Alpha Coiffure" in page and "Beta Menuiserie" not in page
-    assert "Qui travaille quoi" in page
+    assert "En attente d'appel (1)" in page
+    assert "Charge de l'équipe" in page        # la charge reste visible en une ligne
 
 
 def test_migration_des_colonnes_de_suivi(tmp_path, monkeypatch):

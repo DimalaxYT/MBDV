@@ -771,6 +771,11 @@ def _suivi_de_l_entreprise(ligne, aujourd_hui: str) -> dict:
     c["relance_le"] = ligne["relance_le"] or ""
     c["note"] = ligne["note"] or ""
     c["historique"] = _libelle_appels(c)
+    # Libelles prets a afficher (page et reponses aux actions utilisent les memes).
+    c["prise_par_moi"] = c["pris_par"] == (current_user() or {}).get("username")
+    c["pris_le_texte"] = _heure_de_paris(c["pris_le"]) if c["pris_le"] else ""
+    c["dernier_appel"] = _jour_lisible(c["appele_le"]) if c["appele_le"] else "—"
+    c["appels_label"] = f"{c['appels']} appel(s)" if c["appels"] else "—"
     c["masquee"] = bool(db.one("SELECT id FROM hides WHERE siren = ? AND restored_at IS NULL",
                                (ligne["siren"],)))
     c["urgence"], c["urgence_label"] = _etiquette_urgence(
@@ -780,27 +785,20 @@ def _suivi_de_l_entreprise(ligne, aujourd_hui: str) -> dict:
     return c
 
 
-def _equipe_et_charge(membres, entreprises) -> list[dict]:
-    """Cartes de l'equipe : ce que chacun travaille et les appels de la semaine."""
+def _charge_de_l_equipe(membres, entreprises) -> list[dict]:
+    """Charge de chacun, en une ligne : ce que personne ne fait n'est pas visible ici."""
     debut_semaine = (_maintenant() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M")
-    moi = (current_user() or {}).get("username")
-    cartes = []
+    charge = []
     for m in membres:
         miennes = [c for c in entreprises if c["pris_par"] == m["username"]]
-        appels_7j = [c for c in entreprises
-                     if c["appele_par"] == m["username"] and c["appele_le"] >= debut_semaine]
-        cartes.append({
-            "username": m["username"],
+        charge.append({
             "nom": m["display_name"] or m["username"],
-            "moi": m["username"] == moi,
-            "initiales": (m["display_name"] or m["username"])[:1].upper(),
-            "role_label": "Dirigeant" if (m["role"] or "") == "admin" else "Associé",
             "prises": len(miennes),
-            "appels_7j": len(appels_7j),
+            "appels_7j": len([c for c in entreprises if c["appele_par"] == m["username"]
+                              and c["appele_le"] >= debut_semaine]),
             "en_retard": len([c for c in miennes if c["urgence"] == "en_retard"]),
-            "liste": miennes,
         })
-    return cartes
+    return charge
 
 
 def _donnees_de_suivi() -> dict:
@@ -811,20 +809,16 @@ def _donnees_de_suivi() -> dict:
 
     membres = [dict(r) for r in db.query(
         "SELECT username, display_name, role FROM users ORDER BY id")]
-    equipe = _equipe_et_charge(membres, entreprises)
 
     # File d'appels : tout ce qui n'est ni client ni sans suite. Une entreprise
-    # masquee disparait de la file (elle ne sera pas appelee), mais reste dans
-    # « Qui travaille quoi » tant que quelqu'un s'en occupe.
+    # masquee disparait de la file : elle ne sera pas appelee.
     a_appeler = [c for c in entreprises
                  if c["statut"] not in STATUTS_SANS_APPEL and not c["masquee"]]
     a_appeler.sort(key=lambda c: (c["ordre"], c["relance_le"] or "9999-99-99",
                                   c["added_at"] or ""))
     return {
         "appels": a_appeler,
-        "sans_referent": [c for c in a_appeler if not c["pris_par"]],
-        "entreprises": entreprises,
-        "equipe": equipe,
+        "equipe": _charge_de_l_equipe(membres, entreprises),
         "aujourd_hui": aujourd_hui,
         "compteurs": {
             "en_retard": len([c for c in a_appeler if c["urgence"] == "en_retard"]),
@@ -842,8 +836,8 @@ def suivi():
     return render_template(
         "suivi.html",
         page_id="suivi",
-        titre="Tableau de bord d'équipe",
-        sous_titre="Qui travaille quelle entreprise, et quels appels restent à passer",
+        titre="Appels à passer",
+        sous_titre="Une ligne par entreprise en attente : qui s'en occupe et quand rappeler",
         **_donnees_de_suivi(),
     )
 
@@ -864,14 +858,18 @@ def _etat_pour_js(siren: str) -> dict:
         "siren": c["siren"],
         "pris_par": c["pris_par"],
         "pris_label": c["pris_label"],
-        "prise_par_moi": c["pris_par"] == (current_user() or {}).get("username"),
+        "prise_par_moi": c["prise_par_moi"],
+        "referent_html": render_template("partials/suivi_referent.html", c=c).strip(),
         "statut": c["statut"],
         "statut_label": c["statut_label"],
         "urgence": c["urgence"],
         "urgence_label": c["urgence_label"],
         "appels": c["appels"],
+        "appels_label": c["appels_label"],
+        "dernier_appel": c["dernier_appel"],
         "historique": c["historique"],
         "note": c["note"],
+        "relance_le": c["relance_le"],
         "badge_html": _badge_site(c),
     }
 

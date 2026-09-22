@@ -285,82 +285,95 @@
   }
 
   // ------------------------------------------------------------------
-  // Suivi d'equipe : prise en charge, appel passe, note (page /suivi)
+  // Appels a passer : une ligne par entreprise, une modale pour l'appel
   // ------------------------------------------------------------------
-  function carteDeSuivi(el) {
-    return el.closest(".appel-carte");
-  }
-
-  function appliquerEtatSuivi(carte, etat) {
-    // Le serveur renvoie tous les libelles deja calcules : le navigateur se
-    // contente de les ecrire, il ne recompose rien lui-meme.
-    if (!carte || !etat) return;
-    var qui = carte.querySelector("[data-qui]");
-    if (qui) qui.textContent = etat.pris_label;
-    var historique = carte.querySelector("[data-historique]");
-    if (historique) historique.textContent = etat.historique;
-    var note = carte.querySelector("[data-note]");
-    if (note) {
-      note.textContent = etat.note || "Aucune note d’équipe pour l’instant.";
-      note.classList.toggle("is-vide", !etat.note);
-    }
-    var urgence = carte.querySelector("[data-urgence]");
-    if (urgence) {
-      urgence.textContent = etat.urgence_label;
-      urgence.className = "badge u-" + etat.urgence;
-    }
-    var statut = carte.querySelector("[data-statut]");
-    if (statut) statut.textContent = etat.statut_label;
-    var badge = carte.querySelector("[data-site-badge]");
-    if (badge && etat.badge_html) badge.parentNode.innerHTML = etat.badge_html;
-    var bouton = carte.querySelector("[data-prendre]");
-    if (bouton) {
-      bouton.dataset.mine = etat.prise_par_moi ? "1" : "0";
-      var label = bouton.querySelector("[data-prendre-label]");
-      if (label) label.textContent = etat.prise_par_moi ? "Laisser à l'équipe" : "Je m'en occupe";
-    }
-    var zones = carte.querySelectorAll("textarea[name='note']");
-    for (var i = 0; i < zones.length; i++) zones[i].value = etat.note || "";
-  }
+  var ligneAppel = null;
 
   function actionPrendre(bouton) {
-    var carte = carteDeSuivi(bouton);
+    var ligne = bouton.closest("tr");
     var prendre = bouton.dataset.mine !== "1";
     bouton.disabled = true;
     post("/api/suivi/prendre", { siren: bouton.getAttribute("data-prendre"), prendre: prendre })
       .then(function (body) {
-        bouton.disabled = false;
-        if (!body.ok) { toast(body.error || "Erreur.", "error"); return; }
-        appliquerEtatSuivi(carte, body);
-        toast(prendre ? "Cette entreprise vous est attribuée" : "Entreprise laissée à l'équipe",
-              "ok");
+        appliquerEtatAppel(ligne, body);
+        toast(prendre ? "Cette entreprise vous est attribuée" : "Remise dans la file commune", "ok");
       });
   }
 
-  function envoyerFormulaireSuivi(form) {
-    var carte = carteDeSuivi(form);
-    var type = form.getAttribute("data-form");
-    var zone = form.querySelector("textarea[name='note']");
-    var donnees = {
-      siren: form.getAttribute("data-siren"),
-      note: zone ? zone.value : "",
-    };
-    var url = "/api/suivi/note";
-    if (type === "appel") {
-      url = "/api/suivi/appel";
-      var champ = form.querySelector("input[name='relance_le']");
-      donnees.relance_le = champ ? champ.value : "";
+  // Le serveur renvoie tous les libelles deja calcules : on les ecrit, on ne
+  // recompose rien ici.
+  function appliquerEtatAppel(ligne, etat) {
+    if (!ligne || !etat || !etat.ok) return;
+    var referent = ligne.querySelector("[data-referent]");
+    if (referent && etat.referent_html) referent.innerHTML = etat.referent_html;
+    var historique = ligne.querySelector("[data-dernier]");
+    if (historique) historique.textContent = etat.dernier_appel;
+    var compteur = ligne.querySelector("[data-appels]");
+    if (compteur) compteur.textContent = etat.appels_label;
+    var relance = ligne.querySelector("[data-relance]");
+    if (relance) {
+      relance.textContent = etat.urgence_label;
+      relance.className = "badge u-" + etat.urgence;
     }
-    var bouton = form.querySelector("button[type='submit']");
-    if (bouton) bouton.disabled = true;
-    post(url, donnees).then(function (body) {
-      if (bouton) bouton.disabled = false;
-      if (!body.ok) { toast(body.error || "Erreur.", "error"); return; }
-      appliquerEtatSuivi(carte, body);
-      var details = form.closest("details");
-      if (details) details.open = false;
-      toast(type === "appel" ? "Appel enregistré" : "Note d'équipe enregistrée", "ok");
+    var badge = ligne.querySelector("[data-site-badge]");
+    if (badge && etat.badge_html) badge.parentNode.innerHTML = etat.badge_html;
+    // La ligne garde l'etat courant : rouvrir la modale repart de la bonne note.
+    try {
+      var memo = JSON.parse(ligne.dataset.snapshot || "{}");
+      memo.note = etat.note;
+      memo.relance_le = etat.relance_le;
+      memo.pris_par = etat.pris_par;
+      ligne.dataset.snapshot = JSON.stringify(memo);
+    } catch (e) { /* instantane illisible : sans consequence */ }
+  }
+
+  function openAppelModal(siren, nom, note, relance) {
+    if (!modalRoot) return;
+    ligneAppel = document.querySelector('tr[data-siren="' + siren + '"]');
+    modalRoot.innerHTML =
+      '<div class="modal-backdrop" data-close-modal>' +
+      '<div class="modal" role="dialog" aria-modal="true">' +
+      "<h3>Appel passé</h3>" +
+      '<p class="modal-sub"><strong>' + escapeHtml(nom || "") + "</strong> (SIREN " + siren + ")<br>" +
+      "Le compte rendu et la date du prochain appel restent visibles par l'équipe.</p>" +
+      '<div class="stack">' +
+      '<div class="field"><label for="appel-note">Compte rendu de l\'appel</label>' +
+      '<textarea id="appel-note" rows="3" ' +
+      'placeholder="Qui a répondu, ce qui s\'est dit, la suite à donner...">' +
+      escapeHtml(note || "") + "</textarea></div>" +
+      '<div class="field"><label for="appel-relance">Prochain appel ' +
+      '<span class="label-note">(facultatif)</span></label>' +
+      '<input id="appel-relance" type="date" value="' + escapeHtml(relance || "") + '"></div>' +
+      "</div>" +
+      '<div class="modal-error" id="appel-error"></div>' +
+      '<div class="modal-actions">' +
+      '<button type="button" class="btn btn-ghost" data-close-modal>Annuler</button>' +
+      '<button type="button" class="btn btn-ink" id="appel-confirm">' +
+      "Enregistrer l'appel</button>" +
+      "</div></div></div>";
+
+    document.getElementById("appel-confirm").addEventListener("click", function () {
+      envoyerAppel(siren, document.getElementById("appel-note").value,
+                   document.getElementById("appel-relance").value);
     });
+  }
+
+  function envoyerAppel(siren, note, relance) {
+    var bouton = document.getElementById("appel-confirm");
+    if (bouton) bouton.disabled = true;
+    post("/api/suivi/appel", { siren: siren, note: note, relance_le: relance })
+      .then(function (body) {
+        if (!body.ok) {
+          var zone = document.getElementById("appel-error");
+          if (zone) zone.innerHTML = '<div class="banner banner-error">' +
+            escapeHtml(body.error || "Enregistrement impossible.") + "</div>";
+          if (bouton) bouton.disabled = false;
+          return;
+        }
+        appliquerEtatAppel(ligneAppel, body);
+        closeHideModal();
+        toast("Appel enregistré", "ok");
+      });
   }
 
   // ------------------------------------------------------------------
@@ -613,7 +626,7 @@
   }
 
   document.addEventListener("click", function (ev) {
-    var target = ev.target.closest("[data-detail],[data-hide],[data-follow],[data-recheck],[data-override],[data-restore],[data-prendre],[data-close-slideover],[data-close-modal]");
+    var target = ev.target.closest("[data-detail],[data-hide],[data-follow],[data-recheck],[data-override],[data-restore],[data-prendre],[data-appel],[data-close-slideover],[data-close-modal]");
     if (!target) return;
 
     if (target.hasAttribute("data-close-slideover") || target.hasAttribute("data-close-modal")) {
@@ -634,6 +647,15 @@
     if (target.hasAttribute("data-override")) { actionOverride(target); return; }
     if (target.hasAttribute("data-restore")) { actionRestore(target.getAttribute("data-restore")); return; }
     if (target.hasAttribute("data-prendre")) { actionPrendre(target); return; }
+    if (target.hasAttribute("data-appel")) {
+      var ligne = target.closest("tr");
+      var memoire = {};
+      try { memoire = JSON.parse((ligne && ligne.dataset.snapshot) || "{}"); } catch (e) { memoire = {}; }
+      openAppelModal(target.getAttribute("data-appel"),
+                     (ligne && ligne.querySelector(".row-name") || {}).textContent,
+                     memoire.note, memoire.relance_le);
+      return;
+    }
   });
 
   // Les raisons de masquage sont transmises par la page de recherche
