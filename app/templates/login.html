@@ -11,6 +11,13 @@
   <script>
     (function () {
       document.documentElement.classList.add("js");
+      // Transition de page native disponible ? La classe evite de doubler
+      // l'animation avec le repli CSS (voir main.css).
+      try {
+        if (window.CSS && CSS.supports && CSS.supports("@view-transition { navigation: auto }")) {
+          document.documentElement.classList.add("vt");
+        }
+      } catch (e) { /* navigateur sans View Transitions : repli CSS */ }
       try {
         var choix = localStorage.getItem("mbdv-theme");
         var sombre = choix ? choix === "dark"

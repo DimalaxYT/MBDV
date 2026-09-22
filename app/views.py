@@ -22,7 +22,9 @@ from flask import (
 
 from . import db, demo_data, detect, gov_api
 from .auth import (
+    admin_required,
     current_user,
+    est_admin,
     login,
     login_attempts_exhausted,
     login_required,
@@ -626,14 +628,16 @@ def portefeuille():
 # Panel staff
 # --------------------------------------------------------------------------
 
-@bp.route("/staff")
-@login_required
-def staff():
-    etat = request.args.get("etat", "actives")
-    q = (request.args.get("q") or "").strip()
-    if etat not in ("actives", "restaurees", "toutes"):
-        etat = "actives"
+IDENTIFIANT_MOTIF = re.compile(r"^[a-z0-9][a-z0-9._-]{2,31}$")
+MDP_COMPTE_LONGUEUR = 10
 
+
+def _etat_staff(valeur) -> str:
+    return valeur if valeur in ("actives", "restaurees", "toutes") else "actives"
+
+
+def _rendu_staff(etat: str, q: str, compte_erreur=None, compte_succes=False, valeurs=None):
+    """Construit la page du panel staff (partagee entre l'affichage et les erreurs)."""
     clauses, params = [], []
     if etat == "actives":
         clauses.append("restored_at IS NULL")
@@ -669,11 +673,18 @@ def staff():
         e["code_postal"] = snap.get("code_postal")
         entrees.append(e)
 
+    # Gestion des comptes : reservee au dirigeant, et jamais son propre compte.
+    comptes = None
+    if est_admin():
+        comptes = [dict(r) for r in db.query(
+            "SELECT id, username, display_name, role FROM users"
+            " WHERE id <> ? ORDER BY id", (session["uid"],))]
+
     return render_template(
         "staff.html",
         page_id="staff",
         titre="Panel staff",
-        sous_titre="Historique des entreprises masquées — raison, auteur, date",
+        sous_titre="Historique des entreprises masquees - raison, auteur, date",
         entrees=entrees,
         etat=etat,
         q=q,
@@ -684,7 +695,79 @@ def staff():
             "top_raison": top_raison["raison"] if top_raison else None,
             "top_raison_n": top_raison["n"] if top_raison else 0,
         },
+        comptes=comptes,
+        compte_erreur=compte_erreur,
+        compte_succes=compte_succes,
+        valeurs=valeurs or {},
     )
+
+
+@bp.route("/staff")
+@login_required
+def staff():
+    return _rendu_staff(
+        _etat_staff(request.args.get("etat")), (request.args.get("q") or "").strip(),
+        compte_succes=request.args.get("compte") == "ok",
+    )
+
+
+@bp.route("/staff/comptes", methods=["POST"])
+@admin_required
+def staff_comptes():
+    """Le dirigeant change l'identifiant, le nom affiche ou le mot de passe
+    du compte de l'associe (jamais le sien : voir « Mon mot de passe »)."""
+    etat = _etat_staff(request.form.get("etat"))
+    q = (request.form.get("q") or "").strip()
+    try:
+        cible = int(request.form.get("cible") or 0)
+    except ValueError:
+        cible = 0
+
+    valeurs = {
+        "cible": cible,
+        "username": (request.form.get("username") or "").strip().lower(),
+        "display_name": (request.form.get("display_name") or "").strip(),
+    }
+    nouveau = request.form.get("nouveau") or ""
+    confirmation = request.form.get("confirmation") or ""
+
+    compte = db.one("SELECT * FROM users WHERE id = ?", (cible,))
+    erreur = None
+    if compte is None:
+        erreur = "Compte introuvable."
+    elif compte["id"] == session.get("uid"):
+        erreur = "Utilisez « Mon mot de passe » pour votre propre compte."
+    elif not IDENTIFIANT_MOTIF.match(valeurs["username"]):
+        erreur = ("L'identifiant doit faire de 3 à 32 caractères : lettres minuscules, "
+                  "chiffres, point, tiret ou souligné.")
+    elif db.one("SELECT 1 AS n FROM users WHERE username = ? AND id <> ?",
+                (valeurs["username"], cible)):
+        erreur = f"L'identifiant « {valeurs['username']} » est déjà utilisé."
+    elif len(valeurs["display_name"]) > 40:
+        erreur = "Le nom affiché ne doit pas dépasser 40 caractères."
+    elif nouveau and len(nouveau) < MDP_COMPTE_LONGUEUR:
+        erreur = (f"Le mot de passe doit contenir au moins {MDP_COMPTE_LONGUEUR} "
+                  "caractères.")
+    elif nouveau and nouveau != confirmation:
+        erreur = "La confirmation ne correspond pas au mot de passe."
+    elif nouveau and nouveau.strip().lower() == valeurs["username"]:
+        erreur = "Le mot de passe ne doit pas être l'identifiant."
+
+    if erreur:
+        return _rendu_staff(etat, q, compte_erreur=erreur, valeurs=valeurs), 400
+
+    ancien_identifiant = compte["username"]
+    db.execute("UPDATE users SET username = ?, display_name = ? WHERE id = ?",
+               (valeurs["username"], valeurs["display_name"] or valeurs["username"], cible))
+    if nouveau:
+        db.execute("UPDATE users SET password_hash = ? WHERE id = ?",
+                   (db.hash_password(nouveau), cible))
+    current_app.logger.info(
+        "Compte '%s' (ex. '%s') mis a jour par '%s' : identifiant%s",
+        valeurs["username"], ancien_identifiant, session.get("username"),
+        " et mot de passe" if nouveau else " seul")
+    return redirect(url_avec_jeton(
+        url_for("views.staff", etat=etat, q=q or None, compte="ok")))
 
 
 # --------------------------------------------------------------------------

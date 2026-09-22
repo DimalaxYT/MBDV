@@ -1113,27 +1113,66 @@ body.login { background: var(--paper); }
   .topbar, .content { padding-left: 26px; padding-right: 26px; }
 }
 @media (max-width: 900px) {
-  /* Barre laterale compacte : seul un glissement est anime (transform), la mise
-     en page ne bouge pas d'un pixel, donc l'animation reste parfaitement fluide.
-     Les libelles sont toujours rendus : ils ne reapparaissent pas en clignotant. */
+  /* Barre laterale compacte : les icones restent visibles, et un panneau glisse
+     par-dessus le contenu au survol (ou au clavier) pour reveler les libelles.
+     Seuls un transform et des opacites sont animes : aucune mise en page n'est
+     recalculee, et les textes n'apparaissent pas en clignotant. */
   .sidebar {
     position: fixed;
     left: 0;
     top: 0;
     height: 100vh;
-    width: 234px;
-    flex: 0 0 234px;
-    transform: translateX(-166px);        /* seules les icones (68 px) restent visibles */
-    transition: transform 0.26s cubic-bezier(0.22, 0.7, 0.3, 1);
-    will-change: transform;
+    width: 68px;
+    flex: 0 0 68px;
+    padding: 20px 10px 16px;
+    overflow: visible;
     z-index: 60;
-    box-shadow: var(--shadow-3);
   }
-  .sidebar:hover, .sidebar:focus-within { transform: none; }
-  .main { margin-left: 68px; }                      /* place de la bande d'icones */
-  .brand { padding: 2px 0 16px; }
-  .brand-word { font-size: 19px; }
-  .user-card { padding-top: 12px; }
+  /* le fond qui se deplie, dessine derriere le contenu de la barre */
+  .sidebar::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 234px;
+    background: var(--side);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.45);
+    transform: translateX(-100%);
+    transition: transform 0.26s cubic-bezier(0.22, 0.7, 0.3, 1);
+    z-index: -1;
+  }
+  .sidebar:hover::before, .sidebar:focus-within::before { transform: none; }
+
+  .main { margin-left: 68px; }
+  .brand { padding: 2px 0 18px; }
+
+  /* libelles : positionnes hors du flux (aucun decalage) et reveles en fondu */
+  .brand-text {
+    position: absolute;
+    left: 46px;
+    top: 4px;
+    white-space: nowrap;
+  }
+  .nav-item span, .user-meta {
+    position: absolute;
+    left: 42px;
+    top: 50%;
+    transform: translateY(-50%);
+    white-space: nowrap;
+  }
+  .user-card { position: relative; justify-content: flex-start; padding-left: 8px; }
+  .user-meta { left: 44px; top: auto; bottom: 2px; transform: none; }
+  .nav-item.active::before { left: -10px; }
+
+  .brand-text, .nav-label, .nav-item span, .user-meta {
+    opacity: 0;
+    transition: opacity 0.16s ease 0.08s;
+  }
+  .sidebar:hover .brand-text, .sidebar:hover .nav-label, .sidebar:hover .nav-item span,
+  .sidebar:hover .user-meta, .sidebar:focus-within .brand-text,
+  .sidebar:focus-within .nav-label, .sidebar:focus-within .nav-item span,
+  .sidebar:focus-within .user-meta { opacity: 1; }
   .login-grid { grid-template-columns: 1fr; }
   .login-hero { display: none; }
 }
@@ -1154,15 +1193,65 @@ body.login { background: var(--paper); }
   .field-compact { width: 100%; }
 }
 
+/* ---- Gestion des comptes (panel staff) ---- */
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 620;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.panel-title .icon { color: var(--accent-2); }
+.panel-lede { margin: 8px 0 16px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.comptes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 16px;
+}
+.compte-card {
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 18px 16px;
+}
+.compte-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.compte-identite { display: block; min-width: 0; }
+.compte-identite strong { display: block; font-size: 14px; color: var(--ink); }
+.compte-identite em { font-size: 12px; color: var(--muted); font-style: normal; }
+.compte-card .field { margin-bottom: 12px; }
+.compte-card .form-note { margin-top: 10px; }
+
 /* ==========================================================================
-   Changement de page : entree du contenu, barre de progression
+   Changement de page : transition animee, barre de progression
    ========================================================================== */
 @keyframes entree-page {
   from { opacity: 0; transform: translateY(7px); }
   to   { opacity: 1; transform: none; }
 }
-/* Se joue a chaque chargement : c'est l'animation de passage d'une page a l'autre. */
+@keyframes page-sortante {
+  to { opacity: 0; transform: translateY(-8px); }
+}
+@keyframes page-entrante {
+  from { opacity: 0; transform: translateY(10px); }
+}
+/* Repli pour les navigateurs sans transition native : le contenu entre en fondu
+   glissant a chaque chargement ; `html.vt` desactive ce repli quand le
+   navigateur enchaine lui-meme les deux pages (voir plus bas). */
 .main { animation: entree-page 0.3s cubic-bezier(0.22, 0.7, 0.3, 1) both; }
+html.vt .main { animation: none; }
+/* Sortie animee avant de partir (navigateurs sans transition native). */
+.main.sortie { animation: page-sortante 0.15s ease-in both; }
+
+/* Transition de page native (API View Transitions, navigation entre documents) :
+   le navigateur capture la page sortante et la page entrante et enchaine le
+   fondu tout seul, sans clignotement et sans attendre le serveur. */
+@view-transition { navigation: auto; }
+::view-transition-old(root) { animation: page-sortante 0.16s ease-in both; }
+::view-transition-new(root) { animation: page-entrante 0.34s cubic-bezier(0.22, 0.7, 0.3, 1) both; }
+/* La barre laterale et l'en-tete gardent leur place : seul le contenu glisse. */
+.sidebar { view-transition-name: barre-laterale; }
+.topbar { view-transition-name: barre-haute; }
 
 /* Barre de progression affichee des le clic sur un lien ou l'envoi d'un formulaire */
 .progress {
@@ -1186,6 +1275,10 @@ body.login { background: var(--paper); }
 
 @media (prefers-reduced-motion: reduce) {
   .main { animation: none; }
+  .main.sortie { animation: none; }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
 }
 
 /* ==========================================================================

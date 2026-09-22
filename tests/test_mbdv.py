@@ -586,19 +586,179 @@ def test_animation_de_changement_de_page(client):
     assert "pageshow" in js                               # retour arriere sans barre bloquee
 
 
-def test_barre_laterale_compacte_glisse_sans_recalcul(client):
-    """La barre compacte glisse (transform) : aucun deplacement de mise en page."""
+def test_barre_laterale_compacte_garde_les_icones(client):
+    """Barre reduite : les icones restent visibles, seul le fond se deplie.
+
+    Regression : la barre entiere glissait vers la gauche, emportant avec elle les
+    pictogrammes ; il ne restait qu'une bande sombre vide.
+    """
     from pathlib import Path
     css = Path("app/static/css/main.css").read_text(encoding="utf-8")
-    compacte = css.split("@media (max-width: 900px) {")[1].split("\n}")[0]
-    assert "transform: translateX(-166px)" in compacte
-    assert "transition: transform" in compacte
-    assert "transition: width" not in compacte            # plus de largeur animee
-    assert ".sidebar:hover, .sidebar:focus-within { transform: none; }" in compacte
+    compacte = css.split("@media (max-width: 900px) {")[1].split("\n}\n")[0]
+
+    # la barre garde sa largeur d'icones : elle n'est plus translatee elle-meme
+    assert "width: 68px" in compacte
+    assert "flex: 0 0 68px" in compacte
+    assert "translateX(-166px)" not in compacte
+    assert "transition: width" not in compacte           # aucune largeur animee
+
+    # c'est le fond (::before) qui glisse pour reveler les libelles
+    assert ".sidebar::before" in compacte
+    assert "transform: translateX(-100%)" in compacte
+    assert ".sidebar:hover::before" in compacte
+    assert ".sidebar:focus-within::before" in compacte
+
+    # les libelles sont hors du flux (aucun decalage) et reveles en fondu
+    assert "opacity: 0" in compacte
+    assert "position: absolute" in compacte
     assert ".main { margin-left: 68px; }" in compacte
-    # Les libelles ne sont plus masques : la barre glisse, le texte ne clignote pas.
-    for classe in (".brand-text", ".brand-sub", ".nav-item span", ".user-meta", ".nav-label"):
-        assert classe not in compacte, classe
+    assert ".brand-text, .brand-sub" not in compacte
+    # Seul le bloc de connexion a le droit de disparaitre : pas les libelles de nav.
+    assert "display: none" not in compacte.replace(".login-hero { display: none; }", "")
+
+
+def test_transition_de_page_native(client):
+    """Vraie animation de changement de page : transition native + repli anime."""
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    assert "@view-transition { navigation: auto; }" in css
+    assert "::view-transition-old(root)" in css
+    assert "::view-transition-new(root)" in css
+    assert "@keyframes page-sortante" in css and "@keyframes page-entrante" in css
+    assert "view-transition-name: barre-laterale" in css  # la barre ne clignote pas
+    assert "html.vt .main { animation: none; }" in css      # pas de double animation
+    assert ".main.sortie" in css                            # repli : sortie animee
+    assert "::view-transition-group(*)" in css              # mouvement reduit respecte
+
+    for gabarit in ("app/templates/base.html", "app/templates/login.html"):
+        page = Path(gabarit).read_text(encoding="utf-8")
+        assert 'CSS.supports("@view-transition { navigation: auto }")' in page
+        assert 'classList.add("vt")' in page
+
+    js = Path("app/static/js/app.js").read_text(encoding="utf-8")
+    assert "transitionNative" in js
+    assert 'classList.add("sortie")' in js
+    assert "window.location.href = lien.href" in js         # navigation differee du repli
+
+
+def test_migration_role_sur_une_base_existante(tmp_path, monkeypatch):
+    """Une base creee avant les roles est mise a jour au demarrage.
+
+    Le compte le plus ancien (le dirigeant) devient administrateur : la base de
+    production n'a donc besoin d'aucune intervention.
+    """
+    import sqlite3
+    dossier = tmp_path / "data"
+    dossier.mkdir()
+    conn = sqlite3.connect(dossier / "mbdv.sqlite3")
+    conn.executescript(
+        "CREATE TABLE users ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " username TEXT UNIQUE NOT NULL,"
+        " display_name TEXT NOT NULL,"
+        " password_hash TEXT NOT NULL,"
+        " created_at TEXT NOT NULL);")
+    conn.execute("INSERT INTO users (username, display_name, password_hash, created_at)"
+                 " VALUES ('patron', 'Dirigeant', 'scrypt$x$y', '2026-01-01T00:00:00Z')")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("MBDV_DATA_DIR", str(dossier))
+    application = create_app()
+    application.config.update(TESTING=True)
+    with application.app_context():
+        from app import db
+        assert db.one("SELECT role FROM users WHERE username = 'patron'")["role"] == "admin"
+        # les comptes par defaut sont completes en tant qu'associes
+        assert db.one("SELECT role FROM users WHERE username = 'associe'")["role"] == "associe"
+
+
+def test_comptes_des_associes_dans_le_panel_staff(app):
+    """Le dirigeant change l'identifiant et le mot de passe du compte associé."""
+    client = app.test_client()
+    connexion(client)                                   # admin = dirigeant
+
+    page = client.get("/staff").get_data(as_text=True)
+    assert "Comptes des associés" in page
+    assert 'action="/staff/comptes"' in page
+    assert "@associe" in page
+
+    csrf = jeton(client, "/staff")
+    reponse = client.post("/staff/comptes", data={
+        "_csrf": csrf, "cible": "2", "username": "associe2",
+        "display_name": "Associé principal", "nouveau": "NouveauMdp-Associe-2026",
+        "confirmation": "NouveauMdp-Associe-2026",
+    })
+    assert reponse.status_code == 302
+    assert "compte=ok" in reponse.headers["Location"]
+
+    # les nouveaux identifiants fonctionnent, les anciens non
+    autre = app.test_client()
+    connexion(autre, username="associe2", password="NouveauMdp-Associe-2026")
+    assert autre.get("/accueil").status_code == 200
+    ancien = app.test_client()
+    reponse = connexion(ancien, username="associe", password="MBDV-associe-2026")
+    assert "incorrect" in reponse.get_data(as_text=True)
+
+    # le mot de passe seul peut etre change, sans toucher a l'identifiant
+    client.post("/staff/comptes", data={
+        "_csrf": jeton(client, "/staff"), "cible": "2", "username": "associe2",
+        "display_name": "Associé principal", "nouveau": "Encore-Un-Mot-De-Passe",
+        "confirmation": "Encore-Un-Mot-De-Passe",
+    })
+    encore = app.test_client()
+    connexion(encore, username="associe2", password="Encore-Un-Mot-De-Passe")
+    assert encore.get("/accueil").status_code == 200
+    with app.app_context():
+        from app import db
+        ligne = db.one("SELECT display_name FROM users WHERE username = ?", ("associe2",))
+    assert ligne["display_name"] == "Associé principal"
+
+
+def test_comptes_refuses_au_compte_associe(app):
+    """Le compte associé ne voit pas la section et ne peut pas l'appeler."""
+    client = app.test_client()
+    connexion(client, username="associe", password="MBDV-associe-2026")
+    page = client.get("/staff").get_data(as_text=True)
+    assert "Comptes des associés" not in page
+
+    reponse = client.post("/staff/comptes", data={
+        "_csrf": jeton(client, "/staff"), "cible": "1", "username": "pirate",
+        "display_name": "Pirate", "nouveau": "MotDePasse-Pirate",
+        "confirmation": "MotDePasse-Pirate",
+    })
+    assert reponse.status_code == 403
+    with app.app_context():
+        from app import db
+        assert db.one("SELECT 1 AS n FROM users WHERE username = ?", ("pirate",)) is None
+        assert db.one("SELECT username FROM users WHERE id = 1")["username"] == "admin"
+
+
+def test_comptes_controles_de_saisie(app):
+    """Identifiant invalide ou pris, mot de passe trop court, confirmation differente."""
+    client = app.test_client()
+    connexion(client)
+    csrf = jeton(client, "/staff")
+
+    def envoi(**champs):
+        donnees = {"_csrf": csrf, "cible": "2", "username": "associe",
+                   "display_name": "Associe", "nouveau": "", "confirmation": ""}
+        donnees.update(champs)
+        return client.post("/staff/comptes", data=donnees)
+
+    assert "3 à 32 caractères" in envoi(username="a").get_data(as_text=True)
+    assert "déjà utilisé" in envoi(username="admin").get_data(as_text=True)
+    assert "au moins 10 caractères" in envoi(nouveau="court", confirmation="court").get_data(
+        as_text=True)
+    assert "confirmation ne correspond" in envoi(
+        nouveau="MotDePasse-Associe", confirmation="Autre-Mot-De-Passe").get_data(as_text=True)
+    assert "propre compte" in envoi(cible="1").get_data(as_text=True)
+
+    # rien n'a bouge
+    with app.app_context():
+        from app import db
+        assert db.one("SELECT username FROM users WHERE id = 2")["username"] == "associe"
+
 
 
 def test_version_des_assets_dans_les_url(client):

@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS users (
     username      TEXT UNIQUE NOT NULL,
     display_name  TEXT NOT NULL,
     password_hash TEXT NOT NULL,
-    created_at    TEXT NOT NULL
+    created_at    TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'associe'   -- 'admin' (dirigeant) | 'associe'
 );
 
 CREATE TABLE IF NOT EXISTS site_cache (
@@ -92,11 +93,28 @@ def close_db(_exc=None) -> None:
         conn.close()
 
 
+def _migration_role(conn) -> None:
+    """Ajoute la colonne `role` aux bases creees avant son introduction.
+
+    Le compte le plus ancien (celui du dirigeant) devient l'administrateur, afin
+    qu'une base existante continue de fonctionner sans intervention.
+    """
+    colonnes = {ligne["name"] for ligne in conn.execute("PRAGMA table_info(users)")}
+    if "role" not in colonnes:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'associe'")
+    aucun_admin = not conn.execute(
+        "SELECT 1 FROM users WHERE role = 'admin'").fetchone()
+    if aucun_admin and conn.execute("SELECT 1 FROM users").fetchone():
+        conn.execute("UPDATE users SET role = 'admin'"
+                     " WHERE id = (SELECT MIN(id) FROM users)")
+
+
 def init_app(app) -> None:
     base = os.path.join(app.config["DATA_DIR"], "mbdv.sqlite3")
     conn = _connect(base)
     try:
         conn.executescript(SCHEMA)
+        _migration_role(conn)
         conn.commit()
     finally:
         conn.close()
@@ -134,24 +152,26 @@ def _seed_users(app) -> None:
             os.environ.get("MBDV_ADMIN_USER", "admin"),
             os.environ.get("MBDV_ADMIN_PASSWORD", "MBDV-admin-2026"),
             "Dirigeant",
+            "admin",
             "MBDV_ADMIN_PASSWORD",
         ),
         (
             os.environ.get("MBDV_ASSOCIE_USER", "associe"),
             os.environ.get("MBDV_ASSOCIE_PASSWORD", "MBDV-associe-2026"),
             "Associe",
+            "associe",
             "MBDV_ASSOCIE_PASSWORD",
         ),
     ]
     conn = _connect(os.path.join(app.config["DATA_DIR"], "mbdv.sqlite3"))
     try:
-        for username, password, display, variable in defaults:
+        for username, password, display, role, variable in defaults:
             if conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
                 continue
             conn.execute(
-                "INSERT INTO users (username, display_name, password_hash, created_at)"
-                " VALUES (?, ?, ?, ?)",
-                (username, display, hash_password(password), now_iso()),
+                "INSERT INTO users (username, display_name, password_hash, created_at, role)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (username, display, hash_password(password), now_iso(), role),
             )
             if password in DEFAULT_PASSWORDS:
                 app.logger.warning(

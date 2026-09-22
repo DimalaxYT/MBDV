@@ -369,9 +369,22 @@
     return document.body.classList.contains("page-en-cours");
   }
 
+  function transitionNative() {
+    return document.documentElement.classList.contains("vt");
+  }
+
   function demarrerNavigation(lien) {
     if (navigationEnCours()) return;
     document.body.classList.add("page-en-cours");
+    // Sans transition native, on anime la sortie du contenu puis on part : 150 ms,
+    // le temps d'un fondu, imperceptible mais la page ne "saute" plus.
+    if (!transitionNative() && lien && !reduitMouvement()) {
+      var contenu = document.querySelector(".main");
+      if (contenu) {
+        contenu.classList.add("sortie");
+        window.setTimeout(function () { window.location.href = lien.href; }, 150);
+      }
+    }
     var trait = barre();
     trait.classList.add("is-actif");
     trait.style.width = "8%";

@@ -98,4 +98,76 @@
   </div>
   {% endif %}
 </section>
+
+{% if comptes %}
+<section class="panel staff-comptes">
+  <h2 class="panel-title">{{ icon('key', 17) }} Comptes des associés</h2>
+  <p class="panel-lede">
+    Vous êtes connecté en tant que <strong>dirigeant</strong> : vous pouvez modifier
+    l'identifiant, le nom affiché et le mot de passe du compte associé. Laissez le
+    mot de passe vide pour le conserver. Votre propre compte se change depuis
+    <a href="/mot-de-passe">Mon mot de passe</a>.
+  </p>
+
+  {% if compte_succes %}
+  <div class="banner banner-ok">
+    {{ icon('check', 15) }} <span>Compte mis à jour. Les nouveaux identifiants sont
+    actifs dès la prochaine connexion.</span>
+  </div>
+  {% endif %}
+  {% if compte_erreur %}
+  <div class="banner banner-error">
+    {{ icon('alert', 15) }} <span>{{ compte_erreur }}</span>
+  </div>
+  {% endif %}
+
+  <div class="comptes-grid">
+    {% for c in comptes %}
+    <form class="compte-card" method="post" action="/staff/comptes" data-chargement>
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="cible" value="{{ c.id }}">
+      <input type="hidden" name="etat" value="{{ etat }}">
+      {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+
+      <header class="compte-head">
+        <span class="avatar">{{ (c.display_name or c.username)[:1]|upper }}</span>
+        <span class="compte-identite">
+          <strong>{{ c.display_name }}</strong>
+          <em>@{{ c.username }} &middot; {{ 'Dirigeant' if c.role == 'admin' else 'Associé' }}</em>
+        </span>
+      </header>
+
+      <div class="field">
+        <label for="user-{{ c.id }}">Identifiant de connexion</label>
+        <input id="user-{{ c.id }}" type="text" name="username"
+               value="{{ valeurs.username if valeurs.cible == c.id else c.username }}"
+               required minlength="3" maxlength="32" pattern="[a-z0-9][a-z0-9._-]{2,31}"
+               spellcheck="false" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="nom-{{ c.id }}">Nom affiché</label>
+        <input id="nom-{{ c.id }}" type="text" name="display_name"
+               value="{{ valeurs.display_name if valeurs.cible == c.id else c.display_name }}"
+               maxlength="40" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="mdp-{{ c.id }}">Nouveau mot de passe</label>
+        <input id="mdp-{{ c.id }}" type="password" name="nouveau" minlength="10"
+               autocomplete="new-password" placeholder="Laisser vide pour conserver">
+      </div>
+      <div class="field">
+        <label for="mdp2-{{ c.id }}">Confirmer le mot de passe</label>
+        <input id="mdp2-{{ c.id }}" type="password" name="confirmation" minlength="10"
+               autocomplete="new-password" placeholder="Répéter le nouveau mot de passe">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-ink">Mettre à jour</button>
+      </div>
+      <p class="form-note">Minimum 10 caractères. Les mots de passe sont hachés (scrypt),
+      jamais stockés en clair.</p>
+    </form>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 {% endblock %}

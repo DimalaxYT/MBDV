@@ -204,12 +204,21 @@ pyproject.toml          configuration ruff + pytest
   navigation restent affichees des 900 px de large. Sur ecrans plus etroits, la
   barre glisse (`transform`, aucune mise en page recalculee) : seules les icones
   depassent, et le survol ou le clavier la fait sortir instantanement.
-- **Changement de page anime et leger** : le contenu entre en fondu, une barre de
+- **Vraie transition entre les pages** : transition native du navigateur
+  (`@view-transition`, la page sortante et la page entrante s'enchainent en fondu
+  glissant, la barre latérale et l'en-tête ne bougent pas), avec un repli anime
+  (sortie en 150 ms puis entrée) pour les navigateurs qui ne la proposent pas.
+- **Changement de page leger** : le contenu entre en fondu, une barre de
   progression s'affiche des le clic et le lien touche se marque actif tout de suite.
   Les reponses sont compressees en gzip (HTML 19,5 Ko -> 5,3 Ko, CSS 46,4 Ko ->
   10,4 Ko, JS 22,7 Ko -> 6,3 Ko) et le CSS/JS versionne est garde par le
   navigateur (`?v=<empreinte>`, un an) : une page suivante ne coute plus que
   quelques kilo-octets.
+- **Gestion des comptes** : le panel staff comporte, pour le dirigeant seul, la
+  section « Comptes des associés » (identifiant, nom affiché et mot de passe du
+  compte associé, mot de passe laissé vide pour le conserver). Les rôles sont
+  stockés dans la colonne `users.role` (`admin` / `associe`) ; sur une base
+  existante, le compte le plus ancien devient administrateur au démarrage.
 - **Connexion** : case « Rester connecté sur cet appareil » (cochée par défaut).
   Cochée : session de 30 jours ; décochée : la session s'arrête à la fermeture du
   navigateur (jeton d'URL de 12 h en mode aperçu).

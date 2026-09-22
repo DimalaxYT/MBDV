@@ -67,7 +67,7 @@ def jeton_session() -> str:
     # suivantes resigneraient un jeton court et l'utilisateur serait deconnecte
     # au bout de 12 h malgre sa case cochee.
     charge = {cle: session[cle] for cle in
-              ("uid", "username", "display_name", "csrf", "rester_connecte")
+              ("uid", "username", "display_name", "csrf", "rester_connecte", "role")
               if cle in session}
     if not charge:
         # Deja porteur d'un jeton (page anonyme ayant transite par l'URL).
@@ -180,7 +180,20 @@ def login(user_row, rester_connecte: bool = True) -> None:
     session["display_name"] = user_row["display_name"]
     session["csrf"] = secrets.token_hex(16)
     session["rester_connecte"] = bool(rester_connecte)
+    session["role"] = role_de(user_row)
     session.permanent = bool(rester_connecte)
+
+
+def role_de(user_row) -> str:
+    """Role du compte : 'admin' (dirigeant) ou 'associe'."""
+    try:
+        return str(user_row["role"] or "associe")
+    except (KeyError, IndexError, TypeError):
+        return "associe"
+
+
+def est_admin() -> bool:
+    return session.get("role") == "admin"
 
 
 def logout() -> None:
@@ -194,6 +207,7 @@ def current_user():
         "id": session["uid"],
         "username": session["username"],
         "display_name": session.get("display_name") or session["username"],
+        "role": session.get("role") or "associe",
     }
 
 
@@ -217,6 +231,18 @@ def login_required(view):
             # d'accueil (explication de l'outil), pas la recherche directement.
             suite = "" if request.path == "/" else request.path
             return redirect(url_for("views.connexion", next=suite or None))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def admin_required(view):
+    """Reserve une vue au dirigeant (role 'admin')."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if current_user() is None:
+            return redirect(url_for("views.connexion", next=request.path or None))
+        if not est_admin():
+            abort(403)
         return view(*args, **kwargs)
     return wrapped
 
