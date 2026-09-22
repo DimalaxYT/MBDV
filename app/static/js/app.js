@@ -349,6 +349,82 @@
   }
 
   // ------------------------------------------------------------------
+  // Changement de page : reponse immediate au clic, puis fondu du nouveau
+  // contenu. Sans cela, entre le clic et l'arrivee de la page, rien ne bouge
+  // et l'attente parait longue.
+  // ------------------------------------------------------------------
+  var barreDeProgression = null;
+
+  function barre() {
+    if (!barreDeProgression) {
+      barreDeProgression = document.createElement("div");
+      barreDeProgression.className = "progress";
+      barreDeProgression.setAttribute("aria-hidden", "true");
+      document.body.appendChild(barreDeProgression);
+    }
+    return barreDeProgression;
+  }
+
+  function navigationEnCours() {
+    return document.body.classList.contains("page-en-cours");
+  }
+
+  function demarrerNavigation(lien) {
+    if (navigationEnCours()) return;
+    document.body.classList.add("page-en-cours");
+    var trait = barre();
+    trait.classList.add("is-actif");
+    trait.style.width = "8%";
+    // Petite avancee rapide puis une progression lente : la barre ne se bloque
+    // jamais a 100 % tant que la nouvelle page n'est pas la.
+    window.setTimeout(function () { trait.style.width = "55%"; }, 60);
+    window.setTimeout(function () { trait.style.width = "88%"; }, 450);
+    if (lien) {
+      // Le lien touche se marque actif immediatement (retour visuel du clic).
+      var item = lien.closest(".nav-item");
+      if (item) {
+        var ancien = document.querySelector(".nav-item.is-en-cours");
+        if (ancien && ancien !== item) ancien.classList.remove("is-en-cours");
+        item.classList.add("is-en-cours");
+      }
+    }
+  }
+
+  function initTransitionsDePage() {
+    document.addEventListener("click", function (ev) {
+      if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey
+          || ev.altKey) return;
+      var lien = ev.target.closest ? ev.target.closest("a[href]") : null;
+      if (!lien || lien.target || lien.hasAttribute("download")
+          || lien.dataset.sansTransition !== undefined) return;
+      if (lien.getAttribute("href") === "#") return;
+      try {
+        if (new URL(lien.href, window.location.href).origin !== window.location.origin) return;
+      } catch (e) { return; }
+      if (ev.target.closest("[data-detail],[data-close-slideover],[data-close-modal]")) return;
+      demarrerNavigation(lien);
+    });
+
+    // Envoi d'un formulaire (recherche, connexion, action) : meme retour.
+    document.addEventListener("submit", function () {
+      demarrerNavigation(null);
+    }, true);
+
+    // Retour arriere (page restauree depuis le cache du navigateur) : on remet
+    // tout a zero, sinon la barre resterait affichee.
+    window.addEventListener("pageshow", function () {
+      document.body.classList.remove("page-en-cours");
+      var trait = document.querySelector(".progress");
+      if (trait) {
+        trait.classList.remove("is-actif");
+        trait.style.width = "0";
+      }
+      var item = document.querySelector(".nav-item.is-en-cours");
+      if (item) item.classList.remove("is-en-cours");
+    });
+  }
+
+  // ------------------------------------------------------------------
   // Retour visuel immediat : des qu'un formulaire part, le bouton le dit.
   // Une recherche interroge plusieurs pages de l'API : sans cela, le clic
   // semble sans effet pendant quelques secondes.
@@ -459,6 +535,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     preparerAnimations();
     initEtatsDeSoumission();
+    initTransitionsDePage();
     var holder = document.getElementById("raisons-masquage");
     if (holder) {
       try { window.MBDV_RAISONS = JSON.parse(holder.textContent); } catch (e) { /* ignore */ }

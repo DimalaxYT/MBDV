@@ -1,4 +1,5 @@
 """Application MBDV - prospection d'entreprises francaises sans site web."""
+import gzip
 import hashlib
 import logging
 import os
@@ -80,6 +81,7 @@ def create_app() -> Flask:
         SITE_NAME=(os.environ.get("MBDV_SITE_NAME") or "Balise").strip(),
         ASSET_VERSION=_empreinte_assets(app.static_folder),
     )
+
     @app.context_processor
     def _globaux_de_rendu():
         return {
@@ -88,15 +90,50 @@ def create_app() -> Flask:
         }
 
     @app.after_request
-    def _pas_de_cache_pour_les_assets(reponse):
-        """CSS et JS : aucun stockage intermediaire.
+    def _cache_des_assets(reponse):
+        """CSS et JS : cache long quand l'URL porte son empreinte (?v=...).
 
-        L'empreinte en ?v= suffit normalement, mais un cache intermediaire qui
-        conserverait une copie partielle du fichier laisserait la page sans mise
-        en forme. Ici, ces fichiers sont toujours revalides.
+        L'empreinte change des qu'un fichier change, donc une copie gardee par le
+        navigateur ne peut pas devenir obsolete - et la page suivante n'a plus a
+        retelecharger la feuille de style. Sans empreinte (URL tapee a la main),
+        on garde la revalidation stricte.
         """
         if request.path.startswith("/static/") and request.path.endswith((".css", ".js")):
-            reponse.headers["Cache-Control"] = "no-store, must-revalidate"
+            if request.args.get("v"):
+                reponse.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            else:
+                reponse.headers["Cache-Control"] = "no-store, must-revalidate"
+        return reponse
+
+    @app.after_request
+    def _compression(reponse):
+        """Compression gzip des reponses texte (HTML, CSS, JS, JSON, SVG).
+
+        Divise le poids des pages par 4 a 5 : c'est le principal gain sur les
+        changements de page, le CSS et le JavaScript restant les plus gros
+        fichiers echanges.
+        """
+        if "gzip" not in (request.headers.get("Accept-Encoding") or "").lower():
+            return reponse
+        if reponse.status_code != 200 or reponse.headers.get("Content-Encoding"):
+            return reponse
+        if reponse.mimetype not in {"text/html", "text/css", "text/plain", "image/svg+xml",
+                                    "application/javascript", "text/javascript",
+                                    "application/json"}:
+            return reponse
+        # Les fichiers statiques sont envoyes en flux : on les materialise d'abord
+        # (ils sont petits) pour pouvoir les compresser.
+        reponse.direct_passthrough = False
+        donnees = reponse.get_data()
+        if len(donnees) < 1024:
+            return reponse
+        comprime = gzip.compress(donnees, 6)
+        if len(comprime) >= len(donnees):
+            return reponse
+        reponse.set_data(comprime)
+        reponse.headers["Content-Encoding"] = "gzip"
+        reponse.headers["Content-Length"] = str(len(comprime))
+        reponse.headers.add("Vary", "Accept-Encoding")
         return reponse
 
     app.logger.setLevel(logging.INFO)

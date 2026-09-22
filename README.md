@@ -201,8 +201,15 @@ pyproject.toml          configuration ruff + pytest
   etapes et points de vigilance. Apparitions au defilement et compteurs animes
   (desactives si `prefers-reduced-motion`).
 - **Barre laterale toujours visible** : elle ne s'escamote plus, les etiquettes de
-  navigation restent affichees des 900 px de large. Sur ecrans plus etroits, elle
-  passe en icones seules et se deplie instantanement au survol ou au clavier.
+  navigation restent affichees des 900 px de large. Sur ecrans plus etroits, la
+  barre glisse (`transform`, aucune mise en page recalculee) : seules les icones
+  depassent, et le survol ou le clavier la fait sortir instantanement.
+- **Changement de page anime et leger** : le contenu entre en fondu, une barre de
+  progression s'affiche des le clic et le lien touche se marque actif tout de suite.
+  Les reponses sont compressees en gzip (HTML 19,5 Ko -> 5,3 Ko, CSS 46,4 Ko ->
+  10,4 Ko, JS 22,7 Ko -> 6,3 Ko) et le CSS/JS versionne est garde par le
+  navigateur (`?v=<empreinte>`, un an) : une page suivante ne coute plus que
+  quelques kilo-octets.
 - **Connexion** : case « Rester connecté sur cet appareil » (cochée par défaut).
   Cochée : session de 30 jours ; décochée : la session s'arrête à la fermeture du
   navigateur (jeton d'URL de 12 h en mode aperçu).

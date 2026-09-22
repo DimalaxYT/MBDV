@@ -1113,27 +1113,27 @@ body.login { background: var(--paper); }
   .topbar, .content { padding-left: 26px; padding-right: 26px; }
 }
 @media (max-width: 900px) {
-  /* Barre laterale compacte : icones seules, etiquettes au survol immediat */
+  /* Barre laterale compacte : seul un glissement est anime (transform), la mise
+     en page ne bouge pas d'un pixel, donc l'animation reste parfaitement fluide.
+     Les libelles sont toujours rendus : ils ne reapparaissent pas en clignotant. */
   .sidebar {
-    width: 68px;
-    flex-basis: 68px;
-    padding: 20px 10px 16px;
-    transition: width 0.18s ease, flex-basis 0.18s ease;
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    width: 234px;
+    flex: 0 0 234px;
+    transform: translateX(-166px);        /* seules les icones (68 px) restent visibles */
+    transition: transform 0.26s cubic-bezier(0.22, 0.7, 0.3, 1);
+    will-change: transform;
+    z-index: 60;
+    box-shadow: var(--shadow-3);
   }
-  .sidebar:hover, .sidebar:focus-within { width: 234px; flex-basis: 234px; padding: 22px 14px 18px; }
-  .brand { justify-content: center; padding: 2px 0 16px; gap: 0; }
-  .brand-text, .brand-sub, .nav-item span, .user-meta, .nav-label { display: none; }
-  .sidebar:hover .brand-text, .sidebar:hover .brand-sub, .sidebar:hover .nav-item span,
-  .sidebar:hover .user-meta, .sidebar:hover .nav-label, .sidebar:focus-within .brand-text,
-  .sidebar:focus-within .brand-sub, .sidebar:focus-within .nav-item span,
-  .sidebar:focus-within .user-meta, .sidebar:focus-within .nav-label { display: block; }
-  .sidebar:hover .brand, .sidebar:focus-within .brand { justify-content: flex-start; padding: 2px 10px 18px; gap: 11px; }
+  .sidebar:hover, .sidebar:focus-within { transform: none; }
+  .main { margin-left: 68px; }                      /* place de la bande d'icones */
+  .brand { padding: 2px 0 16px; }
   .brand-word { font-size: 19px; }
-  .nav-item { justify-content: center; padding: 10px; }
-  .sidebar:hover .nav-item, .sidebar:focus-within .nav-item { justify-content: flex-start; padding: 9px 12px; }
-  .nav-item.active::before { left: -10px; }
-  .sidebar:hover .nav-item.active::before, .sidebar:focus-within .nav-item.active::before { left: -14px; }
-  .user-card { justify-content: center; padding-top: 12px; }
+  .user-card { padding-top: 12px; }
   .login-grid { grid-template-columns: 1fr; }
   .login-hero { display: none; }
 }
@@ -1152,6 +1152,40 @@ body.login { background: var(--paper); }
   .detail-grid { grid-template-columns: 1fr; }
   .slideover-foot { flex-direction: column; align-items: stretch; }
   .field-compact { width: 100%; }
+}
+
+/* ==========================================================================
+   Changement de page : entree du contenu, barre de progression
+   ========================================================================== */
+@keyframes entree-page {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
+}
+/* Se joue a chaque chargement : c'est l'animation de passage d'une page a l'autre. */
+.main { animation: entree-page 0.3s cubic-bezier(0.22, 0.7, 0.3, 1) both; }
+
+/* Barre de progression affichee des le clic sur un lien ou l'envoi d'un formulaire */
+.progress {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 3px;
+  width: 0;
+  z-index: 90;
+  opacity: 0;
+  pointer-events: none;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 10px var(--accent-line);
+  transition: width 0.45s cubic-bezier(0.22, 0.7, 0.3, 1), opacity 0.2s ease;
+}
+.progress.is-actif { opacity: 1; }
+
+/* Le lien clique se marque tout de suite comme actif, sans attendre le serveur. */
+.nav-item.is-en-cours { background: rgba(240, 233, 218, 0.1); color: var(--side-bright); }
+
+@media (prefers-reduced-motion: reduce) {
+  .main { animation: none; }
 }
 
 /* ==========================================================================

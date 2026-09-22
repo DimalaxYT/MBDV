@@ -516,15 +516,20 @@ def test_jeton_court_sans_la_case(app_embarque):
     assert charge["exp"] - time.time() <= 12 * 3600 + 60
 
 
-def test_styles_et_scripts_jamais_mis_en_cache(client):
-    """CSS et JS servis sans cache intermediaire, avec l'empreinte demandee."""
+def test_styles_et_scripts_mis_en_cache_par_empreinte(client):
+    """CSS et JS : cache long quand l'URL porte l'empreinte, sinon revalidation.
+
+    L'empreinte change des qu'un fichier change : la page suivante ne retelecharge
+    donc plus la feuille de style, ce qui supprime l'attente au changement de page.
+    """
     from pathlib import Path
     page = client.get("/connexion").get_data(as_text=True)
     version = re.search(r"/static/css/main\.css\?v=([0-9a-f]{10})", page).group(1)
 
     feuille = client.get(f"/static/css/main.css?v={version}")
     assert feuille.status_code == 200
-    assert feuille.headers["Cache-Control"] == "no-store, must-revalidate"
+    assert "immutable" in feuille.headers["Cache-Control"]
+    assert "max-age=31536000" in feuille.headers["Cache-Control"]
     corps = feuille.get_data(as_text=True)
     assert corps == Path("app/static/css/main.css").read_text(encoding="utf-8")
     # Garde-fou : la feuille servie contient bien toutes les regles de l'accueil,
@@ -534,7 +539,66 @@ def test_styles_et_scripts_jamais_mis_en_cache(client):
         assert regle in corps
 
     script = client.get(f"/static/js/app.js?v={version}")
-    assert script.headers["Cache-Control"] == "no-store, must-revalidate"
+    assert "immutable" in script.headers["Cache-Control"]
+
+    # Sans empreinte, on reste prudent : revalidation systematique.
+    sans = client.get("/static/css/main.css")
+    assert sans.headers["Cache-Control"] == "no-store, must-revalidate"
+    assert sans.get_data(as_text=True) == corps
+
+
+def test_reponses_compressees(client):
+    """Le HTML, le CSS et le JS voyagent en gzip : pages 4 a 5 fois plus legeres."""
+    import gzip as gz
+    entetes = {"Accept-Encoding": "gzip, deflate"}
+
+    page = client.get("/connexion", headers=entetes)
+    assert page.headers.get("Content-Encoding") == "gzip"
+    assert "Accept-Encoding" in page.headers.get("Vary", "")
+    assert b"Espace associ" in gz.decompress(page.get_data())   # contenu intact
+    assert int(page.headers["Content-Length"]) < len(gz.decompress(page.get_data()))
+
+    css = client.get("/static/css/main.css?v=abc123", headers=entetes)
+    assert css.headers.get("Content-Encoding") == "gzip"
+    assert b".widgets" in gz.decompress(css.get_data())
+
+    # Un client qui n'annonce pas gzip recoit la reponse telle quelle.
+    sec = client.get("/connexion")
+    assert sec.headers.get("Content-Encoding") is None
+
+
+def test_animation_de_changement_de_page(client):
+    """Entree du contenu, barre de progression et lien marque des le clic."""
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    assert "@keyframes entree-page" in css
+    assert ".main { animation: entree-page" in css
+    assert ".progress {" in css and ".progress.is-actif" in css
+    assert ".nav-item.is-en-cours" in css
+    assert ".main { animation: none; }" in css            # mouvement reduit respecte
+
+    js = Path("app/static/js/app.js").read_text(encoding="utf-8")
+    assert "initTransitionsDePage" in js
+    assert "demarrerNavigation" in js
+    assert "ev.defaultPrevented" in js                    # ne double pas les autres clics
+    assert "metaKey" in js and "target" in js             # liens externes / nouvel onglet
+    assert 'classList.add("page-en-cours")' in js
+    assert "pageshow" in js                               # retour arriere sans barre bloquee
+
+
+def test_barre_laterale_compacte_glisse_sans_recalcul(client):
+    """La barre compacte glisse (transform) : aucun deplacement de mise en page."""
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    compacte = css.split("@media (max-width: 900px) {")[1].split("\n}")[0]
+    assert "transform: translateX(-166px)" in compacte
+    assert "transition: transform" in compacte
+    assert "transition: width" not in compacte            # plus de largeur animee
+    assert ".sidebar:hover, .sidebar:focus-within { transform: none; }" in compacte
+    assert ".main { margin-left: 68px; }" in compacte
+    # Les libelles ne sont plus masques : la barre glisse, le texte ne clignote pas.
+    for classe in (".brand-text", ".brand-sub", ".nav-item span", ".user-meta", ".nav-label"):
+        assert classe not in compacte, classe
 
 
 def test_version_des_assets_dans_les_url(client):
@@ -596,14 +660,17 @@ def test_contenu_visible_sans_javascript(client):
     assert "classList.add(\"js\")" in page     # posee avant le premier rendu
 
 
-def test_libelles_de_section_masques_en_barre_reduite(client):
-    """Le libelle "Pilotage" debordait de la barre laterale reduite (68 px)."""
+def test_aucun_libelle_de_navigation_masque(client):
+    """Les libelles restent rendus partout : plus de texte qui apparait/disparait."""
     from pathlib import Path
     css = Path("app/static/css/main.css").read_text(encoding="utf-8")
-    reduit = css.split("@media (max-width: 900px) {")[1].split("\n}")[0]
-    assert ".nav-label { display: none; }" in reduit
-    assert ".sidebar-foot .nav-label" not in reduit     # ancienne regle trop etroite
-    assert ".nav-label { text-align: center" not in reduit
+    assert ".nav-label { display: none" not in css
+    assert ".sidebar-foot .nav-label" not in css
+    assert "text-align: center" not in css.split(".nav-label {")[1][:120]
+    # Un libelle trop long est coupe proprement, jamais cache.
+    bloc = css.split(".nav-label {")[1][:260]
+    assert "overflow: hidden" in bloc and "text-overflow: ellipsis" in bloc
+    assert "white-space: nowrap" in bloc
     assert "overflow: hidden" in css.split(".sidebar {")[1][:400]
 
 
