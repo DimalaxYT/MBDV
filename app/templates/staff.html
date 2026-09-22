@@ -99,6 +99,89 @@
   {% endif %}
 </section>
 
+{% if portefeuille is not none %}
+<section class="panel staff-portefeuille">
+  <h2 class="panel-title">{{ icon('briefcase', 17) }} Portefeuille de l'équipe</h2>
+  <p class="panel-lede">
+    Ajoutez une entreprise au portefeuille en saisissant son SIREN (9 chiffres), ou
+    retirez-en une d'un clic. Les entreprises déjà suivies gardent leur statut et leur
+    bénéfice. Total encaissé : <strong>{{ benefice.total_cents|euros }}</strong>.
+    {% if demo %}<br><strong>Mode démonstration :</strong> les fiches ajoutées depuis le
+    jeu fictif ne sont pas des entreprises réelles
+    (<a href="/staff?etat={{ etat }}&amp;demo=1">recharger avec la démonstration</a>).{% endif %}
+  </p>
+
+  {% if pf_ok %}
+  <div class="banner banner-ok">
+    {{ icon('check', 15) }} <span>
+      {% if pf_ok == 'ajoute' %}Entreprise ajoutée au portefeuille.
+      {% else %}Entreprise retirée du portefeuille.{% endif %}
+    </span>
+  </div>
+  {% endif %}
+  {% if pf_erreur %}
+  <div class="banner banner-error">
+    {{ icon('alert', 15) }} <span>
+      {% if pf_erreur == 'deja' %}Cette entreprise est déjà dans le portefeuille.
+      {% elif pf_erreur == 'absent' %}Cette entreprise n'est pas (ou plus) dans le portefeuille.
+      {% elif pf_erreur == 'introuvable' %}Entreprise introuvable : vérifiez le SIREN, ou
+        ouvrez la recherche pendant que la base officielle est joignable.
+      {% else %}SIREN invalide : 9 chiffres attendus.{% endif %}
+    </span>
+  </div>
+  {% endif %}
+
+  <form class="pf-form" method="post" action="/staff/portefeuille" data-chargement>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="ajouter">
+    <input type="hidden" name="etat" value="{{ etat }}">
+    {% if demo %}<input type="hidden" name="demo" value="1">{% endif %}
+    {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+    <div class="field">
+      <label for="pf-siren">SIREN à ajouter</label>
+      <input id="pf-siren" type="text" name="siren" inputmode="numeric" pattern="\d{9}"
+             maxlength="9" placeholder="123456789" spellcheck="false" required>
+    </div>
+    <button type="submit" class="btn btn-ink">{{ icon('plus', 14) }} Ajouter au portefeuille</button>
+  </form>
+
+  {% if portefeuille %}
+  <div class="pf-liste">
+    {% for c in portefeuille %}
+    <div class="pf-ligne">
+      <span class="pf-nom">
+        <strong>{{ c.nom }}</strong>
+        <span><code class="mono">{{ c.siren }}</code>
+          {% if c.commune %} &middot; {{ c.commune }}{% endif %}
+          &middot; {{ statut_label.get(c.statut, c.statut) }}
+          &middot; ajoutée par {{ c.ajoute_par }}</span>
+      </span>
+      {% if c.montant_cents %}
+      <span class="pf-montant">{{ c.montant_cents|euros }}
+        {% if c.signe_le %}<span class="row-sub">le {{ c.signe_le|frdate }}</span>{% endif %}
+      </span>
+      {% endif %}
+      <form method="post" action="/staff/portefeuille">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="retirer">
+        <input type="hidden" name="siren" value="{{ c.siren }}">
+        <input type="hidden" name="etat" value="{{ etat }}">
+        {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+        <button type="submit" class="btn btn-danger-ghost btn-sm"
+                title="Retirer {{ c.nom }} du portefeuille">
+          {{ icon('trash', 14) }} Retirer
+        </button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="benefice-vide">Le portefeuille est vide : ajoutez une première entreprise
+  avec son SIREN ci-dessus, ou depuis les résultats de recherche.</p>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if comptes %}
 <section class="panel staff-comptes">
   <h2 class="panel-title">{{ icon('key', 17) }} Comptes des associés</h2>

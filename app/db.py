@@ -54,7 +54,9 @@ CREATE TABLE IF NOT EXISTS tracked (
     added_by          TEXT NOT NULL,
     added_at          TEXT NOT NULL,
     status_updated_by TEXT,
-    status_updated_at TEXT
+    status_updated_at TEXT,
+    montant_cents     INTEGER NOT NULL DEFAULT 0,  -- benefice encaisse (en centimes)
+    signe_le          TEXT                          -- date du paiement (AAAA-MM-JJ)
 );
 """
 
@@ -93,6 +95,15 @@ def close_db(_exc=None) -> None:
         conn.close()
 
 
+def _migration_tracked(conn) -> None:
+    """Ajoute les colonnes du benefice aux bases creees avant leur introduction."""
+    colonnes = {ligne["name"] for ligne in conn.execute("PRAGMA table_info(tracked)")}
+    if "montant_cents" not in colonnes:
+        conn.execute("ALTER TABLE tracked ADD COLUMN montant_cents INTEGER NOT NULL DEFAULT 0")
+    if "signe_le" not in colonnes:
+        conn.execute("ALTER TABLE tracked ADD COLUMN signe_le TEXT")
+
+
 def _migration_role(conn) -> None:
     """Ajoute la colonne `role` aux bases creees avant son introduction.
 
@@ -115,6 +126,7 @@ def init_app(app) -> None:
     try:
         conn.executescript(SCHEMA)
         _migration_role(conn)
+        _migration_tracked(conn)
         conn.commit()
     finally:
         conn.close()

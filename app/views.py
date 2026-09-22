@@ -6,6 +6,7 @@ import math
 import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse
+from zoneinfo import ZoneInfo
 
 from flask import (
     Blueprint,
@@ -33,6 +34,9 @@ from .auth import (
     url_avec_jeton,
 )
 from .icons import icon
+
+# Fuseau de reference pour les dates affichees (meme source que auth).
+PARIS_TZ = ZoneInfo("Europe/Paris")
 
 bp = Blueprint("views", __name__)
 
@@ -593,6 +597,72 @@ def api_site_override():
 # Portefeuille
 # --------------------------------------------------------------------------
 
+MOIS_LABELS = ("janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août",
+               "sept.", "oct.", "nov.", "déc.")
+BENEFICE_MOIS = 12          # profondeur du graphique d'encaissements
+
+
+def _decalage_mois(annee: int, mois: int, recul: int) -> tuple[int, int]:
+    """Recule de `recul` mois depuis (annee, mois), sans dependance externe."""
+    index = annee * 12 + (mois - 1) - recul
+    return index // 12, index % 12 + 1
+
+
+def benefice_du_portefeuille():
+    """Encaisssements du portefeuille : totaux, panier moyen et serie mensuelle.
+
+    Les montants viennent de `tracked.montant_cents` (entiers, en centimes : aucun
+    arrondi flottant). La serie couvre les 12 derniers mois, mois courant inclus.
+    """
+    total_cents = 0
+    par_mois = {}
+    lignes = db.query(
+        "SELECT montant_cents, signe_le FROM tracked WHERE montant_cents > 0")
+    for ligne in lignes:
+        montant = int(ligne["montant_cents"] or 0)
+        total_cents += montant
+        date = (ligne["signe_le"] or "")[:10]
+        # Montant sans date exploitable : on le compte sur le mois courant.
+        valide = len(date) >= 7 and date[:4].isdigit() and date[5:7].isdigit()
+        cle = date[:7] if valide else db.now_iso()[:7]
+        par_mois[cle] = par_mois.get(cle, 0) + montant
+
+    maintenant = datetime.now(PARIS_TZ)
+    serie = []
+    for recul in range(BENEFICE_MOIS - 1, -1, -1):
+        annee, mois = _decalage_mois(maintenant.year, maintenant.month, recul)
+        cle = f"{annee:04d}-{mois:02d}"
+        serie.append({
+            "cle": cle,
+            "label": MOIS_LABELS[mois - 1],
+            "annee": annee,
+            "mois": mois,
+            "cents": par_mois.get(cle, 0),
+        })
+    maximum = max([point["cents"] for point in serie] + [0])
+    cumul = 0
+    for point in serie:
+        # Hauteur en pourcentage du plus gros mois (0 % si rien a afficher).
+        point["hauteur"] = round(100 * point["cents"] / maximum) if maximum else 0
+        point["pct_max"] = round(100 * point["cents"] / maximum) if maximum else 0
+        cumul += point["cents"]
+        point["cumul_hauteur"] = round(100 * cumul / (total_cents or 1))
+
+    payants = [int(ligne["montant_cents"]) for ligne in lignes]
+    clients = db.one("SELECT COUNT(*) n FROM tracked WHERE status = 'client'")["n"]
+    ce_mois = par_mois.get(maintenant.strftime("%Y-%m"), 0)
+    return {
+        "total_cents": total_cents,
+        "clients": clients,
+        "payants": len(payants),
+        "panier_cents": round(total_cents / len(payants)) if payants else 0,
+        "ce_mois_cents": ce_mois,
+        "serie": serie,
+        "maximum_cents": maximum,
+        "mois_courant": maintenant.strftime("%Y-%m"),
+    }
+
+
 @bp.route("/portefeuille")
 @login_required
 def portefeuille():
@@ -610,6 +680,9 @@ def portefeuille():
         c["statut"] = r["status"]
         c["added_by"] = r["added_by"]
         c["added_at"] = r["added_at"]
+        # Benefice deja encaisse : sert a pre-remplir la colonne du tableau.
+        c["montant_cents"] = r["montant_cents"] or 0
+        c["signe_le"] = r["signe_le"]
         items.append(c)
     compteurs = {code: 0 for code, _ in STATUTS_PIPELINE}
     for c in items:
@@ -621,7 +694,47 @@ def portefeuille():
         sous_titre="Entreprises suivies par l'équipe — de la prise de contact à la signature",
         items=items,
         compteurs=compteurs,
+        benefice=benefice_du_portefeuille(),
+        montant_ok=request.args.get("montant") == "ok",
+        montant_erreur=request.args.get("montant_erreur"),
     )
+
+
+@bp.route("/portefeuille/montant", methods=["POST"])
+@login_required
+def portefeuille_montant():
+    """Enregistre le benefice encaisse pour une entreprise suivie."""
+    siren = (request.form.get("siren") or "").strip()
+    montant = (request.form.get("montant") or "").strip().replace("\u202f", "").replace(" ", "")
+    date = (request.form.get("signe_le") or "").strip()
+    if not re.fullmatch(r"\d{9}", siren):
+        return redirect(url_avec_jeton(url_for("views.portefeuille", montant_erreur="siren")))
+    if not db.one("SELECT id FROM tracked WHERE siren = ?", (siren,)):
+        return redirect(url_avec_jeton(url_for("views.portefeuille", montant_erreur="absent")))
+
+    erreur = None
+    centimes = 0
+    if montant:
+        montant = montant.replace(",", ".")
+        try:
+            centimes = int(round(float(montant) * 100))
+        except ValueError:
+            erreur = "montant"
+        if centimes < 0:
+            erreur = "montant"
+        if centimes > 100_000_000_00:        # garde-fou : 1 milliard d'euros
+            erreur = "montant"
+    if date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        erreur = "date"
+    if erreur:
+        return redirect(url_avec_jeton(
+            url_for("views.portefeuille", montant_erreur=erreur)))
+
+    db.execute("UPDATE tracked SET montant_cents = ?, signe_le = ? WHERE siren = ?",
+               (centimes, date or None, siren))
+    current_app.logger.info("Benefice de %s enregistre par %s : %s centimes (%s)",
+                            siren, session.get("username"), centimes, date or "sans date")
+    return redirect(url_avec_jeton(url_for("views.portefeuille", montant="ok")))
 
 
 # --------------------------------------------------------------------------
@@ -680,9 +793,34 @@ def _rendu_staff(etat: str, q: str, compte_erreur=None, compte_succes=False, val
             "SELECT id, username, display_name, role FROM users"
             " WHERE id <> ? ORDER BY id", (session["uid"],))]
 
+    # Portefeuille : ajout / retrait d'entreprises suivies (dirigeant uniquement).
+    portefeuille = None
+    if est_admin():
+        portefeuille = []
+        for r in db.query("SELECT siren, snapshot, status, added_by, added_at,"
+                          " montant_cents, signe_le FROM tracked"
+                          " ORDER BY added_at DESC LIMIT 200"):
+            try:
+                snap = json.loads(r["snapshot"] or "{}")
+            except ValueError:
+                snap = {}
+            portefeuille.append({
+                "siren": r["siren"],
+                "nom": snap.get("nom") or r["siren"],
+                "commune": snap.get("commune"),
+                "statut": r["status"],
+                "ajoute_par": r["added_by"],
+                "ajoute_le": r["added_at"],
+                "montant_cents": r["montant_cents"],
+                "signe_le": r["signe_le"],
+            })
+
+    demo = (request.values.get("demo") == "1"
+            and bool(current_app.config["DEMO_ALLOWED"]))
     return render_template(
         "staff.html",
         page_id="staff",
+        demo=demo,
         titre="Panel staff",
         sous_titre="Historique des entreprises masquees - raison, auteur, date",
         entrees=entrees,
@@ -699,6 +837,10 @@ def _rendu_staff(etat: str, q: str, compte_erreur=None, compte_succes=False, val
         compte_erreur=compte_erreur,
         compte_succes=compte_succes,
         valeurs=valeurs or {},
+        portefeuille=portefeuille,
+        pf_erreur=request.args.get("pf_erreur"),
+        pf_ok=request.args.get("pf"),
+        benefice=benefice_du_portefeuille() if est_admin() else None,
     )
 
 
@@ -709,6 +851,57 @@ def staff():
         _etat_staff(request.args.get("etat")), (request.args.get("q") or "").strip(),
         compte_succes=request.args.get("compte") == "ok",
     )
+
+
+@bp.route("/staff/portefeuille", methods=["POST"])
+@admin_required
+def staff_portefeuille():
+    """Ajoute ou retire une entreprise du portefeuille depuis le panel staff."""
+    action = request.form.get("action") or ""
+    siren = (request.form.get("siren") or "").strip()
+    etat = _etat_staff(request.form.get("etat"))
+    q = (request.form.get("q") or "").strip()
+    retour = lambda code: url_avec_jeton(  # noqa: E731 - petite fabrique locale
+        url_for("views.staff", etat=etat, q=q or None, **code))
+
+    if not re.fullmatch(r"\d{9}", siren):
+        return redirect(retour({"pf_erreur": "siren"}))
+
+    if action == "retirer":
+        ligne = db.one("SELECT id FROM tracked WHERE siren = ?", (siren,))
+        if not ligne:
+            return redirect(retour({"pf_erreur": "absent"}))
+        db.execute("DELETE FROM tracked WHERE id = ?", (ligne["id"],))
+        current_app.logger.info("Portefeuille : %s retire par %s",
+                                siren, session.get("username"))
+        return redirect(retour({"pf": "retire"}))
+
+    if action != "ajouter":
+        return redirect(retour({"pf_erreur": "action"}))
+
+    if db.one("SELECT id FROM tracked WHERE siren = ?", (siren,)):
+        return redirect(retour({"pf_erreur": "deja"}))
+
+    # Jamais de fiche inventee : API officielle, sinon instantane deja connu
+    # (masquage, portefeuille). Le jeu de demonstration ne sert que s'il est
+    # explicitement demande sur la page du panel.
+    # Le jeu de demonstration ne sert que s'il a ete demande explicitement sur le
+    # panel (le formulaire transmet l'information), et l'ajout est alors annonce.
+    demo = (request.values.get("demo") == "1"
+            and bool(current_app.config["DEMO_ALLOWED"]))
+    entreprise, source = _entreprise_complete(siren, demo_autorise=demo)
+    if not entreprise:
+        return redirect(retour({"pf_erreur": "introuvable"}))
+    if source == "demo":
+        current_app.logger.info("Portefeuille : %s ajoute depuis le jeu de demonstration", siren)
+    db.execute(
+        "INSERT INTO tracked (siren, snapshot, added_by, added_at) VALUES (?, ?, ?, ?)",
+        (siren, json.dumps(entreprise, ensure_ascii=False),
+         session.get("username") or "?", db.now_iso()),
+    )
+    current_app.logger.info("Portefeuille : %s (%s) ajoute par %s",
+                            siren, source, session.get("username"))
+    return redirect(retour({"pf": "ajoute", "demo": "1" if source == "demo" else None}))
 
 
 @bp.route("/staff/comptes", methods=["POST"])

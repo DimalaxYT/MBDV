@@ -617,6 +617,217 @@ def test_barre_laterale_compacte_garde_les_icones(client):
     assert "display: none" not in compacte.replace(".login-hero { display: none; }", "")
 
 
+def test_surlignage_de_l_onglet_actif(client):
+    """Le trait d'accent est dans l'element (inset), plus un ::before decale.
+
+    Regression : le trait etait un pseudo-element en left:-14px, qui sortait de la
+    barre et se desalignait selon la largeur de la mise en page.
+    """
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    assert ".nav-item.active::before" not in css
+    assert "box-shadow: inset 3px 0 0 var(--accent)" in css
+    # l'etat "clic immediat" est identique a l'etat actif : aucun saut visuel
+    bloc = css.split(".nav-item.active,")[1][:40]
+    assert ".nav-item.is-en-cours" in bloc
+    # le focus clavier utilise un contour, sans entrer en conflit avec la lueur interne
+    assert "outline: 2px solid var(--accent-2)" in css
+    assert ".nav-item:focus-visible { outline: none" not in css
+
+
+def test_fermeture_de_la_barre_synchronisee_avec_le_texte(client):
+    """Le texte ne doit pas rester visible apres le panneau.
+
+    Regression : le fondu avait un retard de 80 ms dans les deux sens, donc a la
+    fermeture le texte trainait apres le fond qui se retractait.
+    """
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    compacte = css.split("@media (max-width: 900px) {")[1].split("\n}\n")[0]
+    # fermeture : fondu court, sans retard
+    assert "transition: opacity 0.12s ease;" in compacte
+    # ouverture : petit retard, uniquement sur l'etat survol/focus
+    assert ".sidebar:hover .brand-text" in compacte
+    assert "transition: opacity 0.18s ease 0.08s;" in compacte
+    assert compacte.count("transition: opacity 0.18s ease 0.08s;") == 1
+
+
+def test_benefice_du_portefeuille(app):
+    """Montants encaisses, totaux et graphique mensuel."""
+    client = app.test_client()
+    connexion(client)
+    with base(client) as b:
+        for siren, nom in (("111111111", "Alpha"), ("222222222", "Beta")):
+            b.execute("INSERT INTO tracked (siren, snapshot, status, added_by, added_at)"
+                      " VALUES (?, ?, 'client', 'admin', '2026-01-01T00:00:00Z')",
+                      (siren, json.dumps(entreprise(siren, nom))))
+
+    # aucun montant : message d'amorcage, pas de graphique
+    page = client.get("/portefeuille").get_data(as_text=True)
+    assert "Bénéfice" in page and "Aucun montant renseigné" in page
+    assert "graph-svg" not in page
+
+    csrf = jeton(client, "/portefeuille")
+    reponse = client.post("/portefeuille/montant", data={
+        "_csrf": csrf, "siren": "111111111", "montant": "4500", "signe_le": "2026-09-10"})
+    assert reponse.status_code == 302
+    assert "montant=ok" in reponse.headers["Location"]
+    client.post("/portefeuille/montant", data={
+        "_csrf": csrf, "siren": "222222222", "montant": "1500.50", "signe_le": "2026-08-02"})
+
+    page = client.get("/portefeuille").get_data(as_text=True)
+    assert "6\u202f001" in page or "6 001" in page          # 4500 + 1500,50 arrondis
+    assert "3\u202f000" in page or "3 000" in page          # panier moyen (3000,25)
+    assert "graph-svg" in page
+    assert page.count('<rect class="graph-bar') == 12     # un point par mois
+    assert "is-courant" in page                               # le mois courant est marque
+    assert "Cumul" in page
+
+    # les montants sont conserves et pre-remplis dans la colonne du tableau
+    assert "col-benefice" in page and "montant-form" in page
+    assert 'value="4500"' in page                       # montant du client 1
+    assert 'value="2026-09-10"' in page                 # sa date de paiement
+    assert 'value="1500"' in page                        # centimes tronques, sans arrondi
+
+
+def test_montant_refuse_si_invalide_ou_hors_portefeuille(app, client):
+    connexion(client)
+    with base(client) as b:
+        b.execute("INSERT INTO tracked (siren, snapshot, status, added_by, added_at)"
+                  " VALUES ('111111111', ?, 'client', 'admin', '2026-01-01T00:00:00Z')",
+                  (json.dumps(entreprise("111111111", "Alpha")),))
+    csrf = jeton(client, "/portefeuille")
+
+    for donnees, motif in (
+        ({"siren": "111111111", "montant": "abc"}, "montant_erreur=montant"),
+        ({"siren": "111111111", "montant": "-5"}, "montant_erreur=montant"),
+        ({"siren": "111111111", "montant": "100", "signe_le": "10/09/2026"},
+         "montant_erreur=date"),
+        ({"siren": "999999999", "montant": "100"}, "montant_erreur=absent"),
+        ({"siren": "12", "montant": "100"}, "montant_erreur=siren"),
+    ):
+        reponse = client.post("/portefeuille/montant",
+                              data={"_csrf": csrf, **donnees})
+        assert motif in reponse.headers["Location"], donnees
+    with app.app_context():
+        from app import db
+        assert db.one("SELECT montant_cents FROM tracked WHERE siren = '111111111'"
+                      )["montant_cents"] == 0
+
+
+def test_staff_ajoute_et_retire_du_portefeuille(app):
+    """Le dirigeant gere le portefeuille depuis le panel staff."""
+    client = app.test_client()
+    connexion(client, username="admin", password="MBDV-admin-2026")
+    page = client.get("/staff").get_data(as_text=True)
+    assert "Portefeuille de l'équipe" in page
+    assert 'action="/staff/portefeuille"' in page
+    assert "Le portefeuille est vide" in page
+
+    csrf = jeton(client, "/staff")
+    # ajout d'une entreprise connue par son instantane (masquee auparavant)
+    with app.app_context():
+        from app import db
+        db.execute("INSERT INTO hides (siren, nom, raison, details, snapshot, hidden_by,"
+                   " hidden_at) VALUES ('111111111', 'Alpha', 'Doublon', '',"
+                   " ?, 'admin', '2026-01-01T00:00:00Z')",
+                   (json.dumps(entreprise("111111111", "Alpha")),))
+    reponse = client.post("/staff/portefeuille",
+                          data={"_csrf": csrf, "action": "ajouter", "siren": "111111111"})
+    assert "pf=ajoute" in reponse.headers["Location"]
+    page = client.get(reponse.headers["Location"]).get_data(as_text=True)
+    assert "Entreprise ajoutée au portefeuille" in page
+    assert "@admin" in page and "111111111" in page
+
+    # doublon refuse
+    reponse = client.post("/staff/portefeuille",
+                          data={"_csrf": csrf, "action": "ajouter", "siren": "111111111"})
+    assert "pf_erreur=deja" in reponse.headers["Location"]
+    # SIREN inconnu : jamais de fiche inventee
+    reponse = client.post("/staff/portefeuille",
+                          data={"_csrf": csrf, "action": "ajouter", "siren": "999999999"})
+    assert "pf_erreur=introuvable" in reponse.headers["Location"]
+
+    # retrait
+    reponse = client.post("/staff/portefeuille",
+                          data={"_csrf": csrf, "action": "retirer", "siren": "111111111"})
+    assert "pf=retire" in reponse.headers["Location"]
+    with app.app_context():
+        from app import db
+        assert db.one("SELECT id FROM tracked WHERE siren = '111111111'") is None
+
+
+def test_staff_ajoute_avec_le_jeu_de_demonstration_sur_demande(app_demo):
+    """L'ajout par SIREN utilise le jeu fictif seulement si `demo=1` est demande."""
+    client = app_demo.test_client()
+    connexion(client)
+    with app_demo.app_context():
+        from app import db
+        db.execute("INSERT INTO hides (siren, nom, raison, details, snapshot, hidden_by,"
+                   " hidden_at) VALUES ('111111111', 'Alpha', 'Doublon', '', '',"
+                   " 'admin', '2026-01-01T00:00:00Z')")
+    # SIREN uniquement connu du jeu de demonstration
+    siren_demo = "848902672"
+
+    # sans demande explicite : la fiche n'est pas inventee
+    page = client.get("/staff").get_data(as_text=True)
+    assert "Mode démonstration" not in page
+    reponse = client.post("/staff/portefeuille", data={
+        "_csrf": jeton(client, "/staff"), "action": "ajouter", "siren": siren_demo})
+    assert "pf_erreur=introuvable" in reponse.headers["Location"]
+
+    # avec ?demo=1 : la fiche fictive est acceptee, et l'information est transmise
+    page = client.get("/staff?demo=1").get_data(as_text=True)
+    assert "Mode démonstration" in page
+    assert 'name="demo" value="1"' in page
+    reponse = client.post("/staff/portefeuille", data={
+        "_csrf": jeton(client, "/staff?demo=1"), "action": "ajouter",
+        "siren": siren_demo, "demo": "1"})
+    assert "pf=ajoute" in reponse.headers["Location"]
+    assert "demo=1" in reponse.headers["Location"]
+    with app_demo.app_context():
+        from app import db
+        assert db.one("SELECT id FROM tracked WHERE siren = ?", (siren_demo,)) is not None
+
+
+def test_portefeuille_du_staff_reserve_au_dirigeant(app):
+    client = app.test_client()
+    connexion(client, username="associe", password="MBDV-associe-2026")
+    page = client.get("/staff").get_data(as_text=True)
+    assert "Portefeuille de l'équipe" not in page
+    reponse = client.post("/staff/portefeuille", data={
+        "_csrf": jeton(client, "/staff"), "action": "retirer", "siren": "111111111"})
+    assert reponse.status_code == 403
+
+
+def test_migration_benefice_sur_une_base_existante(tmp_path, monkeypatch):
+    """Une base sans colonnes de benefice est completee au demarrage."""
+    import sqlite3
+    dossier = tmp_path / "data"
+    dossier.mkdir()
+    conn = sqlite3.connect(dossier / "mbdv.sqlite3")
+    conn.executescript(
+        "CREATE TABLE tracked ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " siren TEXT UNIQUE NOT NULL, snapshot TEXT NOT NULL,"
+        " status TEXT NOT NULL DEFAULT 'a_contacter', note TEXT NOT NULL DEFAULT '',"
+        " added_by TEXT NOT NULL, added_at TEXT NOT NULL,"
+        " status_updated_by TEXT, status_updated_at TEXT);")
+    conn.execute("INSERT INTO tracked (siren, snapshot, added_by, added_at)"
+                 " VALUES ('111111111', '{}', 'admin', '2026-01-01T00:00:00Z')")
+    conn.commit()
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("MBDV_DATA_DIR", str(dossier))
+    application = create_app()
+    application.config.update(TESTING=True)
+    with application.app_context():
+        from app import db
+        ligne = db.one("SELECT montant_cents, signe_le FROM tracked WHERE siren = '111111111'")
+        assert ligne["montant_cents"] == 0 and ligne["signe_le"] is None
+
+
 def test_transition_de_page_native(client):
     """Vraie animation de changement de page : transition native + repli anime."""
     from pathlib import Path

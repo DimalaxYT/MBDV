@@ -214,6 +214,15 @@ pyproject.toml          configuration ruff + pytest
   10,4 Ko, JS 22,7 Ko -> 6,3 Ko) et le CSS/JS versionne est garde par le
   navigateur (`?v=<empreinte>`, un an) : une page suivante ne coute plus que
   quelques kilo-octets.
+- **Bénéfice** : chaque entreprise suivie peut porter un montant encaissé et sa date
+  (colonne « Bénéfice gagné » du portefeuille, montants stockés en centimes). Le
+  portefeuille affiche le total, les clients signés, le panier moyen, le mois en
+  cours et un graphique des 12 derniers mois (barres + courbe de cumul, en SVG,
+  sans dépendance).
+- **Portefeuille géré depuis le panel staff** (dirigeant) : ajout par SIREN et
+  retrait d'un clic. L'ajout ne récupère la fiche que par l'API officielle ou un
+  instantané déjà connu ; le jeu fictif n'est utilisé que si `?demo=1` a été
+  demandé, et l'information est rappelée dans la section.
 - **Gestion des comptes** : le panel staff comporte, pour le dirigeant seul, la
   section « Comptes des associés » (identifiant, nom affiché et mot de passe du
   compte associé, mot de passe laissé vide pour le conserver). Les rôles sont

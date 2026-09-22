@@ -329,7 +329,19 @@ def _fmt_eur(value) -> str:
     return f"{'-' if neg else ''}{s} \u20ac"
 
 
+def _fmt_centimes(value) -> str:
+    """1 250 000 centimes -> '12 500 €' (arrondi a l'euro, espace fine insecable)."""
+    try:
+        centimes = int(value)
+    except (TypeError, ValueError):
+        return "-"
+    signe = "-" if centimes < 0 else ""
+    euros = (abs(centimes) + 50) // 100
+    return f"{signe}{euros:,}".replace(",", "\u202f") + " \u20ac"
+
+
 def _register_filters(app) -> None:
     app.add_template_filter(_fmt_dt, "dt")
     app.add_template_filter(_fmt_date, "frdate")
     app.add_template_filter(_fmt_eur, "eur")
+    app.add_template_filter(_fmt_centimes, "euros")

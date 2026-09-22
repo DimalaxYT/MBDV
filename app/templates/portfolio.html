@@ -6,6 +6,87 @@
 
 {% block content %}
 
+{% if montant_ok %}
+<div class="banner banner-ok">
+  {{ icon('check', 15) }} <span>Bénéfice enregistré. Le graphique et les totaux sont à jour.</span>
+</div>
+{% endif %}
+{% if montant_erreur %}
+<div class="banner banner-error">
+  {{ icon('alert', 15) }} <span>
+    {% if montant_erreur == 'date' %}Date invalide : utilisez le sélecteur de date.
+    {% elif montant_erreur == 'absent' %}Cette entreprise n'est plus dans le portefeuille.
+    {% else %}Montant invalide : indiquez un nombre positif (exemple&nbsp;: 4500).{% endif %}
+  </span>
+</div>
+{% endif %}
+
+<section class="benefice-panel panel">
+  <header class="benefice-head">
+    <div>
+      <h2 class="panel-title">{{ icon('trend-up', 17) }} Bénéfice</h2>
+      <p class="panel-lede">Montants encaissés sur les entreprises suivies, mois par mois.</p>
+    </div>
+    <p class="benefice-total">
+      <span class="benefice-value">{{ benefice.total_cents|euros }}</span>
+      <span class="benefice-label">encaissés au total</span>
+    </p>
+  </header>
+
+  <div class="benefice-cards">
+    <div class="benefice-card">
+      <span class="benefice-card-value">{{ benefice.clients }}</span>
+      <span class="benefice-card-label">Clients signés</span>
+      <span class="benefice-card-note">{{ benefice.payants }} avec un montant renseigné</span>
+    </div>
+    <div class="benefice-card">
+      <span class="benefice-card-value">{{ benefice.panier_cents|euros }}</span>
+      <span class="benefice-card-label">Panier moyen</span>
+      <span class="benefice-card-note">par client payant</span>
+    </div>
+    <div class="benefice-card">
+      <span class="benefice-card-value">{{ benefice.ce_mois_cents|euros }}</span>
+      <span class="benefice-card-label">Ce mois-ci</span>
+      <span class="benefice-card-note">total des {{ benefice.serie|length }} derniers mois ci-dessous</span>
+    </div>
+  </div>
+
+  {% if benefice.maximum_cents %}
+  <figure class="graph">
+    <figcaption class="graph-legend">
+      <span class="graph-key"><span class="graph-swatch graph-swatch-bar"></span>Encaissé dans le mois</span>
+      <span class="graph-key"><span class="graph-swatch graph-swatch-line"></span>Cumul</span>
+      <span class="graph-max">Meilleur mois : {{ benefice.maximum_cents|euros }}</span>
+    </figcaption>
+    <svg class="graph-svg" viewBox="0 0 720 200" role="img"
+         aria-label="Encaissements des douze derniers mois">
+      <g class="graph-bars">
+        {% for point in benefice.serie %}
+        <rect class="graph-bar {% if point.cle == benefice.mois_courant %}is-courant{% endif %}"
+              x="{{ 34 + loop.index0 * 57 }}" y="{{ 170 - (point.hauteur * 1.4)|round(1) }}"
+              width="30" height="{{ (point.hauteur * 1.4)|round(1) }}"
+              rx="4" style="--i: {{ loop.index0 }}">
+          <title>{{ point.label }} {{ point.annee }} : {{ point.cents|euros }}</title>
+        </rect>
+        {% endfor %}
+      </g>
+      <polyline class="graph-line" fill="none"
+                points="{% for point in benefice.serie %}{{ 49 + loop.index0 * 57 }},{{ 170 - (point.cumul_hauteur * 1.4)|round(1) }} {% endfor %}"/>
+      <line class="graph-axis" x1="20" y1="170.5" x2="700" y2="170.5"/>
+      {% for point in benefice.serie %}
+      <text class="graph-label {% if point.cle == benefice.mois_courant %}is-courant{% endif %}"
+            x="{{ 49 + loop.index0 * 57 }}" y="190">{{ point.label }}</text>
+      {% endfor %}
+    </svg>
+  </figure>
+  {% else %}
+  <p class="benefice-vide">
+    Aucun montant renseigné : ouvrez une entreprise du portefeuille (ou utilisez la colonne
+    « Bénéfice gagné ») pour ajouter ce que le client a payé. Le graphique apparaîtra ici.
+  </p>
+  {% endif %}
+</section>
+
 <section class="stats-grid stats-grid-6">
   {% for code, label in statuts_pipeline %}
   <div class="stat-card">
@@ -27,6 +108,7 @@
           <th>Site web</th>
           <th>Statut commercial</th>
           <th>Ajoutée</th>
+          <th class="col-benefice">Bénéfice gagné</th>
           <th class="col-actions"></th>
         </tr>
       </thead>
@@ -58,6 +140,20 @@
           <td>
             <span class="cell-soft">{{ c.added_at|dt }}</span>
             <span class="row-sub">par {{ c.added_by }}</span>
+          </td>
+          <td class="col-benefice">
+            <form class="montant-form" method="post" action="/portefeuille/montant" data-chargement>
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="siren" value="{{ c.siren }}">
+              <input class="input-montant" type="number" name="montant" min="0" step="50"
+                     value="{{ (c.montant_cents // 100) if c.montant_cents else '' }}"
+                     placeholder="0" aria-label="Montant encaissé en euros pour {{ c.nom }}">
+              <input class="input-date" type="date" name="signe_le"
+                     value="{{ (c.signe_le or '')[:10] }}"
+                     aria-label="Date du paiement pour {{ c.nom }}">
+              <button class="btn btn-ghost btn-sm" type="submit"
+                      title="Enregistrer le bénéfice">{{ icon('check', 14) }}</button>
+            </form>
           </td>
           <td class="col-actions">
             <div class="row-actions">

@@ -110,7 +110,10 @@ def _verifie_domaines(nom: str, enseigne=None):
 
 def etat_effectif(company: dict) -> dict:
     """Etat d'affichage : applique l'override manuel, sinon le cache, sinon None."""
-    siren = company["siren"]
+    # Un instantane ancien ou incomplet ne doit jamais faire echouer l'affichage.
+    siren = str(company.get("siren") or "")
+    if not siren:
+        return None
     row = db.one("SELECT value FROM overrides WHERE siren = ?", (siren,))
     if row:
         return {"status": "aucun", "domain": None, "source": "manuel_sans",
