@@ -10,3 +10,7 @@ __pycache__/
 # Node (polices téléchargées ponctuellement)
 node_modules/
 *.tgz
+
+# Outils de qualite (caches)
+.ruff_cache/
+.pytest_cache/

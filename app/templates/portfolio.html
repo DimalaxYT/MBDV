@@ -1,10 +1,80 @@
 {% extends "base.html" %}
 
-{% block titre_page %}Portefeuille - MBDV Prospection{% endblock %}
+{% block titre_page %}Portefeuille - {{ site_name }} Prospection{% endblock %}
 {% block titre %}Portefeuille commercial{% endblock %}
 {% block sous_titre %}{{ sous_titre }}{% endblock %}
 
 {% block content %}
+
+<section class="benefice-panel panel">
+  <header class="benefice-head">
+    <div>
+      <h2 class="panel-title">{{ icon('trend-up', 17) }} Bénéfice</h2>
+      <p class="panel-lede">
+        Montants encaissés sur les entreprises suivies, mois par mois.
+        {% if benefice_gere_au_staff %}La saisie se fait dans le
+        <a href="/staff">panel staff</a>, section Bénéfice.{% endif %}
+      </p>
+    </div>
+    <p class="benefice-total">
+      <span class="benefice-value">{{ benefice.total_cents|euros }}</span>
+      <span class="benefice-label">encaissés au total</span>
+    </p>
+  </header>
+
+  <div class="benefice-cards">
+    <div class="benefice-card">
+      <span class="benefice-card-value">{{ benefice.clients }}</span>
+      <span class="benefice-card-label">Clients signés</span>
+      <span class="benefice-card-note">{{ benefice.nombre }} encaissement(s) enregistré(s)</span>
+    </div>
+    <div class="benefice-card">
+      <span class="benefice-card-value">{{ benefice.panier_cents|euros }}</span>
+      <span class="benefice-card-label">Panier moyen</span>
+      <span class="benefice-card-note">par client payant</span>
+    </div>
+    <div class="benefice-card">
+      <span class="benefice-card-value">{{ benefice.ce_mois_cents|euros }}</span>
+      <span class="benefice-card-label">Ce mois-ci</span>
+      <span class="benefice-card-note">total des {{ benefice.serie|length }} derniers mois ci-dessous</span>
+    </div>
+  </div>
+
+  {% if benefice.maximum_cents %}
+  <figure class="graph">
+    <figcaption class="graph-legend">
+      <span class="graph-key"><span class="graph-swatch graph-swatch-bar"></span>Encaissé dans le mois</span>
+      <span class="graph-key"><span class="graph-swatch graph-swatch-line"></span>Cumul</span>
+      <span class="graph-max">Meilleur mois : {{ benefice.maximum_cents|euros }}</span>
+    </figcaption>
+    <svg class="graph-svg" viewBox="0 0 720 200" role="img"
+         aria-label="Encaissements des douze derniers mois">
+      <g class="graph-bars">
+        {% for point in benefice.serie %}
+        <rect class="graph-bar {% if point.cle == benefice.mois_courant %}is-courant{% endif %}"
+              x="{{ 34 + loop.index0 * 57 }}" y="{{ 170 - (point.hauteur * 1.4)|round(1) }}"
+              width="30" height="{{ (point.hauteur * 1.4)|round(1) }}"
+              rx="4" style="--i: {{ loop.index0 }}">
+          <title>{{ point.label }} {{ point.annee }} : {{ point.cents|euros }}</title>
+        </rect>
+        {% endfor %}
+      </g>
+      <polyline class="graph-line" fill="none"
+                points="{% for point in benefice.serie %}{{ 49 + loop.index0 * 57 }},{{ 170 - (point.cumul_hauteur * 1.4)|round(1) }} {% endfor %}"/>
+      <line class="graph-axis" x1="20" y1="170.5" x2="700" y2="170.5"/>
+      {% for point in benefice.serie %}
+      <text class="graph-label {% if point.cle == benefice.mois_courant %}is-courant{% endif %}"
+            x="{{ 49 + loop.index0 * 57 }}" y="190">{{ point.label }}</text>
+      {% endfor %}
+    </svg>
+  </figure>
+  {% else %}
+  <p class="benefice-vide">
+    Aucun montant renseigné : ouvrez une entreprise du portefeuille (ou utilisez la colonne
+    « Bénéfice gagné ») pour ajouter ce que le client a payé. Le graphique apparaîtra ici.
+  </p>
+  {% endif %}
+</section>
 
 <section class="stats-grid stats-grid-6">
   {% for code, label in statuts_pipeline %}
@@ -27,12 +97,14 @@
           <th>Site web</th>
           <th>Statut commercial</th>
           <th>Ajoutée</th>
+          <th class="col-benefice">Bénéfice gagné <span class="th-note">(géré au panel staff)</span></th>
           <th class="col-actions"></th>
         </tr>
       </thead>
       <tbody>
         {% for c in items %}
-        <tr class="result-row" data-siren="{{ c.siren }}" data-snapshot="{{ c|tojson }}">
+        {# guillemets simples : tojson n'echappe pas le " (cf. app/static/js/app.js) #}
+        <tr class="result-row" data-siren="{{ c.siren }}" data-snapshot='{{ c|tojson }}'>
           <td class="col-name">
             <button class="row-link" data-detail="{{ c.siren }}">
               <span class="row-name">{{ c.nom }}</span>
@@ -57,6 +129,17 @@
           <td>
             <span class="cell-soft">{{ c.added_at|dt }}</span>
             <span class="row-sub">par {{ c.added_by }}</span>
+          </td>
+          <td class="col-benefice">
+            {% set encaisse = benefice.par_siren.get(c.siren) %}
+            {% if encaisse %}
+            <span class="montant-vu-fort">{{ encaisse.cents|euros }}</span>
+            {% if encaisse.dernier %}
+            <span class="row-sub">le {{ encaisse.dernier|moment }}</span>
+            {% endif %}
+            {% else %}
+            <span class="dash">&mdash;</span>
+            {% endif %}
           </td>
           <td class="col-actions">
             <div class="row-actions">

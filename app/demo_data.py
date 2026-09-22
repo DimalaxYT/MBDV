@@ -8,7 +8,7 @@ officielle est utilisee et ce jeu de donnees n'apparaît jamais.
 Les entreprises ci-dessous sont fictives mais realistes, et structurees
 exactement comme la sortie de gov_api.normalize_result().
 """
-from .gov_api import NAF_LABELS, NATURE_JURIDIQUE, EFFECTIFS, section_de
+from .gov_api import EFFECTIFS, NAF_LABELS, NATURE_JURIDIQUE, section_de
 
 
 def _e(siren, nom, forme_code, naf, date_creation, rue, cp, commune, dept, region,
@@ -159,7 +159,42 @@ DEMO_COMPANIES = [
     _e("981260743", "LE BISTROT DE L'AURILLAC", "5442", "56.10A", "2020-06-17",
        "1 rue des Salins", "15000", "Aurillac", "15", "Auvergne-Rhône-Alpes",
        "02", "00017", [_pp("Valadier", "Gilles", "Gérant", "1971")], 187600, 9900, "2024"),
+    # --- Ile-de-France hors Paris (92, 93, 94) ---
+    _e("891274536", "COIFFURE LA BOUCLE D'OR", "5443", "96.02A", "2018-03-12",
+       "25 rue de Montreuil", "94300", "Vincennes", "94", "Île-de-France",
+       "01", "00014", [_pp("Nguyen", "Linh", "Gérante", "1984")], 61400, 5200, "2023"),
+    _e("902381457", "BOULANGERIE DU MARCHÉ", "5442", "10.71C", "2016-09-05",
+       "3 place de l'Abbaye", "94000", "Créteil", "94", "Île-de-France",
+       "02", "00018", [_pp("Bourdin", "Hakim", "Gérant", "1981"),
+                       _pp("Bourdin", "Élise", "Co-gérante", "1983")], 143700, 8100, "2024"),
+    _e("913402678", "PLOMBERIE CHARRON", "1000", "43.22A", "2012-11-20",
+       "8 avenue du Général Leclerc", "94120", "Fontenay-sous-Bois", "94", "Île-de-France",
+       "01", "00016", [_pp("Charron", "Bruno", "Entrepreneur individuel", "1970")],
+       96800, 6400, "2024"),
+    _e("924576310", "GARAGE DE LA MARNE", "5442", "45.20A", "2015-05-27",
+       "41 quai des Carrières", "94220", "Charenton-le-Pont", "94", "Île-de-France",
+       "02", "00020", [_pp("Bensaid", "Farid", "Gérant", "1976")], 268400, 14300, "2023"),
+    _e("935618204", "PRESSING DU PARC", "1000", "96.01Z", "2019-07-15",
+       "12 rue de la Grande Varenne", "94130", "Nogent-sur-Marne", "94", "Île-de-France",
+       "00", "00011", [_pp("Diallo", "Aminata", "Entrepreneure individuelle", "1989")],
+       44300, 2900, "2024"),
+    _e("946702351", "RESTAURANT LE VIEUX PONT", "5710", "56.10A", "2017-02-08",
+       "67 avenue Jean Jaurès", "92100", "Boulogne-Billancourt", "92", "Île-de-France",
+       "12", "00024", [_pp("Lemoine", "Cédric", "Président", "1979")], 486200, -5200, "2024"),
+    _e("957124068", "MENUISERIE DES HAUTS-DE-SEINE", "5442", "43.32B", "2013-08-19",
+       "5 rue des Longs Prés", "92000", "Nanterre", "92", "Île-de-France",
+       "03", "00022", [_pp("Ouedraogo", "Ismaël", "Gérant", "1974")], 173500, 9800, "2023"),
+    _e("968245713", "COIFFURE TÊTE-À-TÊTE", "5499", "96.02A", "2021-01-11",
+       "44 rue de Paris", "93100", "Montreuil", "93", "Île-de-France",
+       "01", "00013", [_pp("Salvador", "Manon", "Gérante", "1992")], 38700, 2100, "2024"),
+    _e("979356824", "BOULANGERIE DU CANAL", "5442", "10.71C", "2014-04-02",
+       "88 rue du Landy", "93200", "Saint-Denis", "93", "Île-de-France",
+       "02", "00019", [_pp("Traoré", "Moussa", "Gérant", "1977")], 132900, 7600, "2024"),
 ]
+
+# Departements couverts par le jeu de demonstration (affiche dans l'interface,
+# pour ne pas laisser croire a un resultat vide de la base officielle).
+DEPARTEMENTS = sorted({e["departement"] for e in DEMO_COMPANIES})
 
 
 def cherche(q="", departement="", code_postal="", section="", effectif="",
@@ -186,7 +221,9 @@ def cherche(q="", departement="", code_postal="", section="", effectif="",
                 return False
         return True
 
-    items = [e for e in DEMO_COMPANIES if correspond(e)]
+    # Copie superficielle : les vues enrichissent les fiches (etat de detection,
+    # suivi, masquage) et ne doivent pas polluer le jeu partage entre requetes.
+    items = [dict(e) for e in DEMO_COMPANIES if correspond(e)]
     total = len(items)
     per_page = 25
     debut = (max(1, page) - 1) * per_page
@@ -201,5 +238,5 @@ def cherche(q="", departement="", code_postal="", section="", effectif="",
 def par_siren(siren):
     for e in DEMO_COMPANIES:
         if e["siren"] == str(siren):
-            return e
+            return dict(e)
     return None

@@ -3,36 +3,70 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titre_page %}MBDV - Prospection{% endblock %}</title>
-  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/main.css">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block titre_page %}{{ site_name }} · Prospection{% endblock %}</title>
+  <script>
+    // Theme applique avant le premier rendu (aucun clignotement) : choix enregistre,
+    // sinon preference du systeme.
+    (function () {
+      // Sans JavaScript, aucun contenu ne doit rester invisible (.reveal).
+      document.documentElement.classList.add("js");
+      // Transition de page native disponible ? La classe evite de doubler
+      // l'animation avec le repli CSS (voir main.css).
+      try {
+        if (window.CSS && CSS.supports && CSS.supports("@view-transition { navigation: auto }")) {
+          document.documentElement.classList.add("vt");
+        }
+      } catch (e) { /* navigateur sans View Transitions : repli CSS */ }
+      try {
+        var choix = localStorage.getItem("mbdv-theme");
+        var sombre = choix ? choix === "dark"
+          : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = sombre ? "dark" : "light";
+      } catch (e) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}?v={{ asset_version }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ asset_version }}">
   <meta name="csrf" content="{{ csrf_token() }}">
+  <meta name="session-token" content="{{ session_token() }}">
 </head>
-<body class="app {% block body_class %}{% endblock %}" data-page="{{ page_id or '' }}">
+<body class="app {% block body_class %}{% endblock %}" data-page="{{ page_id or '' }}"
+      {% if p and p.demo %}data-demo="1"{% endif %}>
 <div class="shell">
 
   <aside class="sidebar">
-    <a class="brand" href="/">
-      <span class="brand-word">MBDV<span class="brand-dot">.</span></span>
-      <span class="brand-sub">Prospection</span>
+    <a class="brand" href="/accueil" title="{{ site_name }} - accueil">
+      {% include "partials/logo.html" %}
+      <span class="brand-text">
+        <span class="brand-word">{{ site_name }}<span class="brand-dot">.</span></span>
+        <span class="brand-sub">Prospection</span>
+      </span>
     </a>
 
     <nav class="nav">
-      <span class="nav-label">Pilotage</span>
-      <a href="/" class="nav-item {% if page_id == 'recherche' %}active{% endif %}">
+      <a href="/accueil" class="nav-item {% if page_id == 'accueil' %}active{% endif %}" title="Accueil">
+        {{ icon('home') }} <span>Accueil</span>
+      </a>
+      <a href="/" class="nav-item {% if page_id == 'recherche' %}active{% endif %}" title="Recherche d'entreprises">
         {{ icon('search') }} <span>Recherche</span>
       </a>
-      <a href="/portefeuille" class="nav-item {% if page_id == 'portefeuille' %}active{% endif %}">
+      <a href="/portefeuille" class="nav-item {% if page_id == 'portefeuille' %}active{% endif %}" title="Portefeuille commercial">
         {{ icon('briefcase') }} <span>Portefeuille</span>
       </a>
-      <a href="/staff" class="nav-item {% if page_id == 'staff' %}active{% endif %}">
+      <a href="/suivi" class="nav-item {% if page_id == 'suivi' %}active{% endif %}" title="Tableau de bord d'équipe : appels à passer">
+        {{ icon('phone') }} <span>Suivi d'équipe</span>
+      </a>
+      <a href="/staff" class="nav-item {% if page_id == 'staff' %}active{% endif %}" title="Panel staff">
         {{ icon('shield') }} <span>Panel staff</span>
       </a>
     </nav>
 
     <div class="sidebar-foot">
       <span class="nav-label">Compte</span>
-      <a href="/mot-de-passe" class="nav-item nav-item-sm {% if page_id == 'motdepasse' %}active{% endif %}">
+      <a href="/mot-de-passe" class="nav-item nav-item-sm {% if page_id == 'motdepasse' %}active{% endif %}" title="Mon mot de passe">
         {{ icon('key') }} <span>Mot de passe</span>
       </a>
       <form method="post" action="/deconnexion">
@@ -57,7 +91,14 @@
         <h1>{% block titre %}{% endblock %}</h1>
         <p>{% block sous_titre %}{% endblock %}</p>
       </div>
-      <div class="topbar-side">{% block topbar_side %}{% endblock %}</div>
+      <div class="topbar-side">
+        {% block topbar_side %}{% endblock %}
+        <button type="button" class="icon-btn theme-btn" data-theme-toggle
+                title="Basculer en mode sombre / clair"
+                aria-label="Basculer en mode sombre ou clair">
+          {{ icon('sun', 17, 'icon-sun') }} {{ icon('moon', 17, 'icon-moon') }}
+        </button>
+      </div>
     </header>
     <div class="content">
       {% block content %}{% endblock %}
@@ -70,6 +111,6 @@
 <div id="modal-root"></div>
 <div id="toast-root" aria-live="polite"></div>
 <script type="application/json" id="raisons-masquage">{{ raisons_masquage|tojson }}</script>
-<script src="/static/js/app.js"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_version }}"></script>
 </body>
 </html>

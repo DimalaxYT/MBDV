@@ -8,6 +8,7 @@ de resolution est un indice fort que l'entreprise n'a pas de site.
 La methode est volontairement prudente : les resultats restent des indices, et
 chaque associe peut corriger manuellement depuis la fiche entreprise.
 """
+import logging
 import re
 import socket
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -16,8 +17,10 @@ from datetime import datetime, timedelta, timezone
 from . import db
 from .gov_api import slug_ascii
 
+LOGGER = logging.getLogger(__name__)
+
 CACHE_TTL_JOURS = 30
-LOOKUP_TIMEOUT_TOTAL = 3.4   # budget global par entreprise (secondes)
+LOOKUP_TIMEOUT_TOTAL = 2.5   # budget global par entreprise (secondes)
 TLD_CHOICES = ["fr", "com", "net"]
 
 MOTS_FORME_JURIDIQUE = {
@@ -38,36 +41,38 @@ def _tokens(nom: str):
 
 
 def _variantes(nom: str, enseigne=None):
-    """Genere une liste deduplique de candidats de domaine (sans TLD)."""
+    """Genere une liste dedupliquee de candidats de domaine (sans TLD).
+
+    Ordre de priorite : denomination (collee puis avec tirets), enseigne, puis
+    denomination + enseigne. Les abreviations (premier/dernier mot, deux premiers
+    mots) ne servent que de dernier recours, sinon elles mangent le quota de cinq
+    candidats et l'enseigne ne serait jamais testee.
+    """
     variantes = []
 
-    def add(tokens):
-        keep = [t for t in tokens if t not in MOTS_FORME_JURIDIQUE]
-        if not keep:
-            keep = tokens
-        noms = []
-        join = "".join(keep).lower()
-        tiret = "-".join(keep).lower()
-        noms += [join, tiret]
-        if len(keep) >= 3:
-            noms.append("".join([keep[0], keep[-1]]).lower())
-            noms.append("-".join([keep[0], keep[-1]]).lower())
-        if len(keep) >= 2:
-            noms.append("".join(keep[:2]).lower())
-        for n in noms:
-            if 3 <= len(n) <= 30 and n not in variantes:
-                variantes.append(n)
+    def ajoute(tokens):
+        if not tokens:
+            return
+        keep = [t for t in tokens if t not in MOTS_FORME_JURIDIQUE] or tokens
+        for candidat in ("".join(keep).lower(), "-".join(keep).lower()):
+            if 3 <= len(candidat) <= 30 and candidat not in variantes:
+                variantes.append(candidat)
 
     tokens_nom = _tokens(nom)
-    if tokens_nom:
-        add(tokens_nom)
-    if enseigne:
-        tokens_ens = _tokens(enseigne)
-        base = tokens_nom[0] if tokens_nom else ""
-        if tokens_ens and "".join(tokens_ens).lower() != "".join(tokens_nom).lower():
-            add([t for t in tokens_ens if t not in MOTS_LIAISON] or tokens_ens)
-            if base:
-                add([base] + [t for t in tokens_ens if t not in MOTS_LIAISON][:2])
+    tokens_enseigne = _tokens(enseigne) if enseigne else []
+    utiles_enseigne = [t for t in tokens_enseigne if t not in MOTS_LIAISON] or tokens_enseigne
+
+    ajoute(tokens_nom)
+    ajoute(utiles_enseigne)
+    base = tokens_nom[0] if tokens_nom else ""
+    if base and utiles_enseigne:
+        ajoute([base, *utiles_enseigne[:2]])
+
+    keep = [t for t in tokens_nom if t not in MOTS_FORME_JURIDIQUE] or tokens_nom
+    if len(keep) >= 3:
+        ajoute([keep[0], keep[-1]])
+    if len(keep) >= 2:
+        ajoute(keep[:2])
     return variantes[:5]
 
 
@@ -105,7 +110,10 @@ def _verifie_domaines(nom: str, enseigne=None):
 
 def etat_effectif(company: dict) -> dict:
     """Etat d'affichage : applique l'override manuel, sinon le cache, sinon None."""
-    siren = company["siren"]
+    # Un instantane ancien ou incomplet ne doit jamais faire echouer l'affichage.
+    siren = str(company.get("siren") or "")
+    if not siren:
+        return None
     row = db.one("SELECT value FROM overrides WHERE siren = ?", (siren,))
     if row:
         return {"status": "aucun", "domain": None, "source": "manuel_sans",
@@ -152,8 +160,12 @@ def verifie(company: dict, force: bool = False) -> dict:
     return {"status": "aucun", "domain": None, "source": "dns", "checked_at": db.now_iso()}
 
 
-def verifie_lot(companies: list, budget_total: float = 8.0) -> None:
-    """Verifie en parallele un lot d'entreprises (page de resultats)."""
+def verifie_lot(companies: list, budget_total: float = 6.0) -> None:
+    """Verifie en parallele un lot d'entreprises (page de resultats).
+
+    Reste volontairement borne dans le temps : cette fonction bloque la requete
+    HTTP en cours (a terme, la detection meriterait une tache de fond).
+    """
     restantes = []
     for c in companies:
         if not etat_effectif(c):
@@ -164,7 +176,6 @@ def verifie_lot(companies: list, budget_total: float = 8.0) -> None:
     futures = {c["siren"]: _pool.submit(_verifie_domaines, c.get("nom") or "",
                                         c.get("enseigne"))
                for c in restantes}
-    limite = {c["siren"] for c in restantes}
     t0 = datetime.now(timezone.utc)
     for siren, future in futures.items():
         reste = budget_total - (datetime.now(timezone.utc) - t0).total_seconds()
@@ -172,8 +183,10 @@ def verifie_lot(companies: list, budget_total: float = 8.0) -> None:
             res = future.result(timeout=max(0.05, reste))
         except TimeoutError:
             future.cancel()
+            LOGGER.info("Detection DNS non terminee dans le budget pour %s", siren)
             continue
         except Exception:
+            LOGGER.exception("Detection DNS en echec pour %s", siren)
             continue
         if res == "TIMEOUT":
             continue
@@ -181,4 +194,3 @@ def verifie_lot(companies: list, budget_total: float = 8.0) -> None:
             _sauve_cache(siren, "site", res, "dns")
         else:
             _sauve_cache(siren, "aucun", None, "dns")
-    _ = limite

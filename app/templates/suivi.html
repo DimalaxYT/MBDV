@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block titre_page %}Appels à passer - {{ site_name }} Prospection{% endblock %}
+{% block titre %}Appels à passer{% endblock %}
+{% block sous_titre %}{{ sous_titre }}{% endblock %}
+
+{% block content %}
+
+{# Repertoire : une ligne par entreprise en attente d'appel. Le nom ouvre le
+   dossier complet (adresse, dirigeant, site web, carte) ; tout le reste se fait
+   sur la ligne, sans changer de page. #}
+
+<section class="panel">
+  <header class="repertoire-tete">
+    <div>
+      <h2 class="panel-title">{{ icon('phone', 17) }} En attente d'appel ({{ appels|length }})</h2>
+      <p class="panel-lede">
+        Du plus urgent au moins urgent. Une entreprise n'a qu'<strong>un référent à la
+        fois</strong> : cliquez sur « Je m'en occupe » pour la prendre, sur le nom pour
+        ouvrir le dossier complet.
+      </p>
+    </div>
+    <p class="repertoire-compteurs">
+      <button class="btn btn-ink btn-sm" data-ajouter>{{ icon('plus', 13) }} Ajouter une entreprise</button>
+      {% if compteurs.en_retard %}<span class="compteur is-alerte">{{ compteurs.en_retard }} en retard</span>{% endif %}
+      {% if compteurs.aujourd_hui %}<span class="compteur">{{ compteurs.aujourd_hui }} aujourd'hui</span>{% endif %}
+      <span class="compteur">{{ compteurs.reste }} à venir</span>
+      {% if compteurs.personne %}<span class="compteur">{{ compteurs.personne }} sans référent</span>{% endif %}
+    </p>
+  </header>
+
+  {% if appels %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th class="col-name">Entreprise</th>
+          <th>Activité</th>
+          <th>Site web</th>
+          <th>Référent</th>
+          <th>Dernier appel</th>
+          <th>À rappeler</th>
+          <th class="col-livrables">Livrables</th>
+          <th class="col-actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in appels %}
+        {# guillemets simples : tojson n'echappe pas le " (cf. app/static/js/app.js) #}
+        <tr class="result-row" data-siren="{{ c.siren }}" data-snapshot='{{ c|tojson }}'>
+          <td class="col-name">
+            <button class="row-link" data-detail="{{ c.siren }}"
+                    title="Ouvrir le dossier complet de cette entreprise">
+              <span class="row-name">{{ c.nom }}</span>
+              <span class="row-sub">
+                <code class="mono">{{ c.siren }}</code>
+                {% if c.commune %} &middot; {{ c.commune }}{% if c.code_postal %} ({{ c.code_postal }}){% endif %}{% endif %}
+              </span>
+            </button>
+          </td>
+          <td>
+            <span class="cell-strong">{{ c.naf_label or c.naf_code or '-' }}</span>
+            {% if c.effectif %}<span class="row-sub">{{ c.effectif }}</span>{% endif %}
+          </td>
+          <td class="col-site">{% include "partials/badge_site.html" %}</td>
+          <td data-referent>{% include "partials/suivi_referent.html" %}</td>
+          <td>
+            <span class="cell-soft" data-dernier>{{ c.dernier_appel }}</span>
+            <span class="row-sub" data-appels>{{ c.appels_label }}</span>
+          </td>
+          <td><span class="badge u-{{ c.urgence }}" data-relance>{{ c.urgence_label }}</span></td>
+          <td class="col-livrables" data-livrables-cellule>
+            {% include "partials/livrables.html" %}
+          </td>
+          <td class="col-actions">
+            <button class="btn btn-ink btn-sm" data-appel="{{ c.siren }}">
+              {{ icon('phone', 13) }} Appel passé
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="repertoire-pied">
+    Charge de l'équipe :
+    {% for m in equipe %}<span class="repertoire-charge">{{ m.nom }}
+      <strong>{{ m.prises }}</strong> entreprise(s), <strong>{{ m.appels_7j }}</strong> appel(s)
+      sur 7 jours{% if m.en_retard %} · <span class="text-danger">{{ m.en_retard }} en retard</span>{% endif %}
+    </span>{% endfor %}
+  </p>
+  {% else %}
+  <div class="empty">
+    <p class="empty-title">Le répertoire est vide</p>
+    <p class="empty-desc">Ajoutez une entreprise par son nom ou son SIREN : sa fiche est
+    reprise de la base officielle (adresse, activité, dirigeant), puis vous pourrez y
+    ranger le dossier du site, l'archive .zip et l'URL de la vitrine.</p>
+    <button class="btn btn-ink" data-ajouter>{{ icon('plus', 14) }} Ajouter une entreprise</button>
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}

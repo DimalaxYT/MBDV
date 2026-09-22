@@ -1,54 +1,199 @@
 """Authentification : sessions, CSRF, limitation des tentatives, filtres de rendu."""
+import secrets
 import time
 from datetime import datetime, timezone
 from functools import wraps
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from flask import (
-    abort, current_app, redirect, request, session, url_for,
+    abort,
+    current_app,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
 )
-from markupsafe import Markup, escape
-
-from . import db
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 PARIS_TZ = ZoneInfo("Europe/Paris")
 
-# 12 tentatives par identifiant toutes les 5 minutes
+# Mode apercu embarque (MBDV_EMBEDDED_SESSION=1) : les navigateurs refusent les
+# cookies de session dans une iframe tierce, donc la session voyage dans l'URL
+# sous forme de jeton signe (parametre _s). A n'activer que pour un apercu.
+_JETON_SEL = "mbdv-session"
+_CSRF_SEL = "mbdv-csrf"
+# Duree du jeton d'URL (mode apercu) : elle suit la case "rester connecte" du
+# formulaire de connexion, faute de pouvoir poser un cookie de session ici.
+JETON_DUREE_LONGUE = 60 * 60 * 24 * 30  # "rester connecte" coche : 30 jours
+JETON_DUREE_COURTE = 60 * 60 * 12       # decoche : le temps d'une journee de travail
+JETON_DUREE = JETON_DUREE_LONGUE        # duree maximale acceptee a la lecture
+CSRF_DUREE = 60 * 60 * 12               # validite d'un jeton CSRF signe
+_META_JETON = 'meta name="session-token"'
+
+# 12 tentatives par identifiant et 40 tentatives par adresse IP, toutes les 5 minutes.
+# Les compteurs sont en memoire : ils sont remis a zero au redemarrage du service.
 _RATE = {}
-_RATE_LIMIT = 12
+_RATE_LIMIT_USER = 12
+_RATE_LIMIT_IP = 40
 _RATE_WINDOW = 300
+_RATE_MAX_KEYS = 5000
+
+
+def embarque() -> bool:
+    """Vrai si l'application tourne en mode apercu embarque (session dans l'URL)."""
+    return bool(current_app.config.get("EMBEDDED_SESSION"))
+
+
+def _serialiseur(salt: str) -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=salt)
+
+
+def duree_jeton() -> int:
+    """Duree de validite du jeton d'URL, selon le choix fait a la connexion."""
+    return JETON_DUREE_LONGUE if session.get("rester_connecte") else JETON_DUREE_COURTE
+
+
+def jeton_session() -> str:
+    """Jeton signe transportant la session dans l'URL (mode apercu).
+
+    Retourne une chaine vide hors mode apercu, ou si la session n'est pas ouverte.
+    """
+    if not embarque():
+        return ""
+    # "rester_connecte" doit voyager avec la session : sans lui, les pages
+    # suivantes resigneraient un jeton court et l'utilisateur serait deconnecte
+    # au bout de 12 h malgre sa case cochee.
+    charge = {cle: session[cle] for cle in
+              ("uid", "username", "display_name", "csrf", "rester_connecte", "role")
+              if cle in session}
+    if not charge:
+        # Deja porteur d'un jeton (page anonyme ayant transite par l'URL).
+        return str(request.values.get("_s") or "")
+    # itsdangerous n'accepte de duree qu'a la lecture : l'echeance voyage donc
+    # dans la charge utile, et c'est elle qui distingue "rester connecte" du
+    # simple maintien de session.
+    charge["exp"] = int(time.time()) + duree_jeton()
+    return _serialiseur(_JETON_SEL).dumps(charge)
+
+
+def url_avec_jeton(url: str) -> str:
+    """Ajoute le jeton de session a une URL interne (mode apercu uniquement)."""
+    jeton = jeton_session()
+    if not jeton:
+        return url
+    separateur = "&" if "?" in url else "?"
+    return f"{url}{separateur}{urlencode({'_s': jeton})}"
+
+
+def _charge_session() -> None:
+    """Hydrate la session depuis le jeton d'URL quand aucun cookie n'est disponible."""
+    if not embarque() or "uid" in session:
+        return
+    jeton = request.values.get("_s")
+    if not jeton:
+        return
+    try:
+        donnees = _serialiseur(_JETON_SEL).loads(jeton, max_age=JETON_DUREE)
+    except (BadSignature, SignatureExpired):
+        return
+    if not isinstance(donnees, dict):
+        return
+    echeance = donnees.pop("exp", None)
+    if echeance is not None and float(echeance) < time.time():
+        # Jeton emis sans "rester connecte" et arrive a echeance.
+        return
+    session.update(donnees)
+
+
+def _csrf_signe_valide(sent: str) -> bool:
+    """Verifie un jeton CSRF signe (mode apercu), sans etat cote serveur."""
+    try:
+        donnees = _serialiseur(_CSRF_SEL).loads(sent, max_age=CSRF_DUREE)
+    except (BadSignature, SignatureExpired, TypeError):
+        return False
+    if not isinstance(donnees, dict):
+        return False
+    attendu = session.get("csrf", "")
+    envoye = str(donnees.get("csrf") or "")
+    if attendu:
+        return secrets.compare_digest(envoye, str(attendu))
+    return True   # page anonyme : la signature suffit
 
 
 def _client_ip() -> str:
-    return (request.headers.get("X-Forwarded-For", "").split(",")[0]
-            or request.remote_addr or "?").strip()
+    """Adresse reellement vue par le serveur.
+
+    On ne lit jamais X-Forwarded-For directement : cet en-tete est fourni par le
+    client et suffirait a contourner la limitation. Quand l'application est
+    derriere un proxy de confiance, c'est ProxyFix (voir MBDV_TRUST_PROXY) qui
+    reecrit request.remote_addr.
+    """
+    return request.remote_addr or "?"
+
+
+def _compteur(cle: str, maintenant: float) -> tuple[int, float]:
+    """Compteur de la fenetre courante ; remis a zero si la fenetre est passee."""
+    count, first = _RATE.get(cle, (0, maintenant))
+    if maintenant - first > _RATE_WINDOW:
+        return 0, maintenant
+    return count, first
 
 
 def login_attempts_exhausted(username: str) -> bool:
-    key = f"{_client_ip()}:{username}"
-    count, first = _RATE.get(key, (0, time.time()))
-    if time.time() - first > _RATE_WINDOW:
-        _RATE.pop(key, None)
-        return False
-    return count >= _RATE_LIMIT
+    maintenant = time.time()
+    ip = _client_ip()
+    par_identifiant, _ = _compteur(f"u:{ip}:{username}", maintenant)
+    par_ip, _ = _compteur(f"ip:{ip}", maintenant)
+    return par_identifiant >= _RATE_LIMIT_USER or par_ip >= _RATE_LIMIT_IP
 
 
 def register_failed_attempt(username: str) -> None:
-    key = f"{_client_ip()}:{username}"
-    count, first = _RATE.get(key, (0, time.time()))
-    if time.time() - first > _RATE_WINDOW:
-        _RATE.clear()
-        count, first = 0, time.time()
-    _RATE[key] = (count + 1, first)
+    maintenant = time.time()
+    ip = _client_ip()
+    for cle, plafond in (
+        (f"u:{ip}:{username}", _RATE_LIMIT_USER),
+        (f"ip:{ip}", _RATE_LIMIT_IP),
+    ):
+        count, first = _compteur(cle, maintenant)
+        _RATE[cle] = (min(count + 1, plafond), first)
+    if len(_RATE) > _RATE_MAX_KEYS:
+        # Garde-fou memoire : on ne purge que les fenetres expirees, jamais tout.
+        for cle in [k for k, (_, first) in _RATE.items()
+                    if maintenant - first > _RATE_WINDOW]:
+            _RATE.pop(cle, None)
 
 
-def login(user_row) -> None:
+def login(user_row, rester_connecte: bool = True) -> None:
+    """Ouvre la session (cookie, et jeton d'URL en mode apercu).
+
+    `rester_connecte` vient de la case du formulaire de connexion : cochee, la
+    session survit a la fermeture du navigateur (cookie persistant de 30 jours,
+    jeton d'URL de 30 jours) ; decochee, elle s'arrete a la fermeture du
+    navigateur (cookie de session, jeton d'URL de 12 heures).
+    """
     session.clear()
     session["uid"] = user_row["id"]
     session["username"] = user_row["username"]
     session["display_name"] = user_row["display_name"]
-    session["csrf"] = session.get("csrf") or session.get("_csrf_token") or None
-    session.permanent = True
+    session["csrf"] = secrets.token_hex(16)
+    session["rester_connecte"] = bool(rester_connecte)
+    session["role"] = role_de(user_row)
+    session.permanent = bool(rester_connecte)
+
+
+def role_de(user_row) -> str:
+    """Role du compte : 'admin' (dirigeant) ou 'associe'."""
+    try:
+        return str(user_row["role"] or "associe")
+    except (KeyError, IndexError, TypeError):
+        return "associe"
+
+
+def est_admin() -> bool:
+    return session.get("role") == "admin"
 
 
 def logout() -> None:
@@ -62,14 +207,17 @@ def current_user():
         "id": session["uid"],
         "username": session["username"],
         "display_name": session.get("display_name") or session["username"],
+        "role": session.get("role") or "associe",
     }
 
 
 def csrf_token() -> str:
+    if embarque():
+        # Sans cookie, le jeton doit etre verifiable sans etat : il est signe.
+        return _serialiseur(_CSRF_SEL).dumps({"csrf": session.get("csrf") or ""})
     token = session.get("csrf")
     if not token:
-        import secrets as _secrets
-        token = session["csrf"] = _secrets.token_hex(16)
+        token = session["csrf"] = secrets.token_hex(16)
     return token
 
 
@@ -79,21 +227,96 @@ def login_required(view):
         if current_user() is None:
             if request.path.startswith("/api/") or request.path.startswith("/entreprise/"):
                 abort(401)
-            return redirect(url_for("views.connexion", next=request.path))
+            # La racine n'a pas besoin de "next" : apres connexion on veut la page
+            # d'accueil (explication de l'outil), pas la recherche directement.
+            suite = "" if request.path == "/" else request.path
+            return redirect(url_for("views.connexion", next=suite or None))
         return view(*args, **kwargs)
     return wrapped
 
 
+def admin_required(view):
+    """Reserve une vue au dirigeant (role 'admin')."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if current_user() is None:
+            return redirect(url_for("views.connexion", next=request.path or None))
+        if not est_admin():
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapped
+
+
+_PAGES_SANS_CONNEXION_AUTO = ("/connexion", "/deconnexion", "/static/")
+
+
+def _apercu_deja_connecte() -> None:
+    """Apercu embarque : ouvre la session du dirigeant sans passer par le formulaire.
+
+    Uniquement avec MBDV_DEJA_CONNECTE=1 *et* en mode apercu (session dans l'URL) :
+    c'est le reglage du bac a sable, jamais celui d'un vrai deploiement. La page de
+    connexion reste servie normalement, donc l'ecran d'entree reste consultable.
+    """
+    if not current_app.config.get("DEJA_CONNECTE") or not embarque():
+        return None
+    if current_user() is not None or request.method != "GET":
+        return None
+    chemin = request.path or "/"
+    if chemin.startswith("/api/") or chemin.startswith(_PAGES_SANS_CONNEXION_AUTO):
+        return None
+    from . import db
+    compte = db.one("SELECT * FROM users"
+                    " ORDER BY CASE WHEN role = 'admin' THEN 0 ELSE 1 END, id LIMIT 1")
+    if compte is None:
+        return None
+    login(compte, rester_connecte=True)
+    current_app.logger.warning(
+        "Apercu : session ouverte sans mot de passe pour %s (MBDV_DEJA_CONNECTE=1)",
+        compte["username"])
+    if chemin == "/":
+        # Meme atterrissage qu'une connexion reussie : l'accueil, pas la recherche.
+        return redirect(url_avec_jeton(url_for("views.accueil")))
+    return None
+
+
 def init_app(app) -> None:
+    app.before_request(_charge_session)
+    app.before_request(_apercu_deja_connecte)
+
     @app.before_request
     def _csrf_guard():
-        if request.method != "POST":
+        if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
             return None
         sent = request.headers.get("X-CSRF-Token") or request.form.get("_csrf", "")
         good = session.get("csrf", "")
-        import secrets as _secrets
-        if not good or not sent or not _secrets.compare_digest(sent, good):
-            abort(400, "Session expiree ou requete non autorisee. Rechargez la page.")
+        if embarque():
+            if sent and _csrf_signe_valide(sent):
+                return None
+        elif good and sent and secrets.compare_digest(sent, good):
+            return None
+        # Diagnostic : c'est ici qu'on voit un apercu heberge qui perd son cookie.
+        app.logger.warning(
+            "Ecriture refusee (CSRF) sur %s — mode apercu : %s, cookie de session "
+            "envoye : %s, session chargee : %s, jeton envoye : %s, contexte : dest=%r "
+            "site=%r origine=%r referent=%r",
+            request.path, embarque(), bool(request.cookies.get("session")), bool(good), bool(sent),
+            request.headers.get("Sec-Fetch-Dest"), request.headers.get("Sec-Fetch-Site"),
+            request.headers.get("Origin"), request.headers.get("Referer"),
+        )
+        if request.path.startswith("/api/") or request.path.startswith("/entreprise/"):
+            return jsonify({"ok": False,
+                            "error": "Session expirée. Rechargez la page."}), 400
+        if request.path == "/connexion":
+            # Formulaire perime (page ouverte avant un redemarrage) ou cookie de
+            # session non conserve par le navigateur : on reaffiche le formulaire
+            # avec un jeton neuf plutot qu'une page "Bad Request" sans issue.
+            message = "Session expirée, merci de saisir vos identifiants à nouveau."
+            if not good:
+                message = ("Votre navigateur n'a pas conservé le cookie de session. "
+                           "Si la page est affichée dans un cadre, ouvrez-la dans un "
+                           "onglet dédié puis reconnectez-vous.")
+            return render_template("login.html", erreur=message), 400
+        abort(400, "Session expiree ou requete non autorisee. Rechargez la page.")
         return None
 
     @app.context_processor
@@ -101,6 +324,7 @@ def init_app(app) -> None:
         return {
             "current_user": current_user(),
             "csrf_token": csrf_token,
+            "session_token": jeton_session,
         }
 
     _register_filters(app)
@@ -138,11 +362,36 @@ def _fmt_eur(value) -> str:
     return f"{'-' if neg else ''}{s} \u20ac"
 
 
+def _fmt_moment(value) -> str:
+    """'2026-09-12T14:30' -> '12/09/2026 à 14:30' ; '2026-09-12' -> '12/09/2026'."""
+    if not value:
+        return "-"
+    texte = str(value)
+    jour = texte[:10]
+    try:
+        dt = datetime.strptime(jour, "%Y-%m-%d")
+    except ValueError:
+        return texte
+    rendu = dt.strftime("%d/%m/%Y")
+    if len(texte) >= 16 and texte[10] == "T":
+        return f"{rendu} à {texte[11:16]}"
+    return rendu
+
+
+def _fmt_centimes(value) -> str:
+    """1 250 000 centimes -> '12 500 €' (arrondi a l'euro, espace fine insecable)."""
+    try:
+        centimes = int(value)
+    except (TypeError, ValueError):
+        return "-"
+    signe = "-" if centimes < 0 else ""
+    euros = (abs(centimes) + 50) // 100
+    return f"{signe}{euros:,}".replace(",", "\u202f") + " \u20ac"
+
+
 def _register_filters(app) -> None:
     app.add_template_filter(_fmt_dt, "dt")
     app.add_template_filter(_fmt_date, "frdate")
     app.add_template_filter(_fmt_eur, "eur")
-
-    @app.template_filter("mono")
-    def _mono(value: str) -> Markup:
-        return Markup(f'<code class="mono">{escape(value or "")}</code>')
+    app.add_template_filter(_fmt_centimes, "euros")
+    app.add_template_filter(_fmt_moment, "moment")

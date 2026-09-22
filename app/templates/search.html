@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block titre_page %}Recherche - MBDV Prospection{% endblock %}
+{% block titre_page %}Recherche - {{ site_name }} Prospection{% endblock %}
 {% block titre %}Recherche d'entreprises{% endblock %}
 {% block sous_titre %}{{ sous_titre }}{% endblock %}
 
 {% block content %}
 
-<form class="panel search-panel" method="get" action="/">
+<form class="panel search-panel" method="get" action="/" data-chargement>
   <div class="search-row">
     <div class="field field-grow">
       <label for="f-q">Dénomination, activité ou SIREN</label>
@@ -115,7 +115,14 @@
 
 {% if erreur %}
 <div class="banner banner-error">
-  {{ icon('alert', 15) }} <span>{{ erreur }}</span>
+  {{ icon('alert', 15) }}
+  <span>{{ erreur }}
+    {% if demo_disponible and not p.demo %}
+    <br>Aucune donnée n'est inventée : vous pouvez afficher un
+    <a class="text-link" href="/?{{ demo_liens }}">jeu de démonstration</a>
+    ({{ nb_demo }} entreprises fictives) pour tester l'interface.
+    {% endif %}
+  </span>
 </div>
 {% endif %}
 
@@ -123,9 +130,12 @@
   {% if resultats.demo %}
   <div class="banner banner-info">
     {{ icon('info', 15) }}
-    <span>Base officielle injoignable depuis cet environnement (reseau filtre).
-    Les résultats ci-dessous sont des <strong>données de démonstration</strong> ;
-    déployé sur votre machine, l'outil interroge la base INSEE / RNE en direct.</span>
+    <span>Base officielle injoignable depuis cet environnement (réseau filtré) :
+    <strong>ces résultats ne sont pas réels</strong>. Jeu de démonstration affiché à
+    votre demande —
+    {{ nb_demo }} entreprises fictives, dans {{ departements_demo|length }} départements
+    seulement ({{ departements_demo[:6]|join(', ') }}…). Déployé sur votre machine,
+    l'outil interroge la base INSEE / RNE en direct.</span>
   </div>
   {% endif %}
 
@@ -167,7 +177,7 @@
         <tbody>
           {% for c in resultats['items'] %}
           <tr class="result-row {% if c.masquee %}is-hidden-row{% endif %}" data-siren="{{ c.siren }}"
-              data-snapshot="{{ c|tojson }}">
+              data-snapshot='{{ c|tojson }}'>
             <td class="col-name">
               <button class="row-link" data-detail="{{ c.siren }}">
                 <span class="row-name">{{ c.nom }}</span>
@@ -232,12 +242,28 @@
     </footer>
     {% else %}
     <div class="empty">
+      {% if resultats.demo %}
+      <p class="empty-title">Aucune entreprise fictive dans cette zone</p>
+      <p class="empty-desc">
+        Cet aperçu n'a pas accès à la base officielle : la recherche porte sur un
+        <strong>jeu de démonstration de {{ nb_demo }} entreprises fictives</strong>, limité
+        à {{ departements_demo|length }} départements ({{ departements_demo|join(', ') }}).
+        {% if p.departement %}Aucune n'est située dans le département {{ p.departement }}.{% endif %}
+        Sur une machine ou un serveur avec un accès réseau normal, l'outil interroge la base
+        INSEE / RNE et cette recherche renverrait des résultats réels.
+      </p>
+      <div class="start-chips">
+        {% for dep in departements_demo %}
+        <a class="chip" href="/?{{ qs_base }}{% if qs_base %}&amp;{% endif %}departement={{ dep }}">Département {{ dep }} {{ icon('arrow-right', 13) }}</a>
+        {% endfor %}
+      </div>
+      {% else %}
       <p class="empty-title">Aucune entreprise ne correspond</p>
       <p class="empty-desc">Élargissez la zone géographique, retirez des filtres de taille,
       ou interrogez directement un SIREN pour retrouver une entreprise précise.</p>
+      {% endif %}
     </div>
-    {% endif %}
-  </section>
+    {% endif %}  </section>
 
 {% elif recherche_lancee and not resultats %}
   <div class="banner banner-error">{{ icon('alert', 15) }} <span>{{ erreur or 'La recherche a echoue.' }}</span></div>

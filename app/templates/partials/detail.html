@@ -1,4 +1,5 @@
-<article class="slideover" data-siren="{{ c.siren }}" data-snapshot="{{ c|tojson }}">
+{# guillemets simples obligatoires : tojson n'echappe pas le " et casserait l'attribut #}
+<article class="slideover" data-siren="{{ c.siren }}" data-snapshot='{{ c|tojson }}'>
   <header class="slideover-head">
     <div>
       <p class="slideover-eyebrow">Fiche entreprise</p>

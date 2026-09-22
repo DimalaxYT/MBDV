@@ -16,6 +16,11 @@ _ICONS = {
     "logout": ('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>'
                '<path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>'),
     "x": '<path d="M18 6L6 18"/><path d="M6 6l12 12"/>',
+    # Suivi d'equipe : appels a passer et prise en charge.
+    "phone": ('<path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 6.5 6.5L17 13l4 1.5v3'
+              'a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 3 5.2 2 2 0 0 1 5 3z"/>'),
+    "edit": ('<path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16z"/>'
+             '<path d="M13.5 6.5l4 4"/>'),
     "pin": ('<path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>'
             '<circle cx="12" cy="10" r="3"/>'),
     "building": ('<rect x="4" y="3" width="16" height="18" rx="1"/>'
@@ -62,6 +67,17 @@ _ICONS = {
                 '<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/>'),
     "layers": ('<path d="M12 2L2 7l10 5 10-5-10-5z"/>'
                '<path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>'),
+    "home": ('<path d="M3.5 10.5L12 3.5l8.5 7"/>'
+             '<path d="M5.5 9.8V20h13V9.8"/><path d="M9.8 20v-5.4h4.4V20"/>'),
+    "sun": ('<circle cx="12" cy="12" r="4.2"/>'
+            '<path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2'
+            'M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>'),
+    "moon": '<path d="M20 14.4A8.4 8.4 0 0 1 9.6 4a8.6 8.6 0 1 0 10.4 10.4z"/>',
+    "trend-up": ('<path d="M3 17l6-6 4 4 8-8"/>'
+                 '<path d="M21 11V7h-4"/>'),
+    "plus": '<path d="M12 5v14"/><path d="M5 12h14"/>',
+    "wallet": ('<rect x="2.5" y="6" width="19" height="13" rx="2"/>'
+               '<path d="M2.5 11h19"/><path d="M16.5 15h2"/>'),
 }
 
 
@@ -70,7 +86,8 @@ def icon(name: str, size: int = 16, cls: str = "") -> Markup:
     if body is None:
         return Markup("")
     classes = f"icon{(' ' + cls) if cls else ''}"
-    return Markup(
+    # Balises issues du dictionnaire _ICONS ci-dessus, jamais de donnee externe.
+    return Markup(  # noqa: S704
         f'<svg class="{classes}" width="{size}" height="{size}" viewBox="0 0 24 24"'
         f' fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"'
         f' stroke-linejoin="round" aria-hidden="true">{body}</svg>'

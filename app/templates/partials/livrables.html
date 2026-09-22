@@ -1,0 +1,23 @@
+{# Cellule « Livrables » : ce qui a ete produit pour cette entreprise.
+   Rendu a l'affichage de la page ET apres une action (innerHTML), donc
+   autonome : tout ce qu'il faut est dans `c` (livrables de l'entreprise). #}
+<div class="livrables" data-livrables-cellule>
+  {% if c.url_vitrine %}
+  <a class="chip chip-vitrine" href="{{ c.url_vitrine }}" target="_blank" rel="noopener"
+     title="{{ c.url_vitrine }}">{{ icon('globe', 11) }} {{ c.vitrine_hote }}</a>
+  {% endif %}
+  {% if c.dossier_site %}
+  <span class="chip" title="{{ c.dossier_site }}">{{ icon('layers', 11) }} Dossier</span>
+  {% endif %}
+  {% if c.zip_href %}
+  <a class="chip" href="{{ c.zip_href }}" {% if c.zip_lien %}target="_blank" rel="noopener"{% endif %}
+     title="{{ c.zip_label }}">{{ icon('download', 11) }} {{ c.zip_label|truncate(20, true) }}</a>
+  {% endif %}
+  {% if not c.a_quelque_chose %}<span class="dash">&mdash;</span>{% endif %}
+  <button class="icon-btn icon-btn-sm" data-livrables="{{ c.siren }}"
+          data-vitrine="{{ c.url_vitrine }}" data-dossier="{{ c.dossier_site }}"
+          data-ziplien="{{ c.zip_lien }}"
+          title="{% if c.a_quelque_chose %}Modifier les livrables{% else %}Ajouter les livrables (dossier du site, .zip, URL de vitrine){% endif %}">
+    {{ icon('edit', 13) }}
+  </button>
+</div>

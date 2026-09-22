@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block titre_page %}Panel staff - MBDV Prospection{% endblock %}
+{% block titre_page %}Panel staff - {{ site_name }} Prospection{% endblock %}
 {% block titre %}Panel staff{% endblock %}
 {% block sous_titre %}{{ sous_titre }}{% endblock %}
 
@@ -98,4 +98,269 @@
   </div>
   {% endif %}
 </section>
+
+{% if portefeuille is not none %}
+<section class="panel staff-portefeuille">
+  <h2 class="panel-title">{{ icon('briefcase', 17) }} Portefeuille de l'équipe</h2>
+  <p class="panel-lede">
+    Ajoutez une entreprise au portefeuille en saisissant son SIREN (9 chiffres), ou
+    retirez-en une d'un clic. Les encaissements se saisissent dans la section
+    <strong>Bénéfice</strong> ci-dessous (code SIRET facultatif) et le portefeuille en
+    affiche le total. Total encaissé : <strong>{{ benefice.total_cents|euros }}</strong>.
+    {% if demo %}<br><strong>Mode démonstration :</strong> les fiches ajoutées depuis le
+    jeu fictif ne sont pas des entreprises réelles
+    (<a href="/staff?etat={{ etat }}&amp;demo=1">recharger avec la démonstration</a>).{% endif %}
+  </p>
+
+  {% if pf_ok %}
+  <div class="banner banner-ok">
+    {{ icon('check', 15) }} <span>
+      {% if pf_ok == 'ajoute' %}Entreprise ajoutée au portefeuille.
+      {% else %}Entreprise retirée du portefeuille.{% endif %}
+    </span>
+  </div>
+  {% endif %}
+  {% if pf_erreur %}
+  <div class="banner banner-error">
+    {{ icon('alert', 15) }} <span>
+      {% if pf_erreur == 'deja' %}Cette entreprise est déjà dans le portefeuille.
+      {% elif pf_erreur == 'absent' %}Cette entreprise n'est pas (ou plus) dans le portefeuille.
+      {% elif pf_erreur == 'introuvable' %}Entreprise introuvable : vérifiez le SIREN, ou
+        ouvrez la recherche pendant que la base officielle est joignable.
+      {% else %}SIREN invalide : 9 chiffres attendus.{% endif %}
+    </span>
+  </div>
+  {% endif %}
+
+  <form class="pf-form" method="post" action="/staff/portefeuille" data-chargement>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="ajouter">
+    <input type="hidden" name="etat" value="{{ etat }}">
+    {% if demo %}<input type="hidden" name="demo" value="1">{% endif %}
+    {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+    <div class="field">
+      <label for="pf-siren">SIREN à ajouter</label>
+      <input id="pf-siren" type="text" name="siren" inputmode="numeric" pattern="\d{9}"
+             maxlength="9" placeholder="123456789" spellcheck="false" required>
+    </div>
+    <button type="submit" class="btn btn-ink">{{ icon('plus', 14) }} Ajouter au portefeuille</button>
+  </form>
+
+  {% if portefeuille %}
+  <div class="pf-liste">
+    {% for c in portefeuille %}
+    <div class="pf-ligne">
+      <span class="pf-nom">
+        <strong>{{ c.nom }}</strong>
+        <span><code class="mono">{{ c.siren }}</code>
+          {% if c.commune %} &middot; {{ c.commune }}{% endif %}
+          &middot; {{ statut_label.get(c.statut, c.statut) }}
+          &middot; ajoutée par {{ c.ajoute_par }}</span>
+      </span>
+      {# Montant lu sur les encaissements (table benefices), jamais sur tracked. #}
+      {% set encaisse = benefice.par_siren.get(c.siren) %}
+      <span class="pf-montant">{% if encaisse %}{{ encaisse.cents|euros }}
+        <span class="row-sub">le {{ encaisse.dernier|moment }}</span>{% endif %}
+      </span>
+      <form method="post" action="/staff/portefeuille">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="retirer">
+        <input type="hidden" name="siren" value="{{ c.siren }}">
+        <input type="hidden" name="etat" value="{{ etat }}">
+        {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+        <button type="submit" class="btn btn-danger-ghost btn-sm"
+                title="Retirer {{ c.nom }} du portefeuille">
+          {{ icon('trash', 14) }} Retirer
+        </button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="benefice-vide">Le portefeuille est vide : ajoutez une première entreprise
+  avec son SIREN ci-dessus, ou depuis les résultats de recherche.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if benefice %}
+<section class="panel staff-benefice">
+  <h2 class="panel-title">{{ icon('trend-up', 17) }} Bénéfice</h2>
+  <p class="panel-lede">
+    Enregistrez ce que les clients ont payé : montant, date et heure. Le
+    <strong>code SIRET est facultatif</strong> — renseigné, il rattache
+    l'encaissement à l'entreprise suivie (14 chiffres, ou 9 pour un SIREN).
+    Le portefeuille affiche ces montants et leur graphique.
+  </p>
+
+  {% if pf_ok == 'montant' %}
+  <div class="banner banner-ok">
+    {{ icon('check', 15) }} <span>Encaissement enregistré.</span>
+  </div>
+  {% elif pf_ok == 'supprime' %}
+  <div class="banner banner-ok">
+    {{ icon('check', 15) }} <span>Encaissement supprimé.</span>
+  </div>
+  {% endif %}
+  {% if pf_erreur %}
+  <div class="banner banner-error">
+    {{ icon('alert', 15) }} <span>
+      {% if pf_erreur == 'siret' %}Code SIRET invalide : 14 chiffres (ou 9 pour un SIREN),
+        ou laissez le champ vide.
+      {% elif pf_erreur == 'montant' %}Montant invalide : indiquez un montant positif
+        (exemple : 4500 ou 4500,50).
+      {% elif pf_erreur == 'date' %}Date invalide : choisissez une date (l'heure est
+        facultative, 12:00 par défaut).
+      {% elif pf_erreur == 'absent' %}Cet encaissement n'existe plus.
+      {% else %}Enregistrement impossible : vérifiez les champs.{% endif %}
+    </span>
+  </div>
+  {% endif %}
+
+  <form class="benefice-form" method="post" action="/staff/benefice" data-chargement>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="etat" value="{{ etat }}">
+    {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+    <div class="field">
+      <label for="pf-siret">Code SIRET <span class="label-note">(facultatif)</span></label>
+      <input id="pf-siret" type="text" name="siret" inputmode="numeric" maxlength="17"
+             placeholder="12345678900012" spellcheck="false">
+    </div>
+    <div class="field field-montant">
+      <label for="pf-montant">Montant encaissé (€)</label>
+      <input id="pf-montant" type="number" name="montant" min="0.01" step="0.01"
+             placeholder="4500" required>
+    </div>
+    <div class="field">
+      <label for="pf-date">Date</label>
+      <input id="pf-date" type="date" name="signe_le" required>
+    </div>
+    <div class="field field-heure">
+      <label for="pf-heure">Heure</label>
+      <input id="pf-heure" type="time" name="heure" value="12:00">
+    </div>
+    <button type="submit" class="btn btn-ink btn-tall">
+      {{ icon('wallet', 15) }} Enregistrer
+    </button>
+  </form>
+
+  <div class="benefice-cards">
+    <div class="benefice-card">
+      <span class="benefice-card-value">{{ benefice.total_cents|euros }}</span>
+      <span class="benefice-card-label">Encaissé au total</span>
+      <span class="benefice-card-note">{{ benefice.nombre }} encaissement(s)</span>
+    </div>
+    <div class="benefice-card">
+      <span class="benefice-card-value">{{ benefice.ce_mois_cents|euros }}</span>
+      <span class="benefice-card-label">Ce mois-ci</span>
+      <span class="benefice-card-note">panier moyen : {{ benefice.panier_cents|euros }}</span>
+    </div>
+    <div class="benefice-card">
+      <span class="benefice-card-value">{{ benefice.clients }}</span>
+      <span class="benefice-card-label">Clients signés</span>
+      <span class="benefice-card-note">statut « Client » du portefeuille</span>
+    </div>
+  </div>
+
+  {% if benefice.lignes %}
+  <div class="pf-liste benefice-liste">
+    {% for ligne in benefice.lignes %}
+    <div class="pf-ligne">
+      <span class="pf-nom">
+        <strong>{{ ligne.libelle or (ligne.siret and ('SIRET ' ~ ligne.siret)) or 'Sans rattachement' }}</strong>
+        <span>
+          {% if ligne.libelle and ligne.siret %}<code class="mono">{{ ligne.siret }}</code> &middot; {% endif %}
+          {{ ligne.encaisse_le|moment }} &middot; par {{ ligne.encaisse_par }}
+        </span>
+      </span>
+      <span class="pf-montant">{{ ligne.montant_cents|euros }}</span>
+      <form method="post" action="/staff/benefice/supprimer">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="id" value="{{ ligne.id }}">
+        <input type="hidden" name="etat" value="{{ etat }}">
+        {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+        <button type="submit" class="btn btn-danger-ghost btn-sm"
+                title="Supprimer cet encaissement">{{ icon('trash', 14) }} Supprimer</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="benefice-vide">Aucun encaissement enregistré pour l'instant : le graphique
+  du portefeuille apparaîtra dès le premier montant.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if comptes %}
+<section class="panel staff-comptes">
+  <h2 class="panel-title">{{ icon('key', 17) }} Comptes des associés</h2>
+  <p class="panel-lede">
+    Vous êtes connecté en tant que <strong>dirigeant</strong> : vous pouvez modifier
+    l'identifiant, le nom affiché et le mot de passe du compte associé. Laissez le
+    mot de passe vide pour le conserver. Votre propre compte se change depuis
+    <a href="/mot-de-passe">Mon mot de passe</a>.
+  </p>
+
+  {% if compte_succes %}
+  <div class="banner banner-ok">
+    {{ icon('check', 15) }} <span>Compte mis à jour. Les nouveaux identifiants sont
+    actifs dès la prochaine connexion.</span>
+  </div>
+  {% endif %}
+  {% if compte_erreur %}
+  <div class="banner banner-error">
+    {{ icon('alert', 15) }} <span>{{ compte_erreur }}</span>
+  </div>
+  {% endif %}
+
+  <div class="comptes-grid">
+    {% for c in comptes %}
+    <form class="compte-card" method="post" action="/staff/comptes" data-chargement>
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="cible" value="{{ c.id }}">
+      <input type="hidden" name="etat" value="{{ etat }}">
+      {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+
+      <header class="compte-head">
+        <span class="avatar">{{ (c.display_name or c.username)[:1]|upper }}</span>
+        <span class="compte-identite">
+          <strong>{{ c.display_name }}</strong>
+          <em>@{{ c.username }} &middot; {{ 'Dirigeant' if c.role == 'admin' else 'Associé' }}</em>
+        </span>
+      </header>
+
+      <div class="field">
+        <label for="user-{{ c.id }}">Identifiant de connexion</label>
+        <input id="user-{{ c.id }}" type="text" name="username"
+               value="{{ valeurs.username if valeurs.cible == c.id else c.username }}"
+               required minlength="3" maxlength="32" pattern="[a-z0-9][a-z0-9._-]{2,31}"
+               spellcheck="false" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="nom-{{ c.id }}">Nom affiché</label>
+        <input id="nom-{{ c.id }}" type="text" name="display_name"
+               value="{{ valeurs.display_name if valeurs.cible == c.id else c.display_name }}"
+               maxlength="40" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="mdp-{{ c.id }}">Nouveau mot de passe</label>
+        <input id="mdp-{{ c.id }}" type="password" name="nouveau" minlength="10"
+               autocomplete="new-password" placeholder="Laisser vide pour conserver">
+      </div>
+      <div class="field">
+        <label for="mdp2-{{ c.id }}">Confirmer le mot de passe</label>
+        <input id="mdp2-{{ c.id }}" type="password" name="confirmation" minlength="10"
+               autocomplete="new-password" placeholder="Répéter le nouveau mot de passe">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-ink">Mettre à jour</button>
+      </div>
+      <p class="form-note">Minimum 10 caractères. Les mots de passe sont hachés (scrypt),
+      jamais stockés en clair.</p>
+    </form>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 {% endblock %}
