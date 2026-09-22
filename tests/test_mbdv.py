@@ -694,6 +694,37 @@ def test_barre_reduite_sans_debordement(client):
     assert ".main { margin-left: 68px; }" in compacte
 
 
+def test_pictogrammes_visibles_en_barre_reduite(client):
+    """Les icones de la barre repliee ne doivent jamais etre ecrasees.
+
+    Un SVG est un element remplacable : dans un conteneur flex etroit (barre de
+    68 px, contenu utile de 16 px), le libelle insecable qui le suit absorbe la
+    place et le pictogramme se reduit jusqu'a disparaitre s'il n'est pas fige.
+    """
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    compacte = css.split("@media (max-width: 900px) {")[1].split("\n}\n")[0]
+
+    # les pictogrammes gardent leur taille, ici comme dans le bloc compact
+    assert ".icon { flex: 0 0 auto; }" in css
+    assert ".sidebar .icon { flex: 0 0 auto; }" in compacte
+    assert ".brand-logo { flex: 0 0 auto;" in css        # deja fige : le logo reste
+    assert ".avatar {" in css and "flex: 0 0 32px;" in css
+    # et le libelle cede la place au pictogramme au lieu de le pousser dehors
+    assert "min-width: 0;" in compacte and "overflow: hidden;" in compacte
+    # aucune regle du passage en barre reduite ne les cache
+    for disparition in ("display: none", "visibility: hidden", "opacity: 0; }"):
+        assert not re.search(r"\.nav-item[^{]*\.icon[^{]*\{[^}]*" + re.escape(disparition),
+                             compacte), disparition
+
+    # et les pictogrammes sont bien presents dans chaque entree de la barre
+    connexion(client)
+    page = client.get("/accueil").get_data(as_text=True)
+    for libelle in ("Accueil", "Recherche", "Portefeuille", "Panel staff"):
+        assert re.search(r'class="nav-item[^"]*"[^>]*>\s*<svg class="icon"[^>]*>.*?</svg>\s*<span>'
+                         + re.escape(libelle) + "</span>", page, re.S), libelle
+
+
 def test_surlignage_de_l_onglet_actif(client):
     """Le trait d'accent est dans l'element (inset), plus un ::before decale.
 

@@ -233,6 +233,11 @@ code.mono, .mono {
   color: var(--side-bright);
   box-shadow: inset 3px 0 0 var(--accent);
 }
+/* Pictogrammes : taille figee. Dans un conteneur flex etroit (barre laterale
+   reduite a 68 px, bouton compact), un SVG est un element remplacable qui se
+   laisse ecraser par le libelle insecable qui le suit, jusqu'a disparaitre :
+   c'est ce qui faisait disparaitre les pictogrammes de la barre repliee. */
+.icon { flex: 0 0 auto; }
 .nav-item .icon { opacity: 0.7; }
 .nav-item.active .icon, .nav-item.is-en-cours .icon { opacity: 1; color: var(--accent); }
 .nav-item-sm { padding: 7px 12px; font-size: 12.5px; }
@@ -1148,12 +1153,19 @@ body.login { background: var(--paper); }
   .sidebar:hover .user-card, .sidebar:focus-within .user-card { padding: 12px 10px 4px; }
 
   /* Libelles : dans le flux, coupes proprement quand la barre est repliee (le
-     `overflow: hidden` de la barre s'en charge) et reveles en fondu a l'ouverture. */
+     `overflow: hidden` de la barre s'en charge) et reveles en fondu a l'ouverture.
+     `min-width: 0` + `overflow: hidden` : le libelle cede la place au pictogramme
+     au lieu de le pousser hors de la barre, et la ligne fait toujours 68 px. */
   .brand-text, .nav-label, .nav-item span, .user-meta {
     white-space: nowrap;
+    min-width: 0;
+    overflow: hidden;
     opacity: 0;
     transition: opacity 0.12s ease;
   }
+  /* Pictogrammes de la barre : taille garantie, meme si un moteur de rendu
+     decidait de compresser les elements flex (le logo et l'avatar le sont deja). */
+  .sidebar .icon { flex: 0 0 auto; }
   .sidebar:hover .brand-text, .sidebar:hover .nav-label, .sidebar:hover .nav-item span,
   .sidebar:hover .user-meta, .sidebar:focus-within .brand-text,
   .sidebar:focus-within .nav-label, .sidebar:focus-within .nav-item span,
