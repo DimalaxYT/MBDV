@@ -214,7 +214,7 @@
         : snap.nom + " retirée du portefeuille", "ok");
       if (slideoverOuverte()) refreshSlideover(snap.siren);
       if (document.body.dataset.page === "portefeuille") {
-        setTimeout(function () { window.location.reload(); }, 550);
+        setTimeout(function () { window.location.reload(); }, 200);
       }
     });
   }
@@ -261,7 +261,7 @@
       toast("Entreprise réaffichée dans les résultats", "ok");
       closeSlideover();
       if (document.body.dataset.page === "staff") {
-        setTimeout(function () { window.location.reload(); }, 550);
+        setTimeout(function () { window.location.reload(); }, 200);
       }
     });
   }
@@ -348,6 +348,40 @@
     for (var i = 0; i < compteurs.length; i++) animerCompteur(compteurs[i]);
   }
 
+  // ------------------------------------------------------------------
+  // Retour visuel immediat : des qu'un formulaire part, le bouton le dit.
+  // Une recherche interroge plusieurs pages de l'API : sans cela, le clic
+  // semble sans effet pendant quelques secondes.
+  // ------------------------------------------------------------------
+  var SECOURS_BOUTON = 20000;      // au dela, un bouton bloque se libere seul
+
+  function initEtatsDeSoumission() {
+    var formulaires = document.querySelectorAll("form[data-chargement]");
+    for (var i = 0; i < formulaires.length; i++) {
+      (function (form) {
+        form.addEventListener("submit", function () {
+          var bouton = form.querySelector('button[type="submit"]');
+          if (!bouton || bouton.disabled) return;
+          bouton.classList.add("is-loading");
+          bouton.disabled = true;
+          // Filet de securite : si la navigation est annulee, le bouton revient.
+          window.setTimeout(function () {
+            bouton.classList.remove("is-loading");
+            bouton.disabled = false;
+          }, SECOURS_BOUTON);
+        });
+      })(formulaires[i]);
+    }
+    // Retour depuis l'historique : on remet les boutons dans leur etat normal.
+    window.addEventListener("pageshow", function () {
+      var boutons = document.querySelectorAll(".is-loading");
+      for (var j = 0; j < boutons.length; j++) {
+        boutons[j].classList.remove("is-loading");
+        boutons[j].disabled = false;
+      }
+    });
+  }
+
   function preparerAnimations() {
     var elements = document.querySelectorAll(".reveal");
     if (!elements.length) return;
@@ -370,53 +404,6 @@
       });
     }, { rootMargin: "0px 0px -8% 0px", threshold: 0.1 });
     for (var k = 0; k < elements.length; k++) observateur.observe(elements[k]);
-  }
-
-  // ------------------------------------------------------------------
-  // Barre laterale escamotable : masquee apres 1,5 s sans survol, rappelee
-  // des que le curseur approche du bord gauche (ecrans larges uniquement)
-  // ------------------------------------------------------------------
-  var DELAI_ESCAMOTAGE = 1500;
-  var ZONE_RAPPEL = 56;      // px depuis le bord gauche : seuil de reapparition
-
-  function initBarreLaterale() {
-    var barre = document.querySelector(".sidebar");
-    if (!barre || typeof window.matchMedia !== "function") return;
-    var large = window.matchMedia("(min-width: 1021px) and (pointer: fine)");
-    if (!large.matches) return;
-
-    var dernierContact = Date.now();
-    var survole = false;
-
-    function proche(ev) {
-      // ouverte : on surveille le survol de la barre elle-meme ;
-      // fermee : une approche du bord gauche la rappelle
-      return typeof ev.clientX === "number" && ev.clientX <= ZONE_RAPPEL;
-    }
-
-    document.addEventListener("mousemove", function (ev) {
-      var cible = ev.target;
-      var dansBarre = barre.contains(cible) || barre === cible;
-      var pres = proche(ev) || dansBarre;
-      survole = pres;
-      if (pres) {
-        dernierContact = Date.now();
-        if (document.body.classList.contains("sidebar-hidden")) {
-          document.body.classList.remove("sidebar-hidden");
-        }
-      }
-    });
-
-    document.addEventListener("mouseleave", function () { survole = false; });
-
-    // Boucle legere plutot qu'un minuteur recree a chaque mouvement de souris.
-    window.setInterval(function () {
-      var focusDedans = barre.contains(document.activeElement);
-      if (survole || focusDedans) { dernierContact = Date.now(); return; }
-      if (Date.now() - dernierContact > DELAI_ESCAMOTAGE) {
-        document.body.classList.add("sidebar-hidden");
-      }
-    }, 250);
   }
 
   // ------------------------------------------------------------------
@@ -471,7 +458,7 @@
   // Les raisons de masquage sont transmises par la page de recherche
   document.addEventListener("DOMContentLoaded", function () {
     preparerAnimations();
-    initBarreLaterale();
+    initEtatsDeSoumission();
     var holder = document.getElementById("raisons-masquage");
     if (holder) {
       try { window.MBDV_RAISONS = JSON.parse(holder.textContent); } catch (e) { /* ignore */ }

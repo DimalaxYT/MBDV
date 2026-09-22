@@ -75,11 +75,17 @@ def create_app() -> Flask:
         # Jeu de demonstration (entreprises fictives) : jamais utilise par defaut,
         # seulement sur demande explicite (?demo=1) et si cette option est active.
         DEMO_ALLOWED=_env_flag("MBDV_DEMO"),
+        # Nom affiche du site (l'association reste signee MBDV). Modifiable sans
+        # toucher au code : MBDV_SITE_NAME="Autre nom".
+        SITE_NAME=(os.environ.get("MBDV_SITE_NAME") or "Balise").strip(),
         ASSET_VERSION=_empreinte_assets(app.static_folder),
     )
     @app.context_processor
-    def _version_des_assets():
-        return {"asset_version": app.config["ASSET_VERSION"]}
+    def _globaux_de_rendu():
+        return {
+            "asset_version": app.config["ASSET_VERSION"],
+            "site_name": app.config["SITE_NAME"],
+        }
 
     @app.after_request
     def _pas_de_cache_pour_les_assets(reponse):

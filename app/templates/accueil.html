@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block titre_page %}Accueil - MBDV Prospection{% endblock %}
-{% block titre %}Bienvenue dans MBDV Prospection{% endblock %}
+{% block titre_page %}Accueil - {{ site_name }} Prospection{% endblock %}
+{% block titre %}Bienvenue dans {{ site_name }}{% endblock %}
 {% block sous_titre %}Trouver les entreprises sans site web, les qualifier, les convertir{% endblock %}
 
 {% block content %}
@@ -15,7 +15,7 @@
       puis les <em>convertir</em>.
     </h2>
     <p class="hero-lede reveal">
-      MBDV interroge la base officielle des entreprises françaises (INSEE / RNE), vérifie
+      {{ site_name }} interroge la base officielle des entreprises françaises (INSEE / RNE), vérifie
       automatiquement la présence d'un site web pour chacune et met en évidence celles qui
       n'en ont pas. Le portefeuille partagé suit ensuite chaque prospect jusqu'à la signature.
     </p>

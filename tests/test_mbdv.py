@@ -398,21 +398,88 @@ def test_pas_de_libelle_pilotage(client):
     assert "Compte" in html                            # la section Compte reste
 
 
-def test_barre_laterale_escamotable_presente(client):
-    """Rail de rappel, regles CSS d'escamotage et logique JS."""
+def test_barre_laterale_toujours_visible(client):
+    """La barre laterale ne s'escamote plus : plus de rail, plus d'auto-masquage."""
     from pathlib import Path
     connexion(client)
     html = client.get("/accueil").get_data(as_text=True)
-    assert "data-sidebar-rail" in html
+    assert "data-sidebar-rail" not in html
+    assert "sidebar-hidden" not in html
+
     css = Path("app/static/css/main.css").read_text(encoding="utf-8")
-    assert "body.sidebar-hidden .sidebar" in css
-    assert "body.sidebar-hidden .sidebar-rail" in css
+    assert "sidebar-hidden" not in css
+    assert "sidebar-rail" not in css
+    assert "transition-delay" not in css               # aucun delai sur les etats
+    assert ".nav-item:active" in css                   # reponse immediate au clic
     assert "@media (prefers-reduced-motion: reduce)" in css
+
     js = Path("app/static/js/app.js").read_text(encoding="utf-8")
-    assert "DELAI_ESCAMOTAGE = 1500" in js             # 1,5 s sans survol
-    assert "ZONE_RAPPEL = 56" in js                    # rappel en approchant le bord
-    assert "sidebar-hidden" in js
-    assert "prefers-reduced-motion" in js
+    assert "sidebar-hidden" not in js
+    assert "ESCAMOTAGE" not in js
+    assert "prefers-reduced-motion" in js              # animations toujours bridees
+
+
+def test_barre_laterale_compacte_seulement_sur_ecrans_etroits(client):
+    """Les libelles restent affiches sur un ecran de bureau, meme a 1000 px."""
+    from pathlib import Path
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    assert "@media (max-width: 900px) {" in css
+    compacte = css.split("@media (max-width: 900px) {")[1].split("\n}")[0]
+    assert ".sidebar {" in compacte                     # icones seules
+    assert ".sidebar:hover" in compacte                 # etiquettes immediates au survol
+    assert ".sidebar:focus-within" in compacte           # idem au clavier
+    assert css.split("@media (max-width: 1020px) {")[1].split("\n}")[0].count(".sidebar") == 0
+
+
+def test_aucun_delai_sur_les_actions(client):
+    """Rien ne doit retarder un clic : ni CSS, ni temporisation dans le script."""
+    import re
+    from pathlib import Path
+    js = Path("app/static/js/app.js").read_text(encoding="utf-8")
+    assert "550" not in js                             # ancien rechargement differe
+    for valeur in re.findall(r"setTimeout\([^,]+,\s*(\d+)\)", js):
+        assert int(valeur) <= 2000                     # aucune attente perceptible
+    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
+    assert "transition-delay" not in css
+
+    connexion(client)
+    html = client.get("/?_q=coiffure&q=coiffure").get_data(as_text=True)
+    assert "data-chargement" in html                   # etat "Recherche..." au clic
+    assert ".btn.is-loading" in css
+    assert "is-loading" in js
+    assert "pageshow" in js                            # bouton remis apres retour arriere
+
+
+def test_nom_du_site_et_logo(client):
+    """Nom en rapport avec l'usage du site, et logo (marque + favicon)."""
+    from pathlib import Path
+    page = client.get("/connexion").get_data(as_text=True)
+    assert "<title>Connexion - Balise Prospection</title>" in page
+    assert "brand-logo" in page                        # logo inline
+    assert ">Balise<" in page
+
+    logo = Path("app/static/logo.svg").read_text(encoding="utf-8")
+    favicon = Path("app/static/favicon.svg").read_text(encoding="utf-8")
+    assert "<svg" in logo and 'viewBox="0 0 48 48"' in logo
+    assert "linearGradient" in logo                    # le degrade du logo
+    assert "rect" in favicon and "circle" in favicon    # favicon reprend la marque
+
+    connexion(client)
+    html = client.get("/accueil").get_data(as_text=True)
+    assert "Bienvenue dans Balise" in html
+    assert ">Balise<" in html and "brand-dot" in html
+    assert "Balise interroge la base officielle" in html
+
+
+def test_nom_du_site_configurable(tmp_path, monkeypatch):
+    """Le nom peut etre change sans toucher au code : MBDV_SITE_NAME."""
+    monkeypatch.setenv("MBDV_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MBDV_SITE_NAME", "Nom Sur Mesure")
+    application = create_app()
+    application.config.update(TESTING=True)
+    page = application.test_client().get("/connexion").get_data(as_text=True)
+    assert "Nom Sur Mesure" in page
+    assert "<title>Connexion - Nom Sur Mesure Prospection</title>" in page
 
 
 def test_jeton_long_conserve_apres_plusieurs_pages(app_embarque):
@@ -462,8 +529,8 @@ def test_styles_et_scripts_jamais_mis_en_cache(client):
     assert corps == Path("app/static/css/main.css").read_text(encoding="utf-8")
     # Garde-fou : la feuille servie contient bien toutes les regles de l'accueil,
     # de la barre laterale et de la page de connexion.
-    for regle in (".widgets {", ".pip-track", ".step-card", ".sidebar-rail {",
-                  "body.sidebar-hidden .sidebar", ".check input:checked"):
+    for regle in (".widgets {", ".pip-track", ".step-card", ".brand-logo {",
+                  ".check input:checked"):
         assert regle in corps
 
     script = client.get(f"/static/js/app.js?v={version}")
@@ -533,7 +600,7 @@ def test_libelles_de_section_masques_en_barre_reduite(client):
     """Le libelle "Pilotage" debordait de la barre laterale reduite (68 px)."""
     from pathlib import Path
     css = Path("app/static/css/main.css").read_text(encoding="utf-8")
-    reduit = css.split("@media (max-width: 1020px) {")[1].split("\n}")[0]
+    reduit = css.split("@media (max-width: 900px) {")[1].split("\n}")[0]
     assert ".nav-label { display: none; }" in reduit
     assert ".sidebar-foot .nav-label" not in reduit     # ancienne regle trop etroite
     assert ".nav-label { text-align: center" not in reduit

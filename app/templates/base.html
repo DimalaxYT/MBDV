@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>{% block titre_page %}MBDV - Prospection{% endblock %}</title>
+  <title>{% block titre_page %}{{ site_name }} · Prospection{% endblock %}</title>
   <script>
     // Theme applique avant le premier rendu (aucun clignotement) : choix enregistre,
     // sinon preference du systeme.
@@ -31,9 +31,12 @@
 <div class="shell">
 
   <aside class="sidebar">
-    <a class="brand" href="/accueil">
-      <span class="brand-word">MBDV<span class="brand-dot">.</span></span>
-      <span class="brand-sub">Prospection</span>
+    <a class="brand" href="/accueil" title="{{ site_name }} - accueil">
+      {% include "partials/logo.html" %}
+      <span class="brand-text">
+        <span class="brand-word">{{ site_name }}<span class="brand-dot">.</span></span>
+        <span class="brand-sub">Prospection</span>
+      </span>
     </a>
 
     <nav class="nav">
@@ -94,7 +97,6 @@
 
 </div>
 
-<div class="sidebar-rail" data-sidebar-rail aria-hidden="true"></div>
 <div id="slideover-root"></div>
 <div id="modal-root"></div>
 <div id="toast-root" aria-live="polite"></div>

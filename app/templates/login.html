@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Connexion - MBDV Prospection</title>
+  <title>Connexion - {{ site_name }} Prospection</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}?v={{ asset_version }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ asset_version }}">
   <meta name="csrf" content="{{ csrf_token() }}">
@@ -32,7 +32,10 @@
 
   <section class="login-hero">
     <div class="login-hero-inner">
-      <p class="hero-brand">MBDV<span>.</span></p>
+      <p class="hero-brand">
+        {% include "partials/logo.html" with context %}
+        <span>{{ site_name }}<span class="brand-dot">.</span></span>
+      </p>
       <p class="hero-tagline">Identifier, qualifier et suivre les entreprises françaises qui n'ont pas encore de site web.</p>
       <ul class="hero-points">
         <li>

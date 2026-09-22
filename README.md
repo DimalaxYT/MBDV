@@ -1,7 +1,15 @@
-# MBDV - Prospection
+# Balise — prospection des entreprises sans site web
 
-Outil interne pour identifier les entreprises francaises **sans site web** :
-la vente de sites aux entreprises qui n'en ont pas encore.
+Outil interne de l'association **MBDV** pour identifier les entreprises francaises
+**sans site web** : la vente de sites aux entreprises qui n'en ont pas encore.
+
+Le site porte le nom **Balise** (marquer le terrain, reperer chaque prospect) et son
+logo est la balise emettrice : un point et ses ondes (`app/static/logo.svg`,
+favicon `app/static/favicon.svg`). Le nom se change sans toucher au code :
+
+```bash
+MBDV_SITE_NAME="Autre nom" python run.py
+```
 
 Deux associes, un acces securise chacun, un portefeuille partage, et un panel
 staff qui garde la trace de chaque entreprise masquee (raison, auteur, date).
@@ -192,9 +200,9 @@ pyproject.toml          configuration ruff + pytest
   cycle commercial alimentees par le portefeuille, guide en quatre gestes, detail des
   etapes et points de vigilance. Apparitions au defilement et compteurs animes
   (desactives si `prefers-reduced-motion`).
-- **Barre laterale escamotable** (ecrans larges, pointeur precis) : apres 1,5 s sans
-  survol elle se replie ; approcher le curseur du bord gauche (56 px) ou du rail
-  orange la ramene. Elle reste ouverte tant que le clavier navigue dedans.
+- **Barre laterale toujours visible** : elle ne s'escamote plus, les etiquettes de
+  navigation restent affichees des 900 px de large. Sur ecrans plus etroits, elle
+  passe en icones seules et se deplie instantanement au survol ou au clavier.
 - **Connexion** : case « Rester connecté sur cet appareil » (cochée par défaut).
   Cochée : session de 30 jours ; décochée : la session s'arrête à la fermeture du
   navigateur (jeton d'URL de 12 h en mode aperçu).

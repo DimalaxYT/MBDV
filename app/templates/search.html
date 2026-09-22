@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block titre_page %}Recherche - MBDV Prospection{% endblock %}
+{% block titre_page %}Recherche - {{ site_name }} Prospection{% endblock %}
 {% block titre %}Recherche d'entreprises{% endblock %}
 {% block sous_titre %}{{ sous_titre }}{% endblock %}
 
 {% block content %}
 
-<form class="panel search-panel" method="get" action="/">
+<form class="panel search-panel" method="get" action="/" data-chargement>
   <div class="search-row">
     <div class="field field-grow">
       <label for="f-q">Dénomination, activité ou SIREN</label>
