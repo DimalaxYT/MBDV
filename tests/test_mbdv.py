@@ -10,8 +10,33 @@ from contextlib import contextmanager
 from html.parser import HTMLParser
 
 import pytest
+import requests
 
 from app import auth, create_app, db, detect, gov_api
+
+# --------------------------------------------------------------------------
+# Garde-fou reseau : la suite doit rester entierement hors ligne.
+# Sans cela, un test peut passer en local (reseau bloque) et echouer en
+# integration continue (reseau disponible) - ou l'inverse.
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _aucun_appel_reseau(monkeypatch):
+    """Tout appel HTTP direct fait echouer le test qui le declenche."""
+
+    def interdit(*args, **kwargs):
+        raise AssertionError(
+            "Appel reseau interdit dans les tests : remplacez l'appel par un double "
+            "(monkeypatch de gov_api.search / fetch_by_siren, ou detect._resout).")
+
+    monkeypatch.setattr(requests.Session, "request", interdit)
+    monkeypatch.setattr(requests.api, "request", interdit)
+
+
+def _api_officielle_indisponible(monkeypatch):
+    """Simule une base officielle injoignable, comme en developpement hors ligne."""
+    monkeypatch.setattr(gov_api, "fetch_by_siren", lambda siren: None)
 
 # --------------------------------------------------------------------------
 # Doubles de test
@@ -76,6 +101,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.delenv("MBDV_DEMO", raising=False)   # jeu fictif desactive par defaut
     # Ni DNS ni API : tout est deterministe et hors ligne.
     monkeypatch.setattr(detect, "_resout", lambda host: False)
+    _api_officielle_indisponible(monkeypatch)
     auth._RATE.clear()
     application = create_app()
     application.config.update(TESTING=True)
@@ -215,6 +241,7 @@ def app_demo(tmp_path, monkeypatch):
     monkeypatch.setenv("MBDV_DEMO", "1")
     monkeypatch.setattr(detect, "_resout", lambda host: False)
     monkeypatch.setattr(gov_api, "search", _api_hors_service)
+    _api_officielle_indisponible(monkeypatch)
     auth._RATE.clear()
     application = create_app()
     application.config.update(TESTING=True)
@@ -227,6 +254,7 @@ def app_embarque(tmp_path, monkeypatch):
     monkeypatch.setenv("MBDV_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("MBDV_EMBEDDED_SESSION", "1")
     monkeypatch.setattr(detect, "_resout", lambda host: False)
+    _api_officielle_indisponible(monkeypatch)
     monkeypatch.setattr(gov_api, "search", faux_search(
         lambda page: [entreprise("848902672", "CARACOLE COIFFURE")]))
     auth._RATE.clear()
@@ -850,6 +878,18 @@ def test_transition_de_page_native(client):
     assert "transitionNative" in js
     assert 'classList.add("sortie")' in js
     assert "window.location.href = lien.href" in js         # navigation differee du repli
+
+
+def test_suite_hermetique():
+    """Le garde-fou reseau est bien actif.
+
+    Il a fallu le verifier en conditions reelles : un test utilisait un SIREN du
+    jeu de demonstration qui existe vraiment dans la base officielle. Il passait
+    en local (reseau bloque) et echouait en integration continue (reseau
+    disponible, l'API renvoyant la vraie entreprise).
+    """
+    with pytest.raises(AssertionError, match="Appel reseau interdit"):
+        requests.get("https://recherche-entreprises.api.gouv.fr/search", timeout=1)
 
 
 def test_migration_role_sur_une_base_existante(tmp_path, monkeypatch):
