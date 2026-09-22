@@ -614,58 +614,33 @@ def test_animation_de_changement_de_page(client):
     assert "pageshow" in js                               # retour arriere sans barre bloquee
 
 
-def test_surlignage_couvre_toute_la_ligne_en_barre_reduite(client):
-    """Regle le bug "seule la moitie de la phrase est surlignee".
+def test_barre_reduite_sans_debordement(client):
+    """Regle les deux bugs signales : surlignage qui deborde, icones qui disparaissent.
 
-    Les libelles etaient positionnes hors du flux : la boite de l'element
-    s'arretait a l'icone, donc le fond et le trait d'accent ne couvraient que
-    l'icone. Les lignes sont maintenant elargies avec le panneau et les libelles
-    restent dans le flux.
+    Cause : les libelles etaient positionnes hors du flux et les lignes elargies a
+    la main (68 -> 234 px) alors que la barre n'en faisait que 68 : le surlignage
+    depassait du panneau, et l'icone, centree dans une boite plus etroite que son
+    contenu, se retrouvait rognee.
+    Desormais la barre s'elargit elle-meme, avec `overflow: hidden` : les lignes
+    restent dans le panneau et les libelles sont dans le flux.
     """
     from pathlib import Path
     css = Path("app/static/css/main.css").read_text(encoding="utf-8")
     compacte = css.split("@media (max-width: 900px) {")[1].split("\n}\n")[0]
 
-    assert ".nav-item span, .user-meta {\n    position: absolute" not in compacte
-    assert "position: absolute" in compacte                 # uniquement le fond du panneau
-    assert compacte.count("position: absolute") == 1
-    assert ".brand, .nav-item, .user-card {\n    width: 68px;" in compacte
-    assert ".sidebar:hover .brand, .sidebar:hover .nav-item, .sidebar:hover .user-card," in compacte
-    assert "width: 234px; }" in compacte                    # elargis avec le panneau
-    assert "transition: width 0.26s" in compacte
-
-
-def test_barre_laterale_compacte_garde_les_icones(client):
-    """Barre reduite : les icones restent visibles, seul le fond se deplie.
-
-    Regression : la barre entiere glissait vers la gauche, emportant avec elle les
-    pictogrammes ; il ne restait qu'une bande sombre vide.
-    """
-    from pathlib import Path
-    css = Path("app/static/css/main.css").read_text(encoding="utf-8")
-    compacte = css.split("@media (max-width: 900px) {")[1].split("\n}\n")[0]
-
-    # la barre garde sa largeur d'icones : elle n'est plus translatee elle-meme
-    assert "width: 68px" in compacte
-    assert "flex: 0 0 68px" in compacte
-    assert "translateX(-166px)" not in compacte
-    # La largeur de la BARRE n'est plus animee (elle restait couteuse). Seules les
-    # lignes s'elargissent, dans une barre en position fixe : la page, elle, ne
-    # bouge pas d'un pixel.
+    # la barre s'elargit elle-meme et coupe proprement ce qui depasse
+    assert "width: 68px;" in compacte
+    assert "width: 234px;" in compacte
+    assert "overflow: hidden;" in compacte
+    assert ".sidebar:hover, .sidebar:focus-within {" in compacte
+    # plus rien hors du flux, plus de lignes elargies a la main
+    assert "position: absolute" not in compacte
     assert "position: fixed" in compacte
-
-    # c'est le fond (::before) qui glisse pour reveler les libelles
-    assert ".sidebar::before" in compacte
-    assert "transform: translateX(-100%)" in compacte
-    assert ".sidebar:hover::before" in compacte
-    assert ".sidebar:focus-within::before" in compacte
-
-    # les libelles sont reveles en fondu, sans sortir de la boite de la ligne
-    assert "opacity: 0" in compacte
+    assert ".sidebar::before" not in compacte
+    assert "width: 234px; }" not in compacte          # ancien elargissement manuel
+    # les libelles restent dans le flux, simplement reveles en fondu
+    assert "opacity: 0" in compacte and "white-space: nowrap;" in compacte
     assert ".main { margin-left: 68px; }" in compacte
-    assert ".brand-text, .brand-sub" not in compacte
-    # Seul le bloc de connexion a le droit de disparaitre : pas les libelles de nav.
-    assert "display: none" not in compacte.replace(".login-hero { display: none; }", "")
 
 
 def test_surlignage_de_l_onglet_actif(client):
@@ -703,8 +678,15 @@ def test_fermeture_de_la_barre_synchronisee_avec_le_texte(client):
     assert compacte.count("transition: opacity 0.18s ease 0.08s;") == 1
 
 
+def _encaisse(client, montant, date, heure="12:00", siret=""):
+    """Enregistre un encaissement depuis le panel staff (comme le formulaire)."""
+    return client.post("/staff/benefice", data={
+        "_csrf": jeton(client, "/staff"), "siret": siret, "montant": montant,
+        "signe_le": date, "heure": heure})
+
+
 def test_benefice_du_portefeuille(app):
-    """Montants encaisses, totaux et graphique mensuel."""
+    """Le portefeuille affiche les encaissements : totaux, graphique, montants."""
     client = app.test_client()
     connexion(client)
     with base(client) as b:
@@ -713,129 +695,170 @@ def test_benefice_du_portefeuille(app):
                       " VALUES (?, ?, 'client', 'admin', '2026-01-01T00:00:00Z')",
                       (siren, json.dumps(entreprise(siren, nom))))
 
-    # aucun montant : message d'amorcage, pas de graphique
+    # aucun encaissement : message d'amorcage, pas de graphique
     page = client.get("/portefeuille").get_data(as_text=True)
     assert "Bénéfice" in page and "Aucun montant renseigné" in page
     assert "graph-svg" not in page
 
-    csrf = jeton(client, "/portefeuille")
-    reponse = client.post("/portefeuille/montant", data={
-        "_csrf": csrf, "siren": "111111111", "montant": "4500",
-        "signe_le": "2026-09-10", "heure": "14:30"})
-    assert reponse.status_code == 302
-    assert "montant=ok" in reponse.headers["Location"]
-    client.post("/portefeuille/montant", data={
-        "_csrf": csrf, "siren": "222222222", "montant": "1500.50", "signe_le": "2026-08-02"})
+    # le portefeuille ne saisit rien : c'est le panel staff qui enregistre
+    assert "encaissement-form" not in page
+    assert 'name="montant"' not in page
+    assert "panel staff" in page
+
+    assert "pf=montant" in _encaisse(client, "4500", "2026-09-10", "14:30",
+                                     siret="11111111100012").headers["Location"]
+    _encaisse(client, "1500.50", "2026-08-02", siret="222222222")
 
     page = client.get("/portefeuille").get_data(as_text=True)
     assert "6\u202f001" in page or "6 001" in page          # 4500 + 1500,50 arrondis
-    assert "3\u202f000" in page or "3 000" in page          # panier moyen (3000,25)
     assert "graph-svg" in page
-    assert page.count('<rect class="graph-bar') == 12     # un point par mois
-    assert "is-courant" in page                               # le mois courant est marque
-    assert "Cumul" in page
-
-    # les montants sont conserves et pre-remplis dans la colonne du tableau
-    assert "col-benefice" in page and "montant-form" in page
-    assert 'value="4500"' in page                       # montant du client 1
-    assert 'value="2026-09-10"' in page                 # sa date de paiement
-    assert 'value="1500"' in page                        # centimes tronques, sans arrondi
-    assert 'value="14:30"' in page                       # heure de l'encaissement
-    assert "10/09/2026 à 14:30" in page or "à 14:30" in page
+    assert page.count('<rect class="graph-bar') == 12         # un point par mois
+    assert "is-courant" in page and "Cumul" in page
+    assert "10/09/2026 à 14:30" in page
+    assert "montant-vu-fort" in page
+    # l'encaissement rattache par SIRET apparait sur la ligne de l'entreprise
+    ligne = re.search(r'<tr class="result-row" data-siren="111111111".*?</tr>', page, re.S)
+    assert ligne and "4\u202f500" in ligne.group(0)
 
 
-def test_encaissement_date_et_heure(app, client):
-    """L'heure est acceptee et affichee ; un datetime-local complet aussi."""
-    connexion(client)
-    with base(client) as b:
-        b.execute("INSERT INTO tracked (siren, snapshot, status, added_by, added_at)"
-                  " VALUES ('111111111', ?, 'client', 'admin', '2026-01-01T00:00:00Z')",
-                  (json.dumps(entreprise("111111111", "Alpha")),))
-    csrf = jeton(client, "/portefeuille")
-
-    client.post("/portefeuille/montant", data={
-        "_csrf": csrf, "siren": "111111111", "montant": "1200",
-        "signe_le": "2026-05-04", "heure": "09:15"})
-    page = client.get("/portefeuille").get_data(as_text=True)
-    assert "04/05/2026 à 09:15" in page
-    # le graphique place bien l'encaissement sur le mois de mai
-    mai = re.search(r'<title>mai 2026 : ([^<]+)</title>', page)
-    assert mai and "1\u202f200" in mai.group(1)
-
-    # champ datetime-local (les deux valeurs dans le meme champ)
-    client.post("/portefeuille/montant", data={
-        "_csrf": csrf, "siren": "111111111", "montant": "1300", "signe_le": "2026-06-01T18:45"})
-    page = client.get("/portefeuille").get_data(as_text=True)
-    assert "01/06/2026 à 18:45" in page
-
-    # heure invalide refusee, montant inchange
-    reponse = client.post("/portefeuille/montant", data={
-        "_csrf": csrf, "siren": "111111111", "montant": "9999",
-        "signe_le": "2026-06-01", "heure": "99:99"})
-    assert "montant_erreur=date" in reponse.headers["Location"]
-    with app.app_context():
-        from app import db
-        assert db.one("SELECT montant_cents FROM tracked WHERE siren = '111111111'"
-                      )["montant_cents"] == 130000
-
-    # montant a 0 : l'encaissement est efface
-    client.post("/portefeuille/montant", data={
-        "_csrf": csrf, "siren": "111111111", "montant": "0", "signe_le": ""})
-    with app.app_context():
-        from app import db
-        assert db.one("SELECT montant_cents FROM tracked WHERE siren = '111111111'"
-                      )["montant_cents"] == 0
-
-
-def test_encaissement_depuis_le_panel_staff(app):
-    """Le dirigeant encaisse un client sans quitter le panel staff."""
+def test_encaissement_siret_facultatif(app):
+    """Le code SIRET est facultatif : sans lui, l'encaissement est sans rattachement."""
     client = app.test_client()
     connexion(client)
+    assert "pf=montant" in _encaisse(client, "900", "2026-03-01").headers["Location"]
+
+    page = client.get("/staff").get_data(as_text=True)
+    assert "Sans rattachement" in page
     with app.app_context():
         from app import db
-        db.execute("INSERT INTO tracked (siren, snapshot, status, added_by, added_at)"
-                   " VALUES ('111111111', ?, 'client', 'admin', '2026-01-01T00:00:00Z')",
-                   (json.dumps(entreprise("111111111", "Alpha")),))
-    page = client.get("/staff").get_data(as_text=True)
-    assert 'name="action" value="benefice"' in page
-    assert 'name="heure"' in page                          # heure modifiable sur place
+        ligne = db.one("SELECT siret, siren, libelle FROM benefices")
+    assert ligne["siret"] == "" and ligne["siren"] is None
 
-    reponse = client.post("/staff/portefeuille", data={
-        "_csrf": jeton(client, "/staff"), "action": "benefice", "siren": "111111111",
-        "montant": "2500", "signe_le": "2026-04-02", "heure": "11:05"})
-    assert reponse.status_code == 302
-    assert "pf=montant" in reponse.headers["Location"]
-
-    page = client.get(reponse.headers["Location"]).get_data(as_text=True)
-    assert "Bénéfice enregistré" in page
-    assert "02/04/2026 à 11:05" in page
-    assert "2\u202f500" in page or "2 500" in page
-    assert 'value="2500"' in page                          # champ pre-rempli
-
-
-def test_montant_refuse_si_invalide_ou_hors_portefeuille(app, client):
-    connexion(client)
+    # un SIRET valide rattache l'encaissement a l'entreprise suivie
     with base(client) as b:
         b.execute("INSERT INTO tracked (siren, snapshot, status, added_by, added_at)"
-                  " VALUES ('111111111', ?, 'client', 'admin', '2026-01-01T00:00:00Z')",
-                  (json.dumps(entreprise("111111111", "Alpha")),))
-    csrf = jeton(client, "/portefeuille")
-
-    for donnees, motif in (
-        ({"siren": "111111111", "montant": "abc"}, "montant_erreur=montant"),
-        ({"siren": "111111111", "montant": "-5"}, "montant_erreur=montant"),
-        ({"siren": "111111111", "montant": "100", "signe_le": "10/09/2026"},
-         "montant_erreur=date"),
-        ({"siren": "999999999", "montant": "100"}, "montant_erreur=absent"),
-        ({"siren": "12", "montant": "100"}, "montant_erreur=siren"),
-    ):
-        reponse = client.post("/portefeuille/montant",
-                              data={"_csrf": csrf, **donnees})
-        assert motif in reponse.headers["Location"], donnees
+                  " VALUES ('333333333', ?, 'client', 'admin', '2026-01-01T00:00:00Z')",
+                  (json.dumps(entreprise("333333333", "Gamma")),))
+    _encaisse(client, "1200", "2026-03-02", siret="333 333 333 00025")
     with app.app_context():
         from app import db
-        assert db.one("SELECT montant_cents FROM tracked WHERE siren = '111111111'"
-                      )["montant_cents"] == 0
+        ligne = db.one("SELECT siret, siren, libelle FROM benefices WHERE montant_cents = 120000")
+    assert ligne["siret"] == "33333333300025"        # espaces retires
+    assert ligne["siren"] == "333333333"
+    assert ligne["libelle"] == "Gamma"
+
+    # heure laissee vide : 12:00 (valeur annoncee sur le formulaire)
+    _encaisse(client, "90", "2026-03-03", heure="")
+    with app.app_context():
+        from app import db
+        assert db.one("SELECT encaisse_le FROM benefices WHERE montant_cents = 9000"
+                      )["encaisse_le"] == "2026-03-03T12:00"
+
+
+def test_benefice_refuse_les_saisies_invalides(app):
+    """SIRET, montant, date : chaque erreur a son message, rien n'est enregistre."""
+    client = app.test_client()
+    connexion(client)
+    csrf = jeton(client, "/staff")
+
+    def envoi(**champs):
+        donnees = {"_csrf": csrf, "siret": "", "montant": "1000", "signe_le": "2026-04-01",
+                   "heure": "10:00"}
+        donnees.update(champs)
+        return client.post("/staff/benefice", data=donnees)
+
+    assert "pf_erreur=siret" in envoi(siret="12ab34").headers["Location"]
+    assert "pf_erreur=siret" in envoi(siret="123").headers["Location"]
+    assert "pf_erreur=montant" in envoi(montant="").headers["Location"]
+    assert "pf_erreur=montant" in envoi(montant="-5").headers["Location"]
+    assert "pf_erreur=montant" in envoi(montant="abc").headers["Location"]
+    assert "pf_erreur=date" in envoi(signe_le="").headers["Location"]
+    assert "pf_erreur=date" in envoi(signe_le="31/12/2026").headers["Location"]
+    assert "pf_erreur=date" in envoi(heure="99:99").headers["Location"]
+
+    with app.app_context():
+        from app import db
+        assert db.one("SELECT COUNT(*) n FROM benefices")["n"] == 0
+
+    # chaque message est explique a l'ecran
+    for motif, texte in (("siret", "SIRET"), ("montant", "Montant"), ("date", "Date")):
+        page = client.get(f"/staff?pf_erreur={motif}").get_data(as_text=True)
+        assert texte in page
+
+
+def test_suppression_d_un_encaissement(app):
+    client = app.test_client()
+    connexion(client)
+    _encaisse(client, "700", "2026-02-02")
+    with app.app_context():
+        from app import db
+        identifiant = db.one("SELECT id FROM benefices")["id"]
+
+    reponse = client.post("/staff/benefice/supprimer",
+                          data={"_csrf": jeton(client, "/staff"), "id": identifiant})
+    assert "pf=supprime" in reponse.headers["Location"]
+    with app.app_context():
+        from app import db
+        assert db.one("SELECT COUNT(*) n FROM benefices")["n"] == 0
+    # identifiant inconnu : message clair, rien ne casse
+    reponse = client.post("/staff/benefice/supprimer",
+                          data={"_csrf": jeton(client, "/staff"), "id": 99999})
+    assert "pf_erreur=absent" in reponse.headers["Location"]
+
+
+def test_benefice_reserve_au_dirigeant(app):
+    """Le compte associé ne voit pas la section et ne peut pas la manipuler."""
+    client = app.test_client()
+    connexion(client, username="associe", password="MBDV-associe-2026")
+    page = client.get("/staff").get_data(as_text=True)
+    assert 'action="/staff/benefice"' not in page
+    assert 'action="/staff/benefice/supprimer"' not in page
+    csrf = jeton(client, "/staff")
+    assert client.post("/staff/benefice", data={
+        "_csrf": csrf, "montant": "100", "signe_le": "2026-01-01"}).status_code == 403
+    assert client.post("/staff/benefice/supprimer", data={
+        "_csrf": csrf, "id": 1}).status_code == 403
+
+
+def test_migration_des_montants_vers_les_encaissements(tmp_path, monkeypatch):
+    """Les montants deja enregistres sur les entreprises sont reportes une fois."""
+    import sqlite3
+    dossier = tmp_path / "data"
+    dossier.mkdir()
+    conn = sqlite3.connect(dossier / "mbdv.sqlite3")
+    conn.executescript(
+        "CREATE TABLE tracked ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " siren TEXT UNIQUE NOT NULL, snapshot TEXT NOT NULL,"
+        " status TEXT NOT NULL DEFAULT 'a_contacter', note TEXT NOT NULL DEFAULT '',"
+        " added_by TEXT NOT NULL, added_at TEXT NOT NULL,"
+        " status_updated_by TEXT, status_updated_at TEXT,"
+        " montant_cents INTEGER NOT NULL DEFAULT 0, signe_le TEXT);")
+    conn.execute("INSERT INTO tracked (siren, snapshot, status, added_by, added_at,"
+                 " montant_cents, signe_le) VALUES ('111111111', ?, 'client', 'admin',"
+                 " '2026-01-01T00:00:00Z', 450000, '2026-09-10T14:30')",
+                 (json.dumps(entreprise("111111111", "Alpha")),))
+    conn.execute("INSERT INTO tracked (siren, snapshot, status, added_by, added_at)"
+                 " VALUES ('222222222', ?, 'client', 'admin', '2026-01-01T00:00:00Z')",
+                 (json.dumps(entreprise("222222222", "Beta")),))
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("MBDV_DATA_DIR", str(dossier))
+    application = create_app()
+    application.config.update(TESTING=True)
+    with application.app_context():
+        from app import db, views
+        lignes = db.query("SELECT siren, libelle, montant_cents, encaisse_le FROM benefices")
+        assert len(lignes) == 1                       # seule la ligne valorisee
+        assert lignes[0]["siren"] == "111111111"
+        assert lignes[0]["libelle"] == "Alpha"
+        assert lignes[0]["montant_cents"] == 450000
+        assert lignes[0]["encaisse_le"] == "2026-09-10T14:30"
+        # un second demarrage ne duplique rien
+        db.init_app(application)
+        assert db.one("SELECT COUNT(*) n FROM benefices")["n"] == 1
+        assert views.benefice_du_portefeuille()["total_cents"] == 450000
 
 
 def test_staff_ajoute_et_retire_du_portefeuille(app):
@@ -921,34 +944,6 @@ def test_portefeuille_du_staff_reserve_au_dirigeant(app):
     reponse = client.post("/staff/portefeuille", data={
         "_csrf": jeton(client, "/staff"), "action": "retirer", "siren": "111111111"})
     assert reponse.status_code == 403
-
-
-def test_migration_benefice_sur_une_base_existante(tmp_path, monkeypatch):
-    """Une base sans colonnes de benefice est completee au demarrage."""
-    import sqlite3
-    dossier = tmp_path / "data"
-    dossier.mkdir()
-    conn = sqlite3.connect(dossier / "mbdv.sqlite3")
-    conn.executescript(
-        "CREATE TABLE tracked ("
-        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        " siren TEXT UNIQUE NOT NULL, snapshot TEXT NOT NULL,"
-        " status TEXT NOT NULL DEFAULT 'a_contacter', note TEXT NOT NULL DEFAULT '',"
-        " added_by TEXT NOT NULL, added_at TEXT NOT NULL,"
-        " status_updated_by TEXT, status_updated_at TEXT);")
-    conn.execute("INSERT INTO tracked (siren, snapshot, added_by, added_at)"
-                 " VALUES ('111111111', '{}', 'admin', '2026-01-01T00:00:00Z')")
-    conn.commit()
-    conn.commit()
-    conn.close()
-
-    monkeypatch.setenv("MBDV_DATA_DIR", str(dossier))
-    application = create_app()
-    application.config.update(TESTING=True)
-    with application.app_context():
-        from app import db
-        ligne = db.one("SELECT montant_cents, signe_le FROM tracked WHERE siren = '111111111'")
-        assert ligne["montant_cents"] == 0 and ligne["signe_le"] is None
 
 
 def test_transition_de_page_native(client):

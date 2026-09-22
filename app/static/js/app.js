@@ -522,11 +522,23 @@
   // ------------------------------------------------------------------
   // Delegation d'evenements
   // ------------------------------------------------------------------
+  // Un clic de fermeture ne compte que s'il vise vraiment le fond (ou le bouton
+  // prevu pour). Le fond porte data-close-modal et entoure tout le contenu : sans
+  // ce garde-fou, le premier clic dans la modale (choix de la raison, saisie d'une
+  // precision) etait pris pour un clic sur le fond et refermait la modale.
+  function clicSurLeFond(ev) {
+    var porteur = ev.target.closest("[data-close-slideover],[data-close-modal]");
+    if (!porteur) return false;
+    if (ev.target === porteur) return true;
+    return !ev.target.closest(".modal, .slideover");
+  }
+
   document.addEventListener("click", function (ev) {
     var target = ev.target.closest("[data-detail],[data-hide],[data-follow],[data-recheck],[data-override],[data-restore],[data-close-slideover],[data-close-modal]");
     if (!target) return;
 
     if (target.hasAttribute("data-close-slideover") || target.hasAttribute("data-close-modal")) {
+      if (!clicSurLeFond(ev)) return;
       ev.preventDefault();
       closeSlideover();
       closeHideModal();

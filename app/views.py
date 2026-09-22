@@ -609,24 +609,32 @@ def _decalage_mois(annee: int, mois: int, recul: int) -> tuple[int, int]:
 
 
 def benefice_du_portefeuille():
-    """Encaisssements du portefeuille : totaux, panier moyen et serie mensuelle.
+    """Encaissements : totaux, panier moyen, serie mensuelle et detail par entreprise.
 
-    Les montants viennent de `tracked.montant_cents` (entiers, en centimes : aucun
-    arrondi flottant). La serie couvre les 12 derniers mois, mois courant inclus.
+    La source est la table `benefices` (que le panel staff alimente). Les montants
+    sont des entiers de centimes ; `encaisse_le` est une date locale (heure de Paris).
     """
+    lignes = db.query(
+        "SELECT id, siret, siren, libelle, montant_cents, encaisse_le, encaisse_par"
+        " FROM benefices ORDER BY encaisse_le DESC, id DESC")
+
     total_cents = 0
     par_mois = {}
-    lignes = db.query(
-        "SELECT montant_cents, signe_le FROM tracked WHERE montant_cents > 0")
+    par_siren = {}
     for ligne in lignes:
         montant = int(ligne["montant_cents"] or 0)
         total_cents += montant
-        date = (ligne["signe_le"] or "")[:10]
-        # `signe_le` est une date locale (heure de Paris) : le mois se lit
-        # directement dessus. Sans date exploitable : mois courant.
+        date = (ligne["encaisse_le"] or "")[:10]
+        # Date locale : le mois se lit directement dessus. Sans date exploitable,
+        # l'encaissement compte sur le mois courant.
         valide = len(date) >= 7 and date[:4].isdigit() and date[5:7].isdigit()
         cle = date[:7] if valide else db.now_iso()[:7]
         par_mois[cle] = par_mois.get(cle, 0) + montant
+        if ligne["siren"]:
+            cumul = par_siren.setdefault(ligne["siren"], {"cents": 0, "dernier": None})
+            cumul["cents"] += montant
+            if cumul["dernier"] is None or (ligne["encaisse_le"] or "") > cumul["dernier"]:
+                cumul["dernier"] = ligne["encaisse_le"]
 
     maintenant = datetime.now(PARIS_TZ)
     serie = []
@@ -643,24 +651,23 @@ def benefice_du_portefeuille():
     maximum = max([point["cents"] for point in serie] + [0])
     cumul = 0
     for point in serie:
-        # Hauteur en pourcentage du plus gros mois (0 % si rien a afficher).
         point["hauteur"] = round(100 * point["cents"] / maximum) if maximum else 0
-        point["pct_max"] = round(100 * point["cents"] / maximum) if maximum else 0
+        point["pct_max"] = point["hauteur"]
         cumul += point["cents"]
         point["cumul_hauteur"] = round(100 * cumul / (total_cents or 1))
 
-    payants = [int(ligne["montant_cents"]) for ligne in lignes]
     clients = db.one("SELECT COUNT(*) n FROM tracked WHERE status = 'client'")["n"]
-    ce_mois = par_mois.get(maintenant.strftime("%Y-%m"), 0)
     return {
         "total_cents": total_cents,
         "clients": clients,
-        "payants": len(payants),
-        "panier_cents": round(total_cents / len(payants)) if payants else 0,
-        "ce_mois_cents": ce_mois,
+        "nombre": len(lignes),
+        "panier_cents": round(total_cents / len(lignes)) if lignes else 0,
+        "ce_mois_cents": par_mois.get(maintenant.strftime("%Y-%m"), 0),
         "serie": serie,
         "maximum_cents": maximum,
         "mois_courant": maintenant.strftime("%Y-%m"),
+        "lignes": lignes,
+        "par_siren": par_siren,
     }
 
 
@@ -681,13 +688,12 @@ def portefeuille():
         c["statut"] = r["status"]
         c["added_by"] = r["added_by"]
         c["added_at"] = r["added_at"]
-        # Benefice deja encaisse : sert a pre-remplir la colonne du tableau.
-        c["montant_cents"] = r["montant_cents"] or 0
-        c["signe_le"] = r["signe_le"]
         items.append(c)
     compteurs = {code: 0 for code, _ in STATUTS_PIPELINE}
     for c in items:
         compteurs[c["statut"]] = compteurs.get(c["statut"], 0) + 1
+    # Le portefeuille ne fait qu'afficher : la saisie du benefice est dans le
+    # panel staff (section Benefice).
     return render_template(
         "portfolio.html",
         page_id="portefeuille",
@@ -696,8 +702,7 @@ def portefeuille():
         items=items,
         compteurs=compteurs,
         benefice=benefice_du_portefeuille(),
-        montant_ok=request.args.get("montant") == "ok",
-        montant_erreur=request.args.get("montant_erreur"),
+        benefice_gere_au_staff=est_admin(),
     )
 
 
@@ -706,26 +711,45 @@ def _montant_en_centimes(brut: str):
     texte = (brut or "").replace("\u202f", "").replace("\u00a0", "").replace(" ", "")
     texte = texte.replace(",", ".")
     if not texte:
-        return 0                    # champ vide : montant retire
+        return None                    # un encaissement doit avoir un montant
     try:
         centimes = int(round(float(texte) * 100))
     except ValueError:
         return None
-    if centimes < 0 or centimes > 100_000_000_00:      # 0 a 1 milliard d'euros
+    if centimes <= 0 or centimes > 100_000_000_00:     # 0 a 1 milliard d'euros
         return None
     return centimes
+
+
+def _siret_normalise(brut: str):
+    """Code SIRET facultatif : renvoie (siret, siren, erreur).
+
+    Accepte un SIRET (14 chiffres) ou un SIREN (9 chiffres), avec ou sans espaces.
+    Vide : aucun rattachement, l'encaissement est simplement sans entreprise.
+    """
+    texte = re.sub(r"[\s.\u202f\u00a0-]", "", brut or "")
+    if not texte:
+        return "", None, None
+    if not texte.isdigit():
+        return None, None, "siret"
+    if len(texte) == 14:
+        return texte, texte[:9], None
+    if len(texte) == 9:
+        return texte, texte, None
+    return None, None, "siret"
 
 
 def _quand_encaissement(date_brute: str, heure_brute: str = ""):
     """Assemble la date et l'heure saisies en 'AAAA-MM-JJTHH:MM' (heure de Paris).
 
     Accepte aussi un champ `datetime-local` complet dans `date_brute`, et une date
-    seule (l'heure vaut alors 00:00). Renvoie (valeur, erreur).
+    seule : l'heure vaut alors 12:00, comme annonce sur le formulaire. Renvoie
+    (valeur, erreur).
     """
     date_txt = (date_brute or "").strip()
     heure_txt = (heure_brute or "").strip()
     if not date_txt and not heure_txt:
-        return None, None                     # aucune date : l'encaissement est date du jour
+        return None, "date"                  # la date est necessaire au graphique
     if "T" in date_txt:                       # <input type="datetime-local">
         date_txt, _, heure_dans_date = date_txt.partition("T")
         heure_txt = heure_txt or heure_dans_date
@@ -735,7 +759,7 @@ def _quand_encaissement(date_brute: str, heure_brute: str = ""):
         datetime.strptime(date_txt, "%Y-%m-%d")
     except ValueError:
         return None, "date"
-    heure_txt = (heure_txt or "00:00").strip()[:5]
+    heure_txt = (heure_txt or "12:00").strip()[:5]
     if not re.fullmatch(r"\d{2}:\d{2}", heure_txt):
         return None, "date"
     try:
@@ -745,38 +769,17 @@ def _quand_encaissement(date_brute: str, heure_brute: str = ""):
     return f"{date_txt}T{heure_txt}", None
 
 
-def _enregistre_encaissement(siren: str, montant_brut: str, date_brute: str,
-                             heure_brute: str = "", redirection=None):
-    """Enregistre le benefice d'une entreprise suivie. Renvoie la redirection."""
-    redirection = redirection or url_for("views.portefeuille", montant="ok")
-    if not re.fullmatch(r"\d{9}", siren or ""):
-        return redirect(url_avec_jeton(url_for("views.portefeuille", montant_erreur="siren")))
-    if not db.one("SELECT id FROM tracked WHERE siren = ?", (siren,)):
-        return redirect(url_avec_jeton(url_for("views.portefeuille", montant_erreur="absent")))
-
-    centimes = _montant_en_centimes(montant_brut)
-    if centimes is None:
-        return redirect(url_avec_jeton(url_for("views.portefeuille", montant_erreur="montant")))
-    quand, erreur = _quand_encaissement(date_brute, heure_brute)
-    if erreur:
-        return redirect(url_avec_jeton(url_for("views.portefeuille", montant_erreur=erreur)))
-
-    db.execute("UPDATE tracked SET montant_cents = ?, signe_le = ? WHERE siren = ?",
-               (centimes, quand, siren))
-    current_app.logger.info("Benefice de %s enregistre par %s : %s centimes (%s)",
-                            siren, session.get("username"), centimes, quand or "sans date")
-    return redirect(url_avec_jeton(redirection))
-
-
-@bp.route("/portefeuille/montant", methods=["POST"])
-@login_required
-def portefeuille_montant():
-    """Enregistre (ou efface) le benefice encaisse pour une entreprise suivie."""
-    return _enregistre_encaissement(
-        (request.form.get("siren") or "").strip(),
-        request.form.get("montant") or "",
-        request.form.get("signe_le") or "",
-        request.form.get("heure") or "")
+def _nom_pour_siren(siren) -> str:
+    """Nom de l'entreprise suivie portant ce SIREN, sinon chaine vide."""
+    if not siren:
+        return ""
+    ligne = db.one("SELECT snapshot FROM tracked WHERE siren = ?", (siren,))
+    if not ligne:
+        return ""
+    try:
+        return (json.loads(ligne["snapshot"] or "{}") or {}).get("nom") or ""
+    except ValueError:
+        return ""
 
 
 # --------------------------------------------------------------------------
@@ -839,9 +842,8 @@ def _rendu_staff(etat: str, q: str, compte_erreur=None, compte_succes=False, val
     portefeuille = None
     if est_admin():
         portefeuille = []
-        for r in db.query("SELECT siren, snapshot, status, added_by, added_at,"
-                          " montant_cents, signe_le FROM tracked"
-                          " ORDER BY added_at DESC LIMIT 200"):
+        for r in db.query("SELECT siren, snapshot, status, added_by, added_at"
+                          " FROM tracked ORDER BY added_at DESC LIMIT 200"):
             try:
                 snap = json.loads(r["snapshot"] or "{}")
             except ValueError:
@@ -853,8 +855,6 @@ def _rendu_staff(etat: str, q: str, compte_erreur=None, compte_succes=False, val
                 "statut": r["status"],
                 "ajoute_par": r["added_by"],
                 "ajoute_le": r["added_at"],
-                "montant_cents": r["montant_cents"],
-                "signe_le": r["signe_le"],
             })
 
     demo = (request.values.get("demo") == "1"
@@ -895,6 +895,35 @@ def staff():
     )
 
 
+def _enregistre_encaissement(siret_ou_siren: str, montant_brut: str, date_brute: str,
+                             heure_brute: str = "", redirection=None):
+    """Enregistre un encaissement dans la table `benefices` (panel staff).
+
+    Le code SIRET est facultatif : sans lui, l'encaissement est enregistre sans
+    rattachement a une entreprise suivie.
+    """
+    siret, siren, erreur = _siret_normalise(siret_ou_siren)
+    if erreur:
+        return redirect(url_avec_jeton(url_for("views.staff", pf_erreur=erreur)))
+    centimes = _montant_en_centimes(montant_brut)
+    if centimes is None:
+        return redirect(url_avec_jeton(url_for("views.staff", pf_erreur="montant")))
+    quand, erreur = _quand_encaissement(date_brute, heure_brute)
+    if erreur:
+        return redirect(url_avec_jeton(url_for("views.staff", pf_erreur=erreur)))
+
+    db.execute(
+        "INSERT INTO benefices (siret, siren, libelle, montant_cents, encaisse_le,"
+        " encaisse_par, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (siret, siren, _nom_pour_siren(siren), centimes, quand,
+         session.get("username") or "?", db.now_iso()))
+    current_app.logger.info(
+        "Encaissement de %s centimes enregistre par %s (siret=%r, le %s)",
+        centimes, session.get("username"), siret or "-", quand)
+    return redirect(url_avec_jeton(
+        redirection or url_for("views.staff", pf="montant")))
+
+
 @bp.route("/staff/portefeuille", methods=["POST"])
 @admin_required
 def staff_portefeuille():
@@ -918,13 +947,6 @@ def staff_portefeuille():
                                 siren, session.get("username"))
         return redirect(retour({"pf": "retire"}))
 
-    if action == "benefice":
-        # Meme enregistrement que depuis le portefeuille, mais reste sur le panel.
-        return _enregistre_encaissement(
-            siren, request.form.get("montant") or "", request.form.get("signe_le") or "",
-            request.form.get("heure") or "",
-            redirection=url_for("views.staff", etat=etat, q=q or None, pf="montant"))
-
     if action != "ajouter":
         return redirect(retour({"pf_erreur": "action"}))
 
@@ -932,10 +954,8 @@ def staff_portefeuille():
         return redirect(retour({"pf_erreur": "deja"}))
 
     # Jamais de fiche inventee : API officielle, sinon instantane deja connu
-    # (masquage, portefeuille). Le jeu de demonstration ne sert que s'il est
-    # explicitement demande sur la page du panel.
-    # Le jeu de demonstration ne sert que s'il a ete demande explicitement sur le
-    # panel (le formulaire transmet l'information), et l'ajout est alors annonce.
+    # (masquage, portefeuille). Le jeu de demonstration ne sert que s'il a ete
+    # demande explicitement sur le panel (le formulaire transmet l'information).
     demo = (request.values.get("demo") == "1"
             and bool(current_app.config["DEMO_ALLOWED"]))
     entreprise, source = _entreprise_complete(siren, demo_autorise=demo)
@@ -951,6 +971,43 @@ def staff_portefeuille():
     current_app.logger.info("Portefeuille : %s (%s) ajoute par %s",
                             siren, source, session.get("username"))
     return redirect(retour({"pf": "ajoute", "demo": "1" if source == "demo" else None}))
+
+
+@bp.route("/staff/benefice", methods=["POST"])
+@admin_required
+def staff_benefice():
+    """Enregistre un encaissement : code SIRET facultatif, montant, date et heure."""
+    etat = _etat_staff(request.form.get("etat"))
+    q = (request.form.get("q") or "").strip()
+    return _enregistre_encaissement(
+        request.form.get("siret") or "",
+        request.form.get("montant") or "",
+        request.form.get("signe_le") or "",
+        request.form.get("heure") or "",
+        redirection=url_for("views.staff", etat=etat, q=q or None, pf="montant"))
+
+
+@bp.route("/staff/benefice/supprimer", methods=["POST"])
+@admin_required
+def staff_benefice_supprimer():
+    """Supprime un encaissement enregistre par erreur."""
+    etat = _etat_staff(request.form.get("etat"))
+    q = (request.form.get("q") or "").strip()
+    try:
+        identifiant = int(request.form.get("id") or 0)
+    except ValueError:
+        identifiant = 0
+    ligne = db.one("SELECT montant_cents, libelle, siret FROM benefices WHERE id = ?",
+                   (identifiant,))
+    if not ligne:
+        return redirect(url_avec_jeton(url_for("views.staff", etat=etat, q=q or None,
+                                               pf_erreur="absent")))
+    db.execute("DELETE FROM benefices WHERE id = ?", (identifiant,))
+    current_app.logger.info(
+        "Encaissement supprime par %s : %s centimes (%s)",
+        session.get("username"), ligne["montant_cents"], ligne["libelle"] or ligne["siret"])
+    return redirect(url_avec_jeton(
+        url_for("views.staff", etat=etat, q=q or None, pf="supprime")))
 
 
 @bp.route("/staff/comptes", methods=["POST"])

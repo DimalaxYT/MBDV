@@ -1110,14 +1110,13 @@ body.login { background: var(--paper); }
   .topbar, .content { padding-left: 26px; padding-right: 26px; }
 }
 @media (max-width: 900px) {
-  /* Barre laterale compacte : les icones restent visibles et chaque element
-     s'elargit (68 -> 234 px) au survol ou au clavier, en meme temps que le fond
-     du panneau glisse. L'element garde sa boite complete : le surlignage couvre
-     donc TOUTE la ligne, libelle compris (avant, le libelle etait positionne hors
-     du flux, donc la boite s'arretait a l'icone et la moitie du texte n'etait pas
-     surlignee).
-     Comme la barre est en position fixe, cet elargissement ne recalcule pas la
-     mise en page de la page : il ne concerne que la barre. */
+  /* Barre laterale compacte.
+     La barre s'elargit ELLE-MEME (68 -> 234 px) au survol ou au clavier, avec
+     `overflow: hidden` : les libelles restent donc dans le flux et le surlignage
+     couvre toute la ligne, sans jamais depasser du panneau (c'etait le cas quand
+     les libelles etaient hors du flux et les lignes elargies a la main).
+     Elle est en position fixe : cet elargissement ne recalcule pas la mise en
+     page de la page, et les icones restent visibles en permanence. */
   .sidebar {
     position: fixed;
     left: 0;
@@ -1126,54 +1125,32 @@ body.login { background: var(--paper); }
     width: 68px;
     flex: 0 0 68px;
     padding: 20px 10px 16px;
-    overflow: visible;
+    overflow: hidden;
     z-index: 60;
+    transition: width 0.24s cubic-bezier(0.22, 0.7, 0.3, 1),
+                padding 0.24s cubic-bezier(0.22, 0.7, 0.3, 1),
+                box-shadow 0.24s ease;
   }
-  /* Fond du panneau : glisse depuis la gauche, dessine derriere le contenu. */
-  .sidebar::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
+  .sidebar:hover, .sidebar:focus-within {
     width: 234px;
-    background: var(--side);
-    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.45);
-    transform: translateX(-100%);
-    transition: transform 0.26s cubic-bezier(0.22, 0.7, 0.3, 1);
-    z-index: -1;
+    flex-basis: 234px;
+    padding: 22px 14px 18px;
+    box-shadow: var(--shadow-3);
   }
-  .sidebar:hover::before, .sidebar:focus-within::before { transform: none; }
-
   .main { margin-left: 68px; }
 
-  /* Les lignes s'elargissent avec le panneau : la boite suit le texte. */
-  .brand, .nav-item, .user-card {
-    width: 68px;
-    overflow: hidden;
-    transition: width 0.26s cubic-bezier(0.22, 0.7, 0.3, 1);
-  }
-  .brand { justify-content: center; gap: 0; padding: 2px 0 18px; }
-  .nav-item span, .brand-text, .user-meta { white-space: nowrap; }
-  .nav-item { padding: 9px 10px; }
-  .user-card { padding: 10px 8px 4px; margin-top: 14px; gap: 8px; }
-  .nav-label { padding-left: 4px; padding-right: 0; }
-
-  .sidebar:hover .brand, .sidebar:hover .nav-item, .sidebar:hover .user-card,
-  .sidebar:focus-within .brand, .sidebar:focus-within .nav-item,
-  .sidebar:focus-within .user-card { width: 234px; }
-  .sidebar:hover .brand, .sidebar:focus-within .brand {
-    justify-content: flex-start;
-    gap: 11px;
-    padding: 2px 10px 18px;
-  }
+  /* Icone centree dans la bande visible quand la barre est repliee. */
+  .nav-item { padding: 9px 16px; }
+  .brand { padding: 2px 6px 18px; }
+  .user-card { padding: 10px 6px 4px; }
   .sidebar:hover .nav-item, .sidebar:focus-within .nav-item { padding: 9px 12px; }
+  .sidebar:hover .brand, .sidebar:focus-within .brand { padding: 2px 10px 18px; }
   .sidebar:hover .user-card, .sidebar:focus-within .user-card { padding: 12px 10px 4px; }
 
-  /* Libelles : reveles en fondu, un peu apres le debut du glissement a
-     l'ouverture, et effaces tout de suite a la fermeture (sinon le texte reste
-     visible une fois le panneau referme). */
+  /* Libelles : dans le flux, coupes proprement quand la barre est repliee (le
+     `overflow: hidden` de la barre s'en charge) et reveles en fondu a l'ouverture. */
   .brand-text, .nav-label, .nav-item span, .user-meta {
+    white-space: nowrap;
     opacity: 0;
     transition: opacity 0.12s ease;
   }
@@ -1246,6 +1223,36 @@ body.login { background: var(--paper); }
 .benefice-card-label { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
 .benefice-card-note { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 .benefice-vide { margin-top: 14px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+/* Formulaire d'encaissement du panel staff. */
+.benefice-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 18px 0 4px;
+  padding: 16px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.benefice-form .field { margin-bottom: 0; }
+.benefice-form .field:nth-child(3) { min-width: 150px; }
+.benefice-form .field:nth-child(4) { min-width: 110px; }
+.benefice-form .field:first-of-type { flex: 1 1 200px; }
+.benefice-form select, .benefice-form input { width: 100%; }
+.benefice-form .btn { height: 40px; }
+.label-note { font-weight: 500; color: var(--faint); font-size: 11.5px; text-transform: none; }
+.benefice-liste { margin-top: 18px; }
+.pf-encaissement { display: flex; align-items: center; gap: 6px; }
+.pf-form .input-montant, .pf-encaissement .input-montant { width: 76px; }
+.montant-vu-fort {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ok-text);
+  font-variant-numeric: tabular-nums;
+}
 
 /* Formulaire d'encaissement : visible en haut du benefice, sans chercher. */
 .encaissement-form {

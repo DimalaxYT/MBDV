@@ -6,26 +6,15 @@
 
 {% block content %}
 
-{% if montant_ok %}
-<div class="banner banner-ok">
-  {{ icon('check', 15) }} <span>Bénéfice enregistré. Le graphique et les totaux sont à jour.</span>
-</div>
-{% endif %}
-{% if montant_erreur %}
-<div class="banner banner-error">
-  {{ icon('alert', 15) }} <span>
-    {% if montant_erreur == 'date' %}Date invalide : utilisez le sélecteur de date.
-    {% elif montant_erreur == 'absent' %}Cette entreprise n'est plus dans le portefeuille.
-    {% else %}Montant invalide : indiquez un nombre positif (exemple&nbsp;: 4500).{% endif %}
-  </span>
-</div>
-{% endif %}
-
 <section class="benefice-panel panel">
   <header class="benefice-head">
     <div>
       <h2 class="panel-title">{{ icon('trend-up', 17) }} Bénéfice</h2>
-      <p class="panel-lede">Montants encaissés sur les entreprises suivies, mois par mois.</p>
+      <p class="panel-lede">
+        Montants encaissés sur les entreprises suivies, mois par mois.
+        {% if benefice_gere_au_staff %}La saisie se fait dans le
+        <a href="/staff">panel staff</a>, section Bénéfice.{% endif %}
+      </p>
     </div>
     <p class="benefice-total">
       <span class="benefice-value">{{ benefice.total_cents|euros }}</span>
@@ -37,7 +26,7 @@
     <div class="benefice-card">
       <span class="benefice-card-value">{{ benefice.clients }}</span>
       <span class="benefice-card-label">Clients signés</span>
-      <span class="benefice-card-note">{{ benefice.payants }} avec un montant renseigné</span>
+      <span class="benefice-card-note">{{ benefice.nombre }} encaissement(s) enregistré(s)</span>
     </div>
     <div class="benefice-card">
       <span class="benefice-card-value">{{ benefice.panier_cents|euros }}</span>
@@ -50,41 +39,6 @@
       <span class="benefice-card-note">total des {{ benefice.serie|length }} derniers mois ci-dessous</span>
     </div>
   </div>
-
-  {% if items %}
-  <form class="encaissement-form" method="post" action="/portefeuille/montant" data-chargement>
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <div class="field">
-      <label for="enc-entreprise">Entreprise encaissée</label>
-      <select id="enc-entreprise" name="siren" required>
-        {% for c in items %}
-        <option value="{{ c.siren }}" {% if c.montant_cents %}data-montant="{{ c.montant_cents // 100 }}"
-                data-quand="{{ (c.signe_le or '')[:16] }}" {% endif %}>{{ c.nom }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="field field-montant">
-      <label for="enc-montant">Montant encaissé (€)</label>
-      <input id="enc-montant" type="number" name="montant" min="0" step="0.01"
-             placeholder="4500" required>
-    </div>
-    <div class="field">
-      <label for="enc-date">Date</label>
-      <input id="enc-date" type="date" name="signe_le" required>
-    </div>
-    <div class="field field-heure">
-      <label for="enc-heure">Heure</label>
-      <input id="enc-heure" type="time" name="heure" value="12:00" required>
-    </div>
-    <button type="submit" class="btn btn-ink btn-tall">
-      {{ icon('wallet', 15) }} Enregistrer
-    </button>
-  </form>
-  <p class="form-note encaissement-note">
-    Le montant remplace celui déjà enregistré pour cette entreprise (0 pour l'effacer).
-    La date et l'heure servent au graphique ci-dessous.
-  </p>
-  {% endif %}
 
   {% if benefice.maximum_cents %}
   <figure class="graph">
@@ -143,7 +97,7 @@
           <th>Site web</th>
           <th>Statut commercial</th>
           <th>Ajoutée</th>
-          <th class="col-benefice">Bénéfice gagné <span class="th-note">(€ — date, heure)</span></th>
+          <th class="col-benefice">Bénéfice gagné <span class="th-note">(géré au panel staff)</span></th>
           <th class="col-actions"></th>
         </tr>
       </thead>
@@ -177,26 +131,15 @@
             <span class="row-sub">par {{ c.added_by }}</span>
           </td>
           <td class="col-benefice">
-            <form class="montant-form" method="post" action="/portefeuille/montant" data-chargement>
-              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-              <input type="hidden" name="siren" value="{{ c.siren }}">
-              <input class="input-montant" type="number" name="montant" min="0" step="50"
-                     value="{{ (c.montant_cents // 100) if c.montant_cents else '' }}"
-                     placeholder="0" aria-label="Montant encaissé en euros pour {{ c.nom }}">
-              <input class="input-date" type="date" name="signe_le"
-                     value="{{ (c.signe_le or '')[:10] }}"
-                     aria-label="Date du paiement pour {{ c.nom }}">
-              <input class="input-heure" type="time" name="heure"
-                     value="{{ (c.signe_le or '')[11:16] or '12:00' }}"
-                     aria-label="Heure du paiement pour {{ c.nom }}">
-              <button class="btn btn-ghost btn-sm" type="submit"
-                      title="Enregistrer le bénéfice">{{ icon('check', 14) }}</button>
-            </form>
-            <span class="row-sub montant-vu">
-              {% if c.montant_cents %}Encaissé : {{ c.montant_cents|euros }}
-              {% if c.signe_le %} le {{ c.signe_le|moment }}{% endif %}
-              {% else %}Aucun montant enregistré{% endif %}
-            </span>
+            {% set encaisse = benefice.par_siren.get(c.siren) %}
+            {% if encaisse %}
+            <span class="montant-vu-fort">{{ encaisse.cents|euros }}</span>
+            {% if encaisse.dernier %}
+            <span class="row-sub">le {{ encaisse.dernier|moment }}</span>
+            {% endif %}
+            {% else %}
+            <span class="dash">&mdash;</span>
+            {% endif %}
           </td>
           <td class="col-actions">
             <div class="row-actions">

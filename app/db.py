@@ -1,5 +1,6 @@
 """Acces SQLite : schema, connexions par requete, comptes utilisateurs."""
 import hashlib
+import json
 import os
 import secrets
 import sqlite3
@@ -43,6 +44,17 @@ CREATE TABLE IF NOT EXISTS hides (
     hidden_at   TEXT NOT NULL,
     restored_at TEXT,
     restored_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS benefices (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    siret         TEXT NOT NULL DEFAULT '',   -- facultatif : SIRET (14) ou SIREN (9)
+    siren         TEXT,                       -- 9 premiers chiffres, pour le rattachement
+    libelle       TEXT NOT NULL DEFAULT '',   -- nom de l'entreprise si elle est connue
+    montant_cents INTEGER NOT NULL,
+    encaisse_le   TEXT NOT NULL,              -- AAAA-MM-JJTHH:MM (heure de Paris)
+    encaisse_par  TEXT NOT NULL,
+    created_at    TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS tracked (
@@ -95,6 +107,43 @@ def close_db(_exc=None) -> None:
         conn.close()
 
 
+def _migration_benefices(conn) -> None:
+    """Table `benefices` : source unique des encaissements.
+
+    Les montants deja enregistres sur les entreprises suivies y sont reportes une
+    seule fois, pour ne rien perdre. Le portefeuille ne fait plus que les afficher ;
+    c'est le panel staff qui les saisit.
+    """
+    conn.executescript("""CREATE TABLE IF NOT EXISTS benefices (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    siret         TEXT NOT NULL DEFAULT '',   -- facultatif : SIRET (14) ou SIREN (9)
+    siren         TEXT,                       -- 9 premiers chiffres, pour le rattachement
+    libelle       TEXT NOT NULL DEFAULT '',   -- nom de l'entreprise si elle est connue
+    montant_cents INTEGER NOT NULL,
+    encaisse_le   TEXT NOT NULL,              -- AAAA-MM-JJTHH:MM (heure de Paris)
+    encaisse_par  TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+);
+
+""")
+    if conn.execute("SELECT 1 FROM benefices LIMIT 1").fetchone():
+        return
+    lignes = conn.execute(
+        "SELECT siren, snapshot, montant_cents, signe_le, added_by, added_at"
+        " FROM tracked WHERE montant_cents > 0").fetchall()
+    for ligne in lignes:
+        try:
+            nom = (json.loads(ligne["snapshot"] or "{}") or {}).get("nom") or ""
+        except (ValueError, TypeError):
+            nom = ""
+        quand = (ligne["signe_le"] or "")[:16] or (ligne["added_at"] or now_iso())[:16]
+        conn.execute(
+            "INSERT INTO benefices (siret, siren, libelle, montant_cents, encaisse_le,"
+            " encaisse_par, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("", ligne["siren"], nom, ligne["montant_cents"], quand,
+             ligne["added_by"] or "?", now_iso()))
+
+
 def _migration_tracked(conn) -> None:
     """Ajoute les colonnes du benefice aux bases creees avant leur introduction."""
     colonnes = {ligne["name"] for ligne in conn.execute("PRAGMA table_info(tracked)")}
@@ -127,6 +176,7 @@ def init_app(app) -> None:
         conn.executescript(SCHEMA)
         _migration_role(conn)
         _migration_tracked(conn)
+        _migration_benefices(conn)
         conn.commit()
     finally:
         conn.close()
