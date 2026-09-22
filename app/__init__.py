@@ -76,6 +76,9 @@ def create_app() -> Flask:
         # Jeu de demonstration (entreprises fictives) : jamais utilise par defaut,
         # seulement sur demande explicite (?demo=1) et si cette option est active.
         DEMO_ALLOWED=_env_flag("MBDV_DEMO"),
+        # Apercu : ouvrir la session du dirigeant sans mot de passe, pour juger
+        # l'affichage sans repasser par le formulaire. Ignore hors apercu embarque.
+        DEJA_CONNECTE=_env_flag("MBDV_DEJA_CONNECTE"),
         # Nom affiche du site (l'association reste signee MBDV). Modifiable sans
         # toucher au code : MBDV_SITE_NAME="Autre nom".
         SITE_NAME=(os.environ.get("MBDV_SITE_NAME") or "Balise").strip(),

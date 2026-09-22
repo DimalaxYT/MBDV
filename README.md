@@ -158,6 +158,13 @@ expiree ou requete non autorisee ». Deux solutions :
    appels AJAX par `static/js/app.js`. Les pages sont alors servies avec
    `Referrer-Policy: same-origin` et `Cache-Control: no-store`.
 
+Pour un apercu ou l'on veut juger l'affichage sans ressaisir de mot de passe,
+`MBDV_DEJA_CONNECTE=1` ouvre la session du dirigeant au premier chargement (la
+racine redirige vers `/accueil`). Ce reglage n'est pris en compte qu'avec
+`MBDV_EMBEDDED_SESSION=1`, c'est-a-dire en apercu : sur un site normal, la page
+de connexion reste exigee, et la page `/connexion` reste servie dans tous les
+cas.
+
 Dans les deux cas, un refus d'ecriture est journalise avec le contexte de la
 requete (mode apercu, cookie recu ou non, en-tetes `Sec-Fetch-*`) pour identifier
 la cause en une ligne.

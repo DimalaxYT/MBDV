@@ -247,8 +247,41 @@ def admin_required(view):
     return wrapped
 
 
+_PAGES_SANS_CONNEXION_AUTO = ("/connexion", "/deconnexion", "/static/")
+
+
+def _apercu_deja_connecte() -> None:
+    """Apercu embarque : ouvre la session du dirigeant sans passer par le formulaire.
+
+    Uniquement avec MBDV_DEJA_CONNECTE=1 *et* en mode apercu (session dans l'URL) :
+    c'est le reglage du bac a sable, jamais celui d'un vrai deploiement. La page de
+    connexion reste servie normalement, donc l'ecran d'entree reste consultable.
+    """
+    if not current_app.config.get("DEJA_CONNECTE") or not embarque():
+        return None
+    if current_user() is not None or request.method != "GET":
+        return None
+    chemin = request.path or "/"
+    if chemin.startswith("/api/") or chemin.startswith(_PAGES_SANS_CONNEXION_AUTO):
+        return None
+    from . import db
+    compte = db.one("SELECT * FROM users"
+                    " ORDER BY CASE WHEN role = 'admin' THEN 0 ELSE 1 END, id LIMIT 1")
+    if compte is None:
+        return None
+    login(compte, rester_connecte=True)
+    current_app.logger.warning(
+        "Apercu : session ouverte sans mot de passe pour %s (MBDV_DEJA_CONNECTE=1)",
+        compte["username"])
+    if chemin == "/":
+        # Meme atterrissage qu'une connexion reussie : l'accueil, pas la recherche.
+        return redirect(url_avec_jeton(url_for("views.accueil")))
+    return None
+
+
 def init_app(app) -> None:
     app.before_request(_charge_session)
+    app.before_request(_apercu_deja_connecte)
 
     @app.before_request
     def _csrf_guard():

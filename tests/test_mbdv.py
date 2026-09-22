@@ -314,6 +314,57 @@ def test_apercu_embarque_jeton_invalide_ignore(app_embarque):
     assert reponse.status_code == 302   # pas de session ouverte -> redirection
 
 
+@pytest.fixture()
+def app_deja_connecte(tmp_path, monkeypatch):
+    """Apercu embarque avec MBDV_DEJA_CONNECTE=1 : session ouverte sans formulaire."""
+    monkeypatch.setenv("MBDV_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MBDV_EMBEDDED_SESSION", "1")
+    monkeypatch.setenv("MBDV_DEJA_CONNECTE", "1")
+    monkeypatch.setattr(detect, "_resout", lambda host: False)
+    _api_officielle_indisponible(monkeypatch)
+    auth._RATE.clear()
+    application = create_app()
+    application.config.update(TESTING=True)
+    return application
+
+
+def test_apercu_deja_connecte_sans_identifiants(app_deja_connecte):
+    """La racine ouvre la session du dirigeant et atterrit sur l'accueil."""
+    vierge = app_deja_connecte.test_client()          # aucun cookie, aucun jeton
+    reponse = vierge.get("/")
+    assert reponse.status_code == 302
+    cible = reponse.headers["Location"]
+    assert cible.startswith("/accueil") and "_s=" in cible
+
+    page = vierge.get(cible)
+    corps = page.get_data(as_text=True)
+    assert page.status_code == 200
+    assert 'action="/deconnexion"' in corps         # deja connecte, sans mot de passe
+    assert 'name="password"' not in corps           # plus de formulaire de connexion
+
+    # Les ecritures reservees au dirigeant restent possibles (onglet Comptes).
+    assert "Dirigeant" in vierge.get("/staff").get_data(as_text=True)
+
+
+def test_apercu_deja_connecte_absent_par_defaut(app_embarque):
+    """Sans MBDV_DEJA_CONNECTE, l'apercu embarque redemande bien la connexion."""
+    vierge = app_embarque.test_client()
+    assert vierge.get("/").status_code == 302
+    assert "/connexion" in vierge.get("/").headers["Location"]
+    assert 'action="/deconnexion"' not in vierge.get("/connexion").get_data(as_text=True)
+
+
+def test_apercu_deja_connecte_ignore_hors_apercu(app, monkeypatch):
+    """Meme avec la variable, un site normal garde son formulaire de connexion."""
+    monkeypatch.setenv("MBDV_DEJA_CONNECTE", "1")
+    application = create_app()
+    application.config.update(TESTING=True)
+    client = application.test_client()
+    reponse = client.get("/")
+    assert reponse.status_code == 302
+    assert "/connexion" in reponse.headers["Location"]
+
+
 def test_apercu_embarque_en_tetes_de_reponse(app_embarque):
     client = app_embarque.test_client()
     reponse = client.get("/connexion")
