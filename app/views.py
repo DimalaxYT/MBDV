@@ -671,6 +671,289 @@ def benefice_du_portefeuille():
     }
 
 
+# --------------------------------------------------------------------------
+# Tableau de bord d'equipe : qui travaille quoi, et quels appels passer
+# --------------------------------------------------------------------------
+
+# Un client signe ou une affaire classee n'a plus besoin d'appel.
+STATUTS_SANS_APPEL = {"client", "sans_suite"}
+
+
+def _maintenant() -> datetime:
+    """Heure de Paris : les dates de suivi sont locales, comme celles du benefice."""
+    return datetime.now(PARIS_TZ)
+
+
+def _jour_lisible(valeur: str) -> str:
+    """'2026-09-25' -> '25/09/2026' (les dates de suivi sont deja locales)."""
+    texte = (valeur or "")[:10]
+    if len(texte) == 10 and texte[4] == "-":
+        return f"{texte[8:10]}/{texte[5:7]}/{texte[:4]}"
+    return texte or "-"
+
+
+def _heure_de_paris(horodatage: str) -> str:
+    """'2026-09-22T17:30:00Z' -> '22/09/2026 a 19:30' (heure de Paris)."""
+    if not horodatage:
+        return "-"
+    try:
+        quand = datetime.strptime(horodatage, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return str(horodatage)
+    return quand.astimezone(PARIS_TZ).strftime("%d/%m/%Y à %H:%M")
+
+
+def _etiquette_urgence(relance_le: str, aujourd_hui: str, appele_le: str) -> tuple[str, str]:
+    """Classe un appel a passer : renvoie (code, libelle).
+
+    Le retard d'abord (c'est ce qu'on regarde en premier le matin), puis
+    aujourd'hui, puis les relances a venir ; sans date, l'entreprise reste a
+    appeler des que possible.
+    """
+    if relance_le:
+        if relance_le < aujourd_hui:
+            jours = (datetime.strptime(aujourd_hui, "%Y-%m-%d")
+                     - datetime.strptime(relance_le, "%Y-%m-%d")).days
+            return "en_retard", f"En retard de {jours} jour(s)"
+        if relance_le == aujourd_hui:
+            return "aujourd_hui", "À appeler aujourd’hui"
+        return "relance", f"Relance le {_jour_lisible(relance_le)}"
+    if appele_le:
+        return "relance", "Déjà appelée — à relancer"
+    return "a_faire", "À appeler"
+
+
+def _libelle_prise(pris_par: str, pris_le: str) -> str:
+    """« Personne pour l'instant », « Prise par vous le ... », « Prise par X »."""
+    if not pris_par:
+        return "Personne pour l’instant"
+    moi = (current_user() or {}).get("username")
+    qui = "vous" if pris_par == moi else pris_par
+    if pris_le:
+        return f"Prise par {qui} le {_heure_de_paris(pris_le)}"
+    return f"Prise par {qui}"
+
+
+def _libelle_appels(c: dict) -> str:
+    """Historique lisible : nombre d'appels, dernier appel, prochain appel."""
+    if not c["appels"]:
+        return "Aucun appel enregistré"
+    morceaux = [f"{c['appels']} appel(s)"]
+    if c["appele_le"]:
+        fin = f" (par {c['appele_par']})" if c["appele_par"] else ""
+        morceaux.append(f"dernier le {_jour_lisible(c['appele_le'])}{fin}")
+    if c["relance_le"]:
+        morceaux.append(f"prochain le {_jour_lisible(c['relance_le'])}")
+    return " · ".join(morceaux)
+
+
+def _suivi_de_l_entreprise(ligne, aujourd_hui: str) -> dict:
+    """Une entreprise suivie, avec son dossier et l'etat de son appel."""
+    try:
+        c = json.loads(ligne["snapshot"] or "{}")
+    except ValueError:
+        c = {}
+    c["siren"] = ligne["siren"]
+    c["nom"] = c.get("nom") or ligne["siren"]
+    c["site"] = detect.etat_effectif(c) or {"status": "inconnu", "domain": None,
+                                            "source": "dns", "checked_at": None}
+    c["tracked"] = True
+    c["statut"] = ligne["status"]
+    c["statut_label"] = dict(STATUTS_PIPELINE).get(ligne["status"], ligne["status"])
+    c["added_by"] = ligne["added_by"]
+    c["added_at"] = ligne["added_at"]
+    c["pris_par"] = ligne["pris_par"] or ""
+    c["pris_le"] = ligne["pris_le"] or ""
+    c["pris_label"] = _libelle_prise(c["pris_par"], c["pris_le"])
+    c["appele_le"] = ligne["appele_le"] or ""
+    c["appele_par"] = ligne["appele_par"] or ""
+    c["appels"] = int(ligne["appels"] or 0)
+    c["relance_le"] = ligne["relance_le"] or ""
+    c["note"] = ligne["note"] or ""
+    c["historique"] = _libelle_appels(c)
+    c["masquee"] = bool(db.one("SELECT id FROM hides WHERE siren = ? AND restored_at IS NULL",
+                               (ligne["siren"],)))
+    c["urgence"], c["urgence_label"] = _etiquette_urgence(
+        c["relance_le"], aujourd_hui, c["appele_le"])
+    # Cle de tri : le retard d'abord, puis aujourd'hui, puis les relances datees.
+    c["ordre"] = {"en_retard": 0, "aujourd_hui": 1}.get(c["urgence"], 2)
+    return c
+
+
+def _equipe_et_charge(membres, entreprises) -> list[dict]:
+    """Cartes de l'equipe : ce que chacun travaille et les appels de la semaine."""
+    debut_semaine = (_maintenant() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M")
+    moi = (current_user() or {}).get("username")
+    cartes = []
+    for m in membres:
+        miennes = [c for c in entreprises if c["pris_par"] == m["username"]]
+        appels_7j = [c for c in entreprises
+                     if c["appele_par"] == m["username"] and c["appele_le"] >= debut_semaine]
+        cartes.append({
+            "username": m["username"],
+            "nom": m["display_name"] or m["username"],
+            "moi": m["username"] == moi,
+            "initiales": (m["display_name"] or m["username"])[:1].upper(),
+            "role_label": "Dirigeant" if (m["role"] or "") == "admin" else "Associé",
+            "prises": len(miennes),
+            "appels_7j": len(appels_7j),
+            "en_retard": len([c for c in miennes if c["urgence"] == "en_retard"]),
+            "liste": miennes,
+        })
+    return cartes
+
+
+def _donnees_de_suivi() -> dict:
+    """Tout le tableau de bord : file d'appels classee, charge de chacun, compteurs."""
+    aujourd_hui = _maintenant().strftime("%Y-%m-%d")
+    lignes = db.query("SELECT * FROM tracked ORDER BY added_at DESC")
+    entreprises = [_suivi_de_l_entreprise(ligne, aujourd_hui) for ligne in lignes]
+
+    membres = [dict(r) for r in db.query(
+        "SELECT username, display_name, role FROM users ORDER BY id")]
+    equipe = _equipe_et_charge(membres, entreprises)
+
+    # File d'appels : tout ce qui n'est ni client ni sans suite. Une entreprise
+    # masquee disparait de la file (elle ne sera pas appelee), mais reste dans
+    # « Qui travaille quoi » tant que quelqu'un s'en occupe.
+    a_appeler = [c for c in entreprises
+                 if c["statut"] not in STATUTS_SANS_APPEL and not c["masquee"]]
+    a_appeler.sort(key=lambda c: (c["ordre"], c["relance_le"] or "9999-99-99",
+                                  c["added_at"] or ""))
+    return {
+        "appels": a_appeler,
+        "sans_referent": [c for c in a_appeler if not c["pris_par"]],
+        "entreprises": entreprises,
+        "equipe": equipe,
+        "aujourd_hui": aujourd_hui,
+        "compteurs": {
+            "en_retard": len([c for c in a_appeler if c["urgence"] == "en_retard"]),
+            "aujourd_hui": len([c for c in a_appeler if c["urgence"] == "aujourd_hui"]),
+            "reste": len([c for c in a_appeler if c["urgence"] in {"a_faire", "relance"}]),
+            "personne": len([c for c in a_appeler if not c["pris_par"]]),
+        },
+    }
+
+
+@bp.route("/suivi")
+@login_required
+def suivi():
+    """Tableau de bord d'equipe : appels a passer et repartition du travail."""
+    return render_template(
+        "suivi.html",
+        page_id="suivi",
+        titre="Tableau de bord d'équipe",
+        sous_titre="Qui travaille quelle entreprise, et quels appels restent à passer",
+        **_donnees_de_suivi(),
+    )
+
+
+def _entreprise_suivie(siren: str):
+    """Ligne `tracked` de ce SIREN, ou None : ces actions ne visent que le portefeuille."""
+    if not re.fullmatch(r"\d{9}", siren or ""):
+        return None
+    return db.one("SELECT * FROM tracked WHERE siren = ?", (siren,))
+
+
+def _etat_pour_js(siren: str) -> dict:
+    """Etat renvoye au navigateur : des libelles deja calcules, rien a recomposer."""
+    ligne = db.one("SELECT * FROM tracked WHERE siren = ?", (siren,))
+    c = _suivi_de_l_entreprise(ligne, _maintenant().strftime("%Y-%m-%d"))
+    return {
+        "ok": True,
+        "siren": c["siren"],
+        "pris_par": c["pris_par"],
+        "pris_label": c["pris_label"],
+        "prise_par_moi": c["pris_par"] == (current_user() or {}).get("username"),
+        "statut": c["statut"],
+        "statut_label": c["statut_label"],
+        "urgence": c["urgence"],
+        "urgence_label": c["urgence_label"],
+        "appels": c["appels"],
+        "historique": c["historique"],
+        "note": c["note"],
+        "badge_html": _badge_site(c),
+    }
+
+
+@bp.route("/api/suivi/prendre", methods=["POST"])
+@login_required
+def api_suivi_prendre():
+    """Prendre en charge une entreprise, ou la laisser a l'equipe."""
+    d = _json()
+    siren = str(d.get("siren") or "")
+    ligne = _entreprise_suivie(siren)
+    if not ligne:
+        return jsonify({"ok": False, "error": "Entreprise non suivie."}), 404
+
+    prendre = d.get("prendre")
+    prendre = True if prendre is None else bool(prendre)
+    moi = current_user()["username"]
+    if prendre:
+        db.execute("UPDATE tracked SET pris_par = ?, pris_le = ? WHERE siren = ?",
+                   (moi, db.now_iso(), siren))
+        current_app.logger.info("Suivi : %s prend %s", moi, siren)
+    else:
+        autre = ligne["pris_par"] and ligne["pris_par"] != moi
+        if autre and not est_admin():
+            return jsonify({"ok": False,
+                            "error": f"Cette entreprise est déjà suivie par {ligne['pris_par']}."}), 409
+        db.execute("UPDATE tracked SET pris_par = '', pris_le = NULL WHERE siren = ?", (siren,))
+        current_app.logger.info("Suivi : %s laisse %s a l'equipe", moi, siren)
+    return jsonify(_etat_pour_js(siren))
+
+
+@bp.route("/api/suivi/appel", methods=["POST"])
+@login_required
+def api_suivi_appel():
+    """Enregistre un appel passe : compte rendu, statut et prochain appel."""
+    d = _json()
+    siren = str(d.get("siren") or "")
+    ligne = _entreprise_suivie(siren)
+    if not ligne:
+        return jsonify({"ok": False, "error": "Entreprise non suivie."}), 404
+
+    relance = str(d.get("relance_le") or "").strip()
+    if relance:
+        try:
+            datetime.strptime(relance, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"ok": False,
+                            "error": "Date de relance invalide (attendu AAAA-MM-JJ)."}), 400
+    note = str(d.get("note") or "").strip()[:2000]
+
+    moi = current_user()["username"]
+    maintenant = _maintenant()
+    # Un appel passe fait avancer le statut commercial, sans jamais reculer :
+    # une entreprise deja en discussion ou signee n'est pas ramenee a « Contacté ».
+    statut = "contacte" if ligne["status"] == "a_contacter" else ligne["status"]
+    db.execute(
+        "UPDATE tracked SET appels = appels + 1, appele_le = ?, appele_par = ?,"
+        " relance_le = ?, note = ?, status = ?, status_updated_by = ?, status_updated_at = ?,"
+        " pris_par = CASE WHEN pris_par = '' OR pris_par IS NULL THEN ? ELSE pris_par END,"
+        " pris_le = CASE WHEN pris_par = '' OR pris_par IS NULL THEN ? ELSE pris_le END"
+        " WHERE siren = ?",
+        (maintenant.strftime("%Y-%m-%dT%H:%M"), moi, relance, note, statut, moi,
+         db.now_iso(), moi, db.now_iso(), siren),
+    )
+    current_app.logger.info("Suivi : appel de %s enregistre par %s (relance %r)",
+                            siren, moi, relance)
+    return jsonify(_etat_pour_js(siren))
+
+
+@bp.route("/api/suivi/note", methods=["POST"])
+@login_required
+def api_suivi_note():
+    """Note d'equipe sur une entreprise suivie (sans compter d'appel)."""
+    d = _json()
+    siren = str(d.get("siren") or "")
+    if not _entreprise_suivie(siren):
+        return jsonify({"ok": False, "error": "Entreprise non suivie."}), 404
+    db.execute("UPDATE tracked SET note = ? WHERE siren = ?",
+               (str(d.get("note") or "").strip()[:2000], siren))
+    return jsonify(_etat_pour_js(siren))
+
+
 @bp.route("/portefeuille")
 @login_required
 def portefeuille():

@@ -720,7 +720,7 @@ def test_pictogrammes_visibles_en_barre_reduite(client):
     # et les pictogrammes sont bien presents dans chaque entree de la barre
     connexion(client)
     page = client.get("/accueil").get_data(as_text=True)
-    for libelle in ("Accueil", "Recherche", "Portefeuille", "Panel staff"):
+    for libelle in ("Accueil", "Recherche", "Portefeuille", "Suivi d'équipe", "Panel staff"):
         assert re.search(r'class="nav-item[^"]*"[^>]*>\s*<svg class="icon"[^>]*>.*?</svg>\s*<span>'
                          + re.escape(libelle) + "</span>", page, re.S), libelle
 
@@ -1637,3 +1637,252 @@ def test_mot_de_passe_change(app, client):
     assert connexion(client, password="NouveauMotDePasse1").status_code == 302
     # l'ancien mot de passe ne fonctionne plus (client neuf : le premier est connecte)
     assert connexion(app.test_client(), password="MBDV-admin-2026").status_code == 200
+
+
+def _aujourd_hui_paris() -> str:
+    """Date du jour a Paris : c'est elle qui classe les retards et les relances."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d")
+
+# --------------------------------------------------------------------------
+# Suivi d'equipe : qui travaille quoi, et quels appels passer
+# --------------------------------------------------------------------------
+
+def _suivie(client, siren, nom, statut="a_contacter", **champs):
+    """Ajoute une entreprise au portefeuille, comme le fait l'API /api/suivre."""
+    colonnes = {"siren": siren, "snapshot": json.dumps(entreprise(siren, nom)),
+                "status": statut, "added_by": "admin", "added_at": "2026-01-01T00:00:00Z"}
+    colonnes.update(champs)
+    noms = ", ".join(colonnes)
+    marques = ", ".join("?" for _ in colonnes)
+    with base(client) as b:
+        # Colonnes litterales du test, valeurs parametrees : aucune donnee externe ici.
+        requete = f"INSERT INTO tracked ({noms}) VALUES ({marques})"  # noqa: S608
+        b.execute(requete, tuple(colonnes.values()))
+
+
+def _suivi_json(client, url, corps, entete=None):
+    return client.post(url, json=corps,
+                       headers=entete or {"X-CSRF-Token": jeton(client, "/suivi")})
+
+
+def test_suivi_protege_par_la_connexion(client):
+    assert client.get("/suivi").status_code == 302
+    assert "/connexion" in client.get("/suivi").headers["Location"]
+
+
+def test_suivi_reunit_le_dossier_de_chaque_appel(client):
+    """Chaque appel a passer arrive avec son dossier complet, pret a etre appele."""
+    connexion(client)
+    _suivie(client, "111111111", "Alpha Coiffure", "a_contacter")
+    _suivie(client, "222222222", "Beta Menuiserie", "client")          # plus d'appel
+    _suivie(client, "333333333", "Gamma Toiture", "sans_suite")        # classe
+    page = client.get("/suivi").get_data(as_text=True)
+
+    assert "Tableau de bord d'équipe" in page
+    assert "Alpha Coiffure" in page
+    assert "Beta Menuiserie" not in page        # cliente : rien a appeler
+    assert "Gamma Toiture" not in page          # classee : rien a appeler
+    # dossier : identite, activite, localisation, effectif, dirigeant, site, liens
+    for attendu in ("111111111", "Coiffure", "Alpha Coiffure",
+                    "Effectif", "Dirigeant", "Activité", "Adresse",
+                    "annuaire-entreprises.data.gouv.fr/entreprise/111111111",
+                    "Aucun appel enregistré", "Personne pour l’instant"):
+        assert attendu in page, attendu
+    # sans note : le message d'amorcage, pas une case vide
+    assert "Aucune note d’équipe pour l’instant." in page
+    # et les trois actions sont disponibles
+    assert 'data-prendre="111111111"' in page
+    assert 'data-form="appel" data-siren="111111111"' in page
+    assert 'data-form="note" data-siren="111111111"' in page
+
+
+def test_suivi_ordonne_les_retards_en_tete(client):
+    """Retard d'abord, puis aujourd'hui, puis les relances a venir."""
+    connexion(client)
+    jour = _aujourd_hui_paris()
+    _suivie(client, "111111111", "AAAA Sans date")
+    _suivie(client, "222222222", "BBBB Relance future", relance_le="2027-01-04")
+    _suivie(client, "333333333", "CCCC En retard", relance_le="2026-01-05")
+    _suivie(client, "444444444", "DDDD Aujourd hui", relance_le=jour)
+    page = client.get("/suivi").get_data(as_text=True)
+
+    positions = [page.find(nom) for nom in
+                 ("CCCC En retard", "DDDD Aujourd hui", "BBBB Relance future", "AAAA Sans date")]
+    assert all(p > 0 for p in positions), positions
+    assert positions == sorted(positions), positions
+    assert "En retard de" in page
+    assert "À appeler aujourd’hui" in page
+
+
+def test_prise_en_charge_partagee_entre_collegues(app):
+    """Un referent a la fois : le collegue voit la prise, et lui seul peut la retirer."""
+    chef = app.test_client()
+    connexion(chef)
+    associe = app.test_client()
+    connexion(associe, username="associe", password="MBDV-associe-2026")  # noqa: S106
+    _suivie(chef, "111111111", "Alpha Coiffure")
+
+    # l'associe voit le tableau de bord (ce n'est pas une page reservee au dirigeant)
+    assert associe.get("/suivi").status_code == 200
+
+    # l'associe prend l'entreprise
+    reponse = _suivi_json(associe, "/api/suivi/prendre", {"siren": "111111111"})
+    assert reponse.status_code == 200, reponse.get_data(as_text=True)
+    etat = reponse.get_json()
+    assert etat["pris_par"] == "associe" and etat["prise_par_moi"] is True
+    assert etat["pris_label"].startswith("Prise par vous")
+    with base(chef) as b:
+        assert b.one("SELECT pris_par FROM tracked WHERE siren = ?",
+                     ("111111111",))["pris_par"] == "associe"
+
+    # le dirigeant voit de qui il s'agit, et peut la reprendre pour lui
+    page = chef.get("/suivi").get_data(as_text=True)
+    assert "Prise par associe" in page
+    etat = _suivi_json(chef, "/api/suivi/prendre", {"siren": "111111111"}).get_json()
+    assert etat["pris_par"] == "admin" and "vous" in etat["pris_label"]
+
+    # un associe ne peut pas retirer la prise d'un autre
+    refus = _suivi_json(associe, "/api/suivi/prendre",
+                        {"siren": "111111111", "prendre": False})
+    assert refus.status_code == 409
+    assert "admin" in refus.get_json()["error"]
+
+    # le dirigeant, si : l'entreprise repart dans la file commune
+    laisse = _suivi_json(chef, "/api/suivi/prendre", {"siren": "111111111", "prendre": False})
+    assert laisse.status_code == 200
+    assert laisse.get_json()["pris_label"] == "Personne pour l’instant"
+    with base(chef) as b:
+        ligne = b.one("SELECT pris_par, pris_le FROM tracked WHERE siren = ?", ("111111111",))
+    assert ligne["pris_par"] == "" and ligne["pris_le"] is None
+
+
+def test_appel_enregistre_avec_compte_rendu_et_relance(client):
+    """Un appel passe : compteur, date, auteur, compte rendu, prochain appel."""
+    connexion(client)
+    _suivie(client, "111111111", "Alpha Coiffure", note="numero a retrouver")
+    etat = _suivi_json(client, "/api/suivi/appel",
+                       {"siren": "111111111", "note": "Joint le gerant, devis a envoyer",
+                        "relance_le": "2026-10-05"}).get_json()
+
+    assert etat["appels"] == 1
+    assert etat["statut"] == "contacte" and etat["statut_label"] == "Contacté"
+    assert etat["note"] == "Joint le gerant, devis a envoyer"
+    assert etat["historique"].startswith("1 appel(s)")
+    assert "prochain le 05/10/2026" in etat["historique"]
+    assert etat["urgence"] == "relance" and etat["urgence_label"] == "Relance le 05/10/2026"
+    assert etat["prise_par_moi"] is True                    # l'appel attribue l'entreprise
+    assert etat["pris_label"].startswith("Prise par vous")
+    assert etat["badge_html"].startswith("<span class=\"badge")
+
+    with base(client) as b:
+        ligne = b.one("SELECT * FROM tracked WHERE siren = ?", ("111111111",))
+    assert ligne["appels"] == 1
+    assert ligne["appele_par"] == "admin"
+    assert ligne["appele_le"].startswith(_aujourd_hui_paris())
+    assert ligne["relance_le"] == "2026-10-05"
+    assert ligne["pris_par"] == "admin"
+    assert ligne["status_updated_by"] == "admin"
+
+    # deuxieme appel : le compteur continue, sans effacer le premier
+    etat = _suivi_json(client, "/api/suivi/appel", {"siren": "111111111"}).get_json()
+    assert etat["appels"] == 2
+
+
+def test_appel_ne_fait_jamais_reculer_le_statut(client):
+    """Une entreprise deja en discussion (ou cliente) n'est pas ramenee a « Contacté »."""
+    connexion(client)
+    _suivie(client, "111111111", "Alpha Coiffure", statut="discussion")
+    _suivie(client, "222222222", "Beta Menuiserie", statut="client")
+    _suivi_json(client, "/api/suivi/appel", {"siren": "111111111"})
+    _suivi_json(client, "/api/suivi/appel", {"siren": "222222222"})
+    with base(client) as b:
+        statuts = {r["siren"]: r["status"] for r in b.query("SELECT siren, status FROM tracked")}
+    assert statuts == {"111111111": "discussion", "222222222": "client"}
+
+
+def test_suivi_refuse_les_saisies_invalides(client):
+    """Relance illisible, entreprise inconnue : rien n'est enregistre."""
+    connexion(client)
+    _suivie(client, "111111111", "Alpha Coiffure")
+    entete = {"X-CSRF-Token": jeton(client, "/suivi")}
+
+    for mauvaise in ("demain", "2026-13-45", "05/10/2026"):
+        reponse = client.post("/api/suivi/appel", json={"siren": "111111111",
+                                                        "relance_le": mauvaise}, headers=entete)
+        assert reponse.status_code == 400, mauvaise
+    # le retrait d'une prise sur une entreprise non suivie est refuse aussi
+    assert client.post("/api/suivi/prendre", json={"siren": "999999999"},
+                       headers=entete).status_code == 404
+    assert client.post("/api/suivi/note", json={"siren": "999999999"},
+                       headers=entete).status_code == 404
+    with base(client) as b:
+        ligne = b.one("SELECT appels, relance_le FROM tracked WHERE siren = ?", ("111111111",))
+    assert ligne["appels"] == 0 and ligne["relance_le"] is None
+
+
+def test_note_d_equipe_sans_appel(client):
+    """La note se modifie sans compter d'appel ni changer le statut."""
+    connexion(client)
+    _suivie(client, "111111111", "Alpha Coiffure")
+    etat = _suivi_json(client, "/api/suivi/note",
+                       {"siren": "111111111", "note": "Telephone : 02 40 00 00 00"}).get_json()
+    assert etat["note"] == "Telephone : 02 40 00 00 00"
+    assert etat["appels"] == 0
+    assert etat["historique"] == "Aucun appel enregistré"
+    assert etat["statut"] == "a_contacter"
+    page = client.get("/suivi").get_data(as_text=True)
+    assert "Telephone : 02 40 00 00 00" in page
+    # la note reste modifiable et suit le compte rendu du prochain appel
+    etat = _suivi_json(client, "/api/suivi/appel",
+                       {"siren": "111111111", "note": "Joint le gerant"}).get_json()
+    assert etat["note"] == "Joint le gerant"
+
+
+def test_suivi_masque_les_entreprises_masquees(client):
+    """Une entreprise masquee quitte la file d'appels, mais reste dans « qui travaille quoi »."""
+    connexion(client)
+    _suivie(client, "111111111", "Alpha Coiffure", pris_par="admin", pris_le="2026-01-02T09:00:00Z")
+    _suivie(client, "222222222", "Beta Menuiserie")
+    with base(client) as b:
+        b.execute("INSERT INTO hides (siren, nom, raison, details, hidden_by, hidden_at)"
+                  " VALUES ('222222222', 'Beta Menuiserie', 'Doublon', '', 'admin',"
+                  " '2026-01-03T09:00:00Z')")
+    page = client.get("/suivi").get_data(as_text=True)
+    assert "Alpha Coiffure" in page and "Beta Menuiserie" not in page
+    assert "Qui travaille quoi" in page
+
+
+def test_migration_des_colonnes_de_suivi(tmp_path, monkeypatch):
+    """Une base ancienne gagne les colonnes du suivi sans perdre ses entreprises."""
+    monkeypatch.setenv("MBDV_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(detect, "_resout", lambda host: False)
+    _api_officielle_indisponible(monkeypatch)
+    dossier = tmp_path / "data"
+    dossier.mkdir(parents=True)
+    ancienne = sqlite3.connect(dossier / "mbdv.sqlite3")
+    ancienne.executescript("""
+        CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
+            display_name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL);
+        CREATE TABLE tracked (id INTEGER PRIMARY KEY AUTOINCREMENT, siren TEXT UNIQUE NOT NULL,
+            snapshot TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'a_contacter',
+            note TEXT NOT NULL DEFAULT '', added_by TEXT NOT NULL, added_at TEXT NOT NULL,
+            status_updated_by TEXT, status_updated_at TEXT);
+        INSERT INTO tracked (siren, snapshot, status, added_by, added_at)
+            VALUES ('111111111', '{"siren": "111111111", "nom": "Alpha"}', 'contacte',
+                    'admin', '2026-01-01T00:00:00Z');
+    """)
+    ancienne.commit()
+    ancienne.close()
+
+    application = create_app()
+    application.config.update(TESTING=True)
+    with application.app_context():
+        colonnes = {ligne["name"] for ligne in db.query("PRAGMA table_info(tracked)")}
+        for nom in ("pris_par", "pris_le", "appele_le", "appele_par", "appels", "relance_le"):
+            assert nom in colonnes, nom
+        ligne = db.one("SELECT * FROM tracked WHERE siren = ?", ("111111111",))
+        assert ligne["status"] == "contacte"          # rien n'est perdu
+        assert ligne["pris_par"] == "" and ligne["appels"] == 0
+        assert ligne["relance_le"] is None

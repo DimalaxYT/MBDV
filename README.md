@@ -94,7 +94,34 @@ entreprises masquees ; l'option "inclure les entreprises masquees" les remontre.
 
 Ajoutez des entreprises au portefeuille (icône marque-page) pour suivre le
 cycle commercial : a contacter, contacte, en discussion, devis envoye, client,
-sans suite.
+sans suite. Le portefeuille est un tableau de lecture : il affiche le statut, la
+couleur du site detecte et le benefice gagne (saisi au panel staff).
+
+### Tableau de bord d'equipe (`/suivi`)
+
+Page commune aux deux associes, pour ne pas appeler la meme entreprise en meme
+temps : chaque entreprise suivie n'a qu'**un referent a la fois**.
+
+- **Appels a passer**, du plus urgent au moins urgent : retards d'abord, puis
+  les appels du jour, puis les relances a venir. Les clients signes, les affaires
+  classees et les entreprises masquees sortent de la file.
+- Chaque ligne est un **dossier pret a appeler** : identite (SIREN, enseigne),
+  activite, adresse, effectif, date de creation, dirigeant, etat du site web,
+  liens annuaire officiel / domaine / carte, note d'equipe et historique des
+  appels. Le bouton « Fiche complete » ouvre le dossier detaille.
+- **« Je m'en occupe »** attribue l'entreprise (le collegue voit qui s'en
+  occupe, seul le referent ou le dirigeant peut la rendre a l'equipe).
+- **« Appel passé »** enregistre le compte rendu, la date et l'heure de l'appel,
+  le prochain appel a passer, fait passer le statut de « A contacter » a
+  « Contacte » (jamais l'inverse) et attribue l'entreprise si elle etait libre.
+- **Note d'equipe** modifiable sans compter d'appel.
+- Cartes d'equipe en tete : entreprises travaillees et appels passes sur 7 jours
+  par chacun, plus le nombre d'entreprises sans referent.
+
+Actions JSON : `POST /api/suivi/prendre` (`siren`, `prendre`),
+`POST /api/suivi/appel` (`siren`, `note`, `relance_le`) et
+`POST /api/suivi/note` (`siren`, `note`). Le serveur renvoie les libelles deja
+calcules, le navigateur se contente de les afficher.
 
 ## Donnees locales
 
@@ -193,7 +220,7 @@ app/
   demo_data.py          jeu de demonstration (reseau filtre uniquement)
   icons.py              icones SVG inline
   views.py              routes recherche / fiche / portefeuille / staff / API
-  templates/            Jinja2 (base, connexion, recherche, staff, portefeuille)
+  templates/            Jinja2 (base, connexion, recherche, staff, portefeuille, suivi)
   static/               CSS, JS, polices auto-hebergees (Fraunces, Archivo, Plex Mono)
 tests/                  tests pytest (application, securite, detection, export)
 pyproject.toml          configuration ruff + pytest
@@ -207,10 +234,12 @@ pyproject.toml          configuration ruff + pytest
   cycle commercial alimentees par le portefeuille, guide en quatre gestes, detail des
   etapes et points de vigilance. Apparitions au defilement et compteurs animes
   (desactives si `prefers-reduced-motion`).
-- **Barre laterale toujours visible** : elle ne s'escamote plus, les etiquettes de
-  navigation restent affichees des 900 px de large. Sur ecrans plus etroits, la
-  barre glisse (`transform`, aucune mise en page recalculee) : seules les icones
-  depassent, et le survol ou le clavier la fait sortir instantanement.
+- **Barre laterale toujours visible** : les etiquettes de navigation restent
+  affichees des 900 px de large. Sur ecrans plus etroits, la barre ne fait plus que
+  68 px de large (`overflow: hidden`) et **s'elargit elle-meme** a 234 px au survol
+  ou au clavier, les libelles apparaissant en fondu. Les pictogrammes gardent leur
+  taille (`flex: 0 0 auto`) : ils ne sont jamais ecrases par le libelle, et le
+  surlignage de l'onglet actif reste dans le panneau (trait `inset`).
 - **Vraie transition entre les pages** : transition native du navigateur
   (`@view-transition`, la page sortante et la page entrante s'enchainent en fondu
   glissant, la barre latérale et l'en-tête ne bougent pas), avec un repli anime
@@ -221,14 +250,15 @@ pyproject.toml          configuration ruff + pytest
   10,4 Ko, JS 22,7 Ko -> 6,3 Ko) et le CSS/JS versionne est garde par le
   navigateur (`?v=<empreinte>`, un an) : une page suivante ne coute plus que
   quelques kilo-octets.
-- **Bénéfice** : chaque entreprise suivie porte un montant encaissé avec sa **date et
-  son heure**. On le renseigne à trois endroits : le formulaire « Enregistrer un
-  encaissement » en haut du portefeuille (choix de l'entreprise, montant, date, heure),
-  la colonne « Bénéfice gagné » du tableau, ou directement dans le panel staff sur la
-  ligne de l'entreprise. Montants stockés en centimes, heure en heure de Paris. Le
-  portefeuille affiche le total, les clients signés, le panier moyen, le mois en
-  cours et un graphique des 12 derniers mois (barres + courbe de cumul, en SVG,
-  sans dépendance).
+- **Bénéfice géré au panel staff** : la section « Bénéfice » du panel staff
+  enregistre un encaissement (montant, date, heure ; 12:00 par défaut) avec un
+  **code SIRET facultatif** (14 chiffres, ou 9 pour un SIREN) qui le rattache à
+  l'entreprise suivie ; un encaissement peut être supprimé d'un clic. Montants
+  stockés en centimes dans la table `benefices`, heure de Paris ; les montants
+  déjà saisis sur les entreprises suivies y sont reportés une seule fois au
+  démarrage. Le portefeuille affiche le total encaissé, les clients signés, le
+  panier moyen, le mois en cours et un graphique des 12 derniers mois (barres +
+  courbe de cumul, en SVG, sans dépendance).
 - **Portefeuille géré depuis le panel staff** (dirigeant) : ajout par SIREN et
   retrait d'un clic. L'ajout ne récupère la fiche que par l'API officielle ou un
   instantané déjà connu ; le jeu fictif n'est utilisé que si `?demo=1` a été

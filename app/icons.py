@@ -16,6 +16,11 @@ _ICONS = {
     "logout": ('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>'
                '<path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>'),
     "x": '<path d="M18 6L6 18"/><path d="M6 6l12 12"/>',
+    # Suivi d'equipe : appels a passer et prise en charge.
+    "phone": ('<path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 6.5 6.5L17 13l4 1.5v3'
+              'a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 3 5.2 2 2 0 0 1 5 3z"/>'),
+    "edit": ('<path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16z"/>'
+             '<path d="M13.5 6.5l4 4"/>'),
     "pin": ('<path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>'
             '<circle cx="12" cy="10" r="3"/>'),
     "building": ('<rect x="4" y="3" width="16" height="18" rx="1"/>'

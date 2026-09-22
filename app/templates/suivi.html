@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block titre_page %}Suivi d'équipe - {{ site_name }} Prospection{% endblock %}
+{% block titre %}Tableau de bord d'équipe{% endblock %}
+{% block sous_titre %}{{ sous_titre }}{% endblock %}
+
+{% block content %}
+
+{# Dossier d'appel : chaque entreprise a besoin d'un appel, et se presente avec
+   toutes ses informations (identite, activite, site web, contacts, historique)
+   pour pouvoir etre appelee sans ouvrir d'autre page. #}
+
+<section class="panel equipe-panel">
+  <header class="equipe-head">
+    <div>
+      <h2 class="panel-title">{{ icon('users', 17) }} L'équipe en un coup d'œil</h2>
+      <p class="panel-lede">
+        Une entreprise n'a qu'<strong>un seul référent à la fois</strong> : dès que
+        l'un la prend, l'autre voit qui s'en occupe. Les appels déjà passés sont
+        conservés avec leur compte rendu.
+      </p>
+    </div>
+    <ul class="equipe-compteurs">
+      <li class="{% if compteurs.en_retard %}is-alerte{% endif %}">
+        <span class="compteur-valeur">{{ compteurs.en_retard }}</span>
+        <span class="compteur-label">en retard</span>
+      </li>
+      <li>
+        <span class="compteur-valeur">{{ compteurs.aujourd_hui }}</span>
+        <span class="compteur-label">aujourd'hui</span>
+      </li>
+      <li>
+        <span class="compteur-valeur">{{ compteurs.reste }}</span>
+        <span class="compteur-label">à appeler ensuite</span>
+      </li>
+      <li>
+        <span class="compteur-valeur">{{ compteurs.personne }}</span>
+        <span class="compteur-label">sans référent</span>
+      </li>
+    </ul>
+  </header>
+
+  <div class="equipe-cards">
+    {% for m in equipe %}
+    <article class="equipe-card {% if m.moi %}is-moi{% endif %}">
+      <span class="avatar">{{ m.initiales }}</span>
+      <div class="equipe-card-corps">
+        <p class="equipe-nom">
+          {{ m.nom }}
+          {% if m.nom|lower != m.role_label|lower %}<span class="pill pill-role">{{ m.role_label }}</span>{% endif %}
+          {% if m.moi %}<span class="pill">vous</span>{% endif %}
+        </p>
+        <p class="equipe-charge">
+          <strong>{{ m.prises }}</strong> entreprise(s) travaillée(s) ·
+          <strong>{{ m.appels_7j }}</strong> appel(s) cette semaine
+          {% if m.en_retard %} · <span class="text-danger">{{ m.en_retard }} en retard</span>{% endif %}
+        </p>
+        {% if m.liste %}
+        <p class="equipe-en-cours">
+          {% for c in m.liste[:4] %}<span class="jeton">{{ c.nom }}</span>{% endfor %}
+          {% if m.liste|length > 4 %}<span class="jeton jeton-plus">+{{ m.liste|length - 4 }}</span>{% endif %}
+        </p>
+        {% else %}
+        <p class="row-sub">Aucune entreprise prise en charge pour l'instant.</p>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="suivi-grid">
+
+  <section class="panel suivi-appels">
+    <header class="suivi-tete">
+      <h2 class="panel-title">{{ icon('phone', 17) }} Appels à passer ({{ appels|length }})</h2>
+      <p class="panel-lede">
+        Du plus urgent au moins urgent : retards, appels du jour, puis relances
+        à venir. Les clients signés et les affaires classées n'apparaissent plus ici ;
+        l'ordre se recalcule à chaque chargement de la page.
+      </p>
+    </header>
+
+    {% if appels %}
+    {% for c in appels %}
+    <article class="appel-carte" data-siren="{{ c.siren }}" data-snapshot='{{ c|tojson }}'>
+      <header class="appel-tete">
+        <div class="appel-titre">
+          <button class="row-link" data-detail="{{ c.siren }}"
+                  title="Ouvrir la fiche complète de cette entreprise">
+            <span class="row-name">{{ c.nom }}</span>
+          </button>
+          <span class="row-sub">
+            <code class="mono">{{ c.siren }}</code>
+            {% if c.enseigne %} · {{ c.enseigne }}{% endif %}
+            {% if c.commune %} · {{ c.commune }}{% if c.code_postal %} ({{ c.code_postal }}){% endif %}{% endif %}
+          </span>
+        </div>
+        <div class="appel-marques">
+          <span class="badge u-{{ c.urgence }}" data-urgence>{{ c.urgence_label }}</span>
+          <span class="badge b-statut" data-statut>{{ c.statut_label }}</span>
+          <span class="appel-site-badge">{% include "partials/badge_site.html" %}</span>
+        </div>
+      </header>
+
+      <dl class="appel-dossier">
+        <div>
+          <dt>Activité</dt>
+          <dd>{{ c.naf_label or '-' }}
+            {% if c.naf_code %}<span class="row-sub">{{ c.naf_code }}</span>{% endif %}</dd>
+        </div>
+        <div>
+          <dt>Adresse</dt>
+          <dd>{{ c.rue or c.adresse or '-' }}</dd>
+        </div>
+        <div>
+          <dt>Effectif</dt>
+          <dd>{{ c.effectif or 'non publié' }}</dd>
+        </div>
+        <div>
+          <dt>Créée le</dt>
+          <dd>{{ c.date_creation|frdate }}{% if c.categorie %} <span class="row-sub">{{ c.categorie }}</span>{% endif %}</dd>
+        </div>
+        <div>
+          <dt>Dirigeant</dt>
+          <dd>
+            {% if c.dirigeants %}
+              {{ c.dirigeants[0].nom }}{% if c.dirigeants[0].qualite %}
+              <span class="row-sub">{{ c.dirigeants[0].qualite }}</span>{% endif %}
+            {% else %}non publié{% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Situation</dt>
+          <dd>{% if c.actif %}En activité{% else %}<span class="text-danger">Fermée</span>{% endif %}</dd>
+        </div>
+      </dl>
+
+      <p class="appel-liens">
+        <a class="chip" href="https://annuaire-entreprises.data.gouv.fr/entreprise/{{ c.siren }}"
+           target="_blank" rel="noopener">Annuaire officiel {{ icon('external', 11) }}</a>
+        {% if c.site.domain %}
+        <a class="chip" href="https://{{ c.site.domain }}" target="_blank" rel="noopener">
+          {{ c.site.domain }} {{ icon('external', 11) }}</a>
+        {% endif %}
+        {% if c.lat and c.lng %}
+        <a class="chip"
+           href="https://www.openstreetmap.org/?mlat={{ c.lat }}&mlon={{ c.lng }}#map=17/{{ c.lat }}/{{ c.lng }}"
+           target="_blank" rel="noopener">Carte {{ icon('external', 11) }}</a>
+        {% endif %}
+        <span class="chip chip-neutre">Ajoutée par {{ c.added_by }} le {{ c.added_at|dt }}</span>
+      </p>
+
+      <div class="appel-suivi">
+        <span class="appel-qui" data-qui>{{ c.pris_label }}</span>
+        <span class="appel-historique" data-historique>{{ c.historique }}</span>
+      </div>
+
+      <p class="appel-note {% if not c.note %}is-vide{% endif %}" data-note>
+        {{ c.note or "Aucune note d’équipe pour l’instant." }}
+      </p>
+
+      <footer class="appel-pied">
+        <button class="btn btn-ghost btn-sm" data-prendre="{{ c.siren }}"
+                data-mine="{{ '1' if c.pris_par == current_user.username else '0' }}">
+          {{ icon('users', 13) }}
+          <span data-prendre-label>{% if c.pris_par == current_user.username %}Laisser à l'équipe{% else %}Je m'en occupe{% endif %}</span>
+        </button>
+        <button class="btn btn-ghost btn-sm" data-detail="{{ c.siren }}">
+          {{ icon('layers', 13) }} Fiche complète
+        </button>
+
+        <details class="appel-form">
+          <summary class="btn btn-ink btn-sm">{{ icon('phone', 13) }} Appel passé</summary>
+          <form data-form="appel" data-siren="{{ c.siren }}">
+            <div class="field">
+              <label for="compte-rendu-{{ c.siren }}">Compte rendu de l'appel</label>
+              <textarea id="compte-rendu-{{ c.siren }}" name="note" rows="2"
+                        placeholder="Ce qui s'est dit, le numéro obtenu, la suite à donner…">{{ c.note }}</textarea>
+            </div>
+            <div class="field field-etroit">
+              <label for="relance-{{ c.siren }}">Prochain appel
+                <span class="label-note">(facultatif)</span></label>
+              <input id="relance-{{ c.siren }}" type="date" name="relance_le"
+                     value="{{ c.relance_le }}">
+            </div>
+            <p class="appel-form-pied">
+              <button type="submit" class="btn btn-ink btn-sm">
+                {{ icon('check', 13) }} Enregistrer l'appel</button>
+              <span class="row-sub">Le statut passe à « Contacté » et l'entreprise vous est attribuée.</span>
+            </p>
+          </form>
+        </details>
+
+        <details class="appel-form">
+          <summary class="btn btn-ghost btn-sm">{{ icon('edit', 13) }} Note</summary>
+          <form data-form="note" data-siren="{{ c.siren }}">
+            <div class="field">
+              <label for="note-seule-{{ c.siren }}">Note d'équipe (sans compter d'appel)</label>
+              <textarea id="note-seule-{{ c.siren }}" name="note" rows="2"
+                        placeholder="Numéro trouvé, horaires d'ouverture, personne à demander…">{{ c.note }}</textarea>
+            </div>
+            <p class="appel-form-pied">
+              <button type="submit" class="btn btn-ghost btn-sm">
+                {{ icon('check', 13) }} Enregistrer la note</button>
+            </p>
+          </form>
+        </details>
+      </footer>
+    </article>
+    {% endfor %}
+    {% else %}
+    <div class="empty">
+      <p class="empty-title">Aucun appel à passer</p>
+      <p class="empty-desc">Toutes les entreprises suivies sont soit clientes, soit
+      classées. Ajoutez-en au portefeuille depuis la recherche pour préparer de
+      nouveaux appels.</p>
+      <a class="btn btn-ink" href="/">{{ icon('search', 14) }} Lancer une recherche</a>
+    </div>
+    {% endif %}
+  </section>
+
+  <aside class="panel suivi-qui">
+    <h2 class="panel-title">{{ icon('briefcase', 17) }} Qui travaille quoi</h2>
+    <p class="panel-lede">Les entreprises prises en charge, par personne.</p>
+
+    {% for m in equipe %}
+    <div class="qui-bloc">
+      <p class="qui-tete">
+        <span class="avatar avatar-sm">{{ m.initiales }}</span>
+        <strong>{{ m.nom }}</strong>
+        {% if m.moi %}<span class="pill">vous</span>{% endif %}
+        <span class="row-sub">{{ m.prises }} entreprise(s)</span>
+      </p>
+      {% if m.liste %}
+      <ul class="qui-liste">
+        {% for c in m.liste %}
+        <li>
+          <button class="qui-item" data-detail="{{ c.siren }}">
+            <span class="qui-nom">{{ c.nom }}</span>
+            <span class="row-sub">{{ c.statut_label }} · {{ c.urgence_label }}</span>
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="row-sub qui-vide">Rien en cours.</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if sans_referent %}
+    <div class="qui-bloc qui-bloc-libre">
+      <p class="qui-tete">
+        {{ icon('alert', 15) }}
+        <strong>Sans référent</strong>
+        <span class="row-sub">{{ sans_referent|length }} entreprise(s)</span>
+      </p>
+      <ul class="qui-liste">
+        {% for c in sans_referent[:8] %}
+        <li>
+          <button class="qui-item" data-detail="{{ c.siren }}">
+            <span class="qui-nom">{{ c.nom }}</span>
+            <span class="row-sub">{{ c.urgence_label }}</span>
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if sans_referent|length > 8 %}
+      <p class="row-sub">… et {{ sans_referent|length - 8 }} autre(s) dans la file d'appels.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </aside>
+
+</div>
+
+{% endblock %}

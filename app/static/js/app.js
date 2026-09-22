@@ -285,6 +285,85 @@
   }
 
   // ------------------------------------------------------------------
+  // Suivi d'equipe : prise en charge, appel passe, note (page /suivi)
+  // ------------------------------------------------------------------
+  function carteDeSuivi(el) {
+    return el.closest(".appel-carte");
+  }
+
+  function appliquerEtatSuivi(carte, etat) {
+    // Le serveur renvoie tous les libelles deja calcules : le navigateur se
+    // contente de les ecrire, il ne recompose rien lui-meme.
+    if (!carte || !etat) return;
+    var qui = carte.querySelector("[data-qui]");
+    if (qui) qui.textContent = etat.pris_label;
+    var historique = carte.querySelector("[data-historique]");
+    if (historique) historique.textContent = etat.historique;
+    var note = carte.querySelector("[data-note]");
+    if (note) {
+      note.textContent = etat.note || "Aucune note d’équipe pour l’instant.";
+      note.classList.toggle("is-vide", !etat.note);
+    }
+    var urgence = carte.querySelector("[data-urgence]");
+    if (urgence) {
+      urgence.textContent = etat.urgence_label;
+      urgence.className = "badge u-" + etat.urgence;
+    }
+    var statut = carte.querySelector("[data-statut]");
+    if (statut) statut.textContent = etat.statut_label;
+    var badge = carte.querySelector("[data-site-badge]");
+    if (badge && etat.badge_html) badge.parentNode.innerHTML = etat.badge_html;
+    var bouton = carte.querySelector("[data-prendre]");
+    if (bouton) {
+      bouton.dataset.mine = etat.prise_par_moi ? "1" : "0";
+      var label = bouton.querySelector("[data-prendre-label]");
+      if (label) label.textContent = etat.prise_par_moi ? "Laisser à l'équipe" : "Je m'en occupe";
+    }
+    var zones = carte.querySelectorAll("textarea[name='note']");
+    for (var i = 0; i < zones.length; i++) zones[i].value = etat.note || "";
+  }
+
+  function actionPrendre(bouton) {
+    var carte = carteDeSuivi(bouton);
+    var prendre = bouton.dataset.mine !== "1";
+    bouton.disabled = true;
+    post("/api/suivi/prendre", { siren: bouton.getAttribute("data-prendre"), prendre: prendre })
+      .then(function (body) {
+        bouton.disabled = false;
+        if (!body.ok) { toast(body.error || "Erreur.", "error"); return; }
+        appliquerEtatSuivi(carte, body);
+        toast(prendre ? "Cette entreprise vous est attribuée" : "Entreprise laissée à l'équipe",
+              "ok");
+      });
+  }
+
+  function envoyerFormulaireSuivi(form) {
+    var carte = carteDeSuivi(form);
+    var type = form.getAttribute("data-form");
+    var zone = form.querySelector("textarea[name='note']");
+    var donnees = {
+      siren: form.getAttribute("data-siren"),
+      note: zone ? zone.value : "",
+    };
+    var url = "/api/suivi/note";
+    if (type === "appel") {
+      url = "/api/suivi/appel";
+      var champ = form.querySelector("input[name='relance_le']");
+      donnees.relance_le = champ ? champ.value : "";
+    }
+    var bouton = form.querySelector("button[type='submit']");
+    if (bouton) bouton.disabled = true;
+    post(url, donnees).then(function (body) {
+      if (bouton) bouton.disabled = false;
+      if (!body.ok) { toast(body.error || "Erreur.", "error"); return; }
+      appliquerEtatSuivi(carte, body);
+      var details = form.closest("details");
+      if (details) details.open = false;
+      toast(type === "appel" ? "Appel enregistré" : "Note d'équipe enregistrée", "ok");
+    });
+  }
+
+  // ------------------------------------------------------------------
   // Session dans l'URL (apercu embarque) : liens et formulaires
   // ------------------------------------------------------------------
   function completable(form) {
@@ -534,7 +613,7 @@
   }
 
   document.addEventListener("click", function (ev) {
-    var target = ev.target.closest("[data-detail],[data-hide],[data-follow],[data-recheck],[data-override],[data-restore],[data-close-slideover],[data-close-modal]");
+    var target = ev.target.closest("[data-detail],[data-hide],[data-follow],[data-recheck],[data-override],[data-restore],[data-prendre],[data-close-slideover],[data-close-modal]");
     if (!target) return;
 
     if (target.hasAttribute("data-close-slideover") || target.hasAttribute("data-close-modal")) {
@@ -554,6 +633,7 @@
     if (target.hasAttribute("data-recheck")) { actionRecheck(target); return; }
     if (target.hasAttribute("data-override")) { actionOverride(target); return; }
     if (target.hasAttribute("data-restore")) { actionRestore(target.getAttribute("data-restore")); return; }
+    if (target.hasAttribute("data-prendre")) { actionPrendre(target); return; }
   });
 
   // Les raisons de masquage sont transmises par la page de recherche
@@ -565,6 +645,13 @@
     if (holder) {
       try { window.MBDV_RAISONS = JSON.parse(holder.textContent); } catch (e) { /* ignore */ }
     }
+  });
+
+  document.addEventListener("submit", function (ev) {
+    var formulaire = ev.target.closest ? ev.target.closest("form[data-form]") : null;
+    if (!formulaire) return;
+    ev.preventDefault();
+    envoyerFormulaireSuivi(formulaire);
   });
 
   document.addEventListener("change", function (ev) {

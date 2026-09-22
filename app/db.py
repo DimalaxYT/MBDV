@@ -68,7 +68,14 @@ CREATE TABLE IF NOT EXISTS tracked (
     status_updated_by TEXT,
     status_updated_at TEXT,
     montant_cents     INTEGER NOT NULL DEFAULT 0,  -- benefice encaisse (en centimes)
-    signe_le          TEXT                          -- date du paiement (AAAA-MM-JJ)
+    signe_le          TEXT,                         -- date du paiement (AAAA-MM-JJ)
+    -- Suivi d'equipe : qui travaille l'entreprise et ou en est l'appel.
+    pris_par          TEXT NOT NULL DEFAULT '',     -- identifiant du collegue qui la travaille
+    pris_le           TEXT,                         -- depuis quand (ISO)
+    appele_le         TEXT,                         -- dernier appel (AAAA-MM-JJTHH:MM)
+    appele_par        TEXT,                         -- qui a passe le dernier appel
+    appels            INTEGER NOT NULL DEFAULT 0,   -- nombre d'appels passes
+    relance_le        TEXT                          -- prochain appel a passer (AAAA-MM-JJ)
 );
 """
 
@@ -153,6 +160,26 @@ def _migration_tracked(conn) -> None:
         conn.execute("ALTER TABLE tracked ADD COLUMN signe_le TEXT")
 
 
+def _migration_suivi(conn) -> None:
+    """Ajoute les colonnes du suivi d'equipe aux bases creees avant leur introduction.
+
+    Une base existante garde donc ses entreprises suivies : elles apparaissent
+    simplement comme « personne ne s'en occupe », sans appel enregistre.
+    """
+    colonnes = {ligne["name"] for ligne in conn.execute("PRAGMA table_info(tracked)")}
+    a_ajouter = (
+        ("pris_par", "TEXT NOT NULL DEFAULT ''"),
+        ("pris_le", "TEXT"),
+        ("appele_le", "TEXT"),
+        ("appele_par", "TEXT"),
+        ("appels", "INTEGER NOT NULL DEFAULT 0"),
+        ("relance_le", "TEXT"),
+    )
+    for nom, type_sql in a_ajouter:
+        if nom not in colonnes:
+            conn.execute(f"ALTER TABLE tracked ADD COLUMN {nom} {type_sql}")
+
+
 def _migration_role(conn) -> None:
     """Ajoute la colonne `role` aux bases creees avant son introduction.
 
@@ -176,6 +203,7 @@ def init_app(app) -> None:
         conn.executescript(SCHEMA)
         _migration_role(conn)
         _migration_tracked(conn)
+        _migration_suivi(conn)
         _migration_benefices(conn)
         conn.commit()
     finally:
