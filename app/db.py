@@ -75,7 +75,13 @@ CREATE TABLE IF NOT EXISTS tracked (
     appele_le         TEXT,                         -- dernier appel (AAAA-MM-JJTHH:MM)
     appele_par        TEXT,                         -- qui a passe le dernier appel
     appels            INTEGER NOT NULL DEFAULT 0,   -- nombre d'appels passes
-    relance_le        TEXT                          -- prochain appel a passer (AAAA-MM-JJ)
+    relance_le        TEXT,                         -- prochain appel a passer (AAAA-MM-JJ)
+    -- Livrables : ce qu'on a produit pour cette entreprise.
+    url_vitrine       TEXT NOT NULL DEFAULT '',     -- URL de la vitrine (lien a ouvrir)
+    dossier_site      TEXT NOT NULL DEFAULT '',     -- dossier du site (chemin ou lien)
+    zip_lien          TEXT NOT NULL DEFAULT '',     -- archive .zip deposee ailleurs (lien)
+    zip_nom           TEXT NOT NULL DEFAULT '',     -- nom du .zip televerse (fichier local)
+    livrables_maj_le  TEXT                          -- derniere mise a jour des livrables (ISO)
 );
 """
 
@@ -180,6 +186,18 @@ def _migration_suivi(conn) -> None:
             conn.execute(f"ALTER TABLE tracked ADD COLUMN {nom} {type_sql}")
 
 
+def _migration_livrables(conn) -> None:
+    """Ajoute les colonnes des livrables aux bases creees avant leur introduction."""
+    colonnes = {ligne["name"] for ligne in conn.execute("PRAGMA table_info(tracked)")}
+    for nom, type_sql in (("url_vitrine", "TEXT NOT NULL DEFAULT ''"),
+                          ("dossier_site", "TEXT NOT NULL DEFAULT ''"),
+                          ("zip_lien", "TEXT NOT NULL DEFAULT ''"),
+                          ("zip_nom", "TEXT NOT NULL DEFAULT ''"),
+                          ("livrables_maj_le", "TEXT")):
+        if nom not in colonnes:
+            conn.execute(f"ALTER TABLE tracked ADD COLUMN {nom} {type_sql}")
+
+
 def _migration_role(conn) -> None:
     """Ajoute la colonne `role` aux bases creees avant son introduction.
 
@@ -204,6 +222,7 @@ def init_app(app) -> None:
         _migration_role(conn)
         _migration_tracked(conn)
         _migration_suivi(conn)
+        _migration_livrables(conn)
         _migration_benefices(conn)
         conn.commit()
     finally:

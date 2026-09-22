@@ -3,7 +3,9 @@
 Aucun acces reseau : l'API officielle et les resolutions DNS sont remplacees par
 des doubles de test, ce qui rend la suite rapide et deterministe.
 """
+import io
 import json
+import os
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -12,7 +14,7 @@ from html.parser import HTMLParser
 import pytest
 import requests
 
-from app import auth, create_app, db, detect, gov_api
+from app import auth, create_app, db, detect, gov_api, views
 
 # --------------------------------------------------------------------------
 # Garde-fou reseau : la suite doit rester entierement hors ligne.
@@ -1901,3 +1903,234 @@ def test_migration_des_colonnes_de_suivi(tmp_path, monkeypatch):
         assert ligne["status"] == "contacte"          # rien n'est perdu
         assert ligne["pris_par"] == "" and ligne["appels"] == 0
         assert ligne["relance_le"] is None
+# --------------------------------------------------------------------------
+# Repertoire : ajouter une entreprise, ranger ses livrables
+# --------------------------------------------------------------------------
+
+def test_repertoire_vide_invite_a_ajouter(client):
+    """Sans entreprise suivie : un message clair et le bouton d'ajout, rien de fictif."""
+    connexion(client)
+    page = client.get("/suivi").get_data(as_text=True)
+    assert "Le répertoire est vide" in page
+    assert page.count("data-ajouter") == 2          # en-tete et etat vide
+    assert "Ajouter une entreprise" in page
+    assert "COIFFURE" not in page.upper()            # aucune entreprise inventee
+    # l'etat vide explique ce qu'on pourra ranger : dossier, .zip, vitrine
+    assert "dossier du site" in page and ".zip" in page and "URL de la vitrine" in page
+    assert "table" not in page.split("</section>")[0][-200:]   # aucune ligne fantome
+
+    # des qu'une entreprise existe, la colonne des livrables apparait, vide au depart
+    _suivie(client, "111111111", "Alpha Coiffure")
+    page = client.get("/suivi").get_data(as_text=True)
+    assert "Livrables" in page
+    assert '<td class="col-livrables" data-livrables-cellule>' in page
+    assert 'data-livrables="111111111"' in page
+    assert "Ajouter les livrables" in page        # l'invite, tant qu'il n'y a rien
+
+
+def test_annuaire_cherche_dans_la_base_officielle(client, monkeypatch):
+    """La recherche d'ajout interroge l'API officielle et signale ce qui est deja suivi."""
+    connexion(client)
+    monkeypatch.setattr(gov_api, "search", faux_search(
+        lambda page: [entreprise("111111111", "Alpha Coiffure"),
+                      entreprise("222222222", "Beta Menuiserie")]))
+    _suivie(client, "222222222", "Beta Menuiserie")
+
+    reponse = client.get("/api/annuaire?q=coiffure")
+    assert reponse.status_code == 200
+    corps = reponse.get_json()
+    assert corps["ok"] is True and len(corps["resultats"]) == 2
+    par_siren = {r["siren"]: r for r in corps["resultats"]}
+    assert par_siren["111111111"]["deja"] is False
+    assert par_siren["222222222"]["deja"] is True       # deja dans le repertoire
+    # la fiche reprise sert a reconnaitre l'entreprise sans l'ouvrir
+    for champ in ("nom", "commune", "naf_label", "effectif", "adresse"):
+        assert champ in par_siren["111111111"], champ
+
+    # recherche trop courte : refusee, rien n'est interroge
+    assert client.get("/api/annuaire?q=a").status_code == 400
+    assert client.get("/api/annuaire").status_code == 400
+
+
+def test_annuaire_signale_la_base_indisponible(client, monkeypatch):
+    """Base officielle injoignable : on le dit, et la saisie manuelle est proposee."""
+    connexion(client)
+
+    def echoue(**kwargs):
+        raise gov_api.ApiError("injoignable")
+
+    monkeypatch.setattr(gov_api, "search", echoue)
+    corps = client.get("/api/annuaire?q=coiffure").get_json()
+    assert corps["ok"] is False and corps["indisponible"] is True
+    assert "à la main" in corps["error"]
+
+
+def test_ajout_au_repertoire_par_siren(client, monkeypatch):
+    """Ajouter par SIREN reprend la fiche officielle et attribue la ligne a l'agent."""
+    connexion(client)
+    monkeypatch.setattr(gov_api, "fetch_by_siren",
+                        lambda siren: entreprise(siren, "Alpha Coiffure"))
+    reponse = _suivi_json(client, "/api/suivi/ajouter", {"siren": "111111111"})
+    assert reponse.status_code == 200, reponse.get_data(as_text=True)
+    etat = reponse.get_json()
+    assert etat["ok"] is True and etat["prise_par_moi"] is True     # je m'en occupe
+    assert etat["statut"] == "a_contacter"
+    assert etat["pris_label"].startswith("Prise par vous")
+    with base(client) as b:
+        ligne = b.one("SELECT * FROM tracked WHERE siren = ?", ("111111111",))
+    assert ligne["pris_par"] == "admin"
+    assert json.loads(ligne["snapshot"])["nom"] == "Alpha Coiffure"
+
+    # la ligne apparait dans le repertoire, avec sa cellule de livrables vide
+    page = client.get("/suivi").get_data(as_text=True)
+    assert "Alpha Coiffure" in page
+    assert 'data-livrables="111111111"' in page
+    assert "En attente d'appel (1)" in page
+    # ajouter deux fois la meme entreprise est refuse
+    assert _suivi_json(client, "/api/suivi/ajouter",
+                       {"siren": "111111111"}).status_code == 409
+
+
+def test_ajout_manuel_si_la_base_ne_repond_pas(client):
+    """Sans fiche officielle : le nom saisi suffit, et rien d'autre n'est invente."""
+    connexion(client)                                # API doublee en echec par la fixture
+    # sans nom : refus, avec un message qui explique quoi faire
+    reponse = _suivi_json(client, "/api/suivi/ajouter", {"siren": "333333333"})
+    assert reponse.status_code == 400
+    assert "indiquez au moins son nom" in reponse.get_json()["error"]
+
+    reponse = _suivi_json(client, "/api/suivi/ajouter",
+                          {"siren": "333 333 333", "nom": "Gamma Toiture",
+                           "commune": "Nantes", "activite": "Couverture"})
+    assert reponse.status_code == 200
+    with base(client) as b:
+        fichier = json.loads(b.one("SELECT snapshot FROM tracked WHERE siren = ?",
+                                   ("333333333",))["snapshot"])
+    assert fichier["nom"] == "Gamma Toiture"
+    assert fichier["commune"] == "Nantes" and fichier["naf_label"] == "Couverture"
+    assert fichier["source"] == "saisie"             # provenance affichee, pas de faux
+    # SIREN invalide : refuse
+    assert _suivi_json(client, "/api/suivi/ajouter",
+                       {"siren": "12", "nom": "X"}).status_code == 400
+
+
+def test_livrables_dossier_zip_et_url_de_vitrine(client):
+    """Les trois livrables se rangent sur la ligne, avec les verifications d'usage."""
+    connexion(client)
+    _suivie(client, "111111111", "Alpha Coiffure")
+    reponse = _suivi_json(client, "/api/suivi/livrables", {
+        "siren": "111111111",
+        "dossier_site": "//serveur/projets/alpha/vitrine",
+        "zip_lien": "https://exemple.fr/alpha.zip",
+        "url_vitrine": "https://alpha.exemple.fr",
+    })
+    assert reponse.status_code == 200, reponse.get_data(as_text=True)
+    etat = reponse.get_json()
+    assert "alpha.exemple.fr" in etat["livrables_html"]
+    assert "Dossier" in etat["livrables_html"]
+    assert "alpha.zip" in etat["livrables_html"]
+
+    with base(client) as b:
+        ligne = b.one("SELECT * FROM tracked WHERE siren = ?", ("111111111",))
+    assert ligne["dossier_site"] == "//serveur/projets/alpha/vitrine"
+    assert ligne["url_vitrine"] == "https://alpha.exemple.fr"
+    assert ligne["zip_lien"] == "https://exemple.fr/alpha.zip"
+    assert ligne["livrables_maj_le"]
+
+    # la page affiche les livrables de la ligne
+    page = client.get("/suivi").get_data(as_text=True)
+    assert 'href="https://alpha.exemple.fr"' in page
+    assert "alpha.zip" in page
+
+    # une vitrine saisie sans http prend le https ; une adresse fantaisiste est refusee
+    etat = _suivi_json(client, "/api/suivi/livrables",
+                       {"siren": "111111111", "url_vitrine": "alpha.exemple.fr"}).get_json()
+    assert etat["livrables_html"].count("alpha.exemple.fr") >= 1
+    with base(client) as b:
+        assert b.one("SELECT url_vitrine FROM tracked WHERE siren = ?",
+                     ("111111111",))["url_vitrine"] == "https://alpha.exemple.fr"
+    for mauvais in ("pas une url", "javascript:alert(1)", "fichier local"):
+        refus = _suivi_json(client, "/api/suivi/livrables",
+                            {"siren": "111111111", "url_vitrine": mauvais})
+        assert refus.status_code == 400, mauvais
+    assert _suivi_json(client, "/api/suivi/livrables",
+                       {"siren": "999999999", "url_vitrine": "https://x.fr"}).status_code == 404
+
+
+def test_depot_et_telechargement_de_l_archive(client):
+    """Le .zip du site se depose depuis la ligne et se retelcharge tel quel."""
+    connexion(client)
+    _suivie(client, "111111111", "Alpha Coiffure")
+    # une archive minimale mais valide (signature PK)
+    archive = b"PK\x03\x04" + b"contenu du site" * 4
+    reponse = client.post("/suivi/livrables/zip", data={
+        "siren": "111111111", "fichier": (io.BytesIO(archive), "vitrine-alpha.zip"),
+    }, content_type="multipart/form-data",
+        headers={"X-CSRF-Token": jeton(client, "/suivi")})
+    assert reponse.status_code == 200, reponse.get_data(as_text=True)
+    corps = reponse.get_json()
+    assert corps["ok"] is True and "vitrine-alpha.zip" in corps["message"]
+    assert "vitrine-alpha.zip" in corps["livrables_html"]
+    with base(client) as b:
+        ligne = b.one("SELECT zip_nom, zip_lien FROM tracked WHERE siren = ?", ("111111111",))
+    assert ligne["zip_nom"] == "vitrine-alpha.zip" and ligne["zip_lien"] == ""
+
+    # le fichier se recupere depuis le repertoire
+    telechargement = client.get("/suivi/livrables/zip/111111111")
+    assert telechargement.status_code == 200
+    assert telechargement.data == archive
+    assert "vitrine-alpha.zip" in telechargement.headers["Content-Disposition"]
+
+    # une autre archive remplace la precedente
+    nouvelle = b"PK\x03\x04" + b"version 2"
+    client.post("/suivi/livrables/zip", data={
+        "siren": "111111111", "fichier": (io.BytesIO(nouvelle), "vitrine-alpha-v2.zip"),
+    }, content_type="multipart/form-data",
+        headers={"X-CSRF-Token": jeton(client, "/suivi")})
+    assert client.get("/suivi/livrables/zip/111111111").data == nouvelle
+
+
+def test_depot_refuse_ce_qui_n_est_pas_une_archive(client, monkeypatch):
+    """Extension, signature, taille et entreprise : chaque refus a son message."""
+    connexion(client)
+    monkeypatch.setattr(views, "ZIP_MAX_OCTETS", 4096)   # plafond abaisse pour le test
+    _suivie(client, "111111111", "Alpha Coiffure")
+    entete = {"X-CSRF-Token": jeton(client, "/suivi")}
+
+    def depose(nom, contenu, siren="111111111"):
+        return client.post("/suivi/livrables/zip", data={
+            "siren": siren, "fichier": (io.BytesIO(contenu), nom),
+        }, content_type="multipart/form-data", headers=entete)
+
+    refus = depose("notes.txt", b"PK\x03\x04du texte")
+    assert refus.status_code == 400 and ".zip" in refus.get_json()["error"]
+    refus = depose("photo.zip", b"pas une archive")
+    assert refus.status_code == 400 and "n'est pas une archive" in refus.get_json()["error"]
+    refus = depose("enorme.zip", b"PK\x03\x04" + b"x" * 4096)
+    assert refus.status_code == 400 and "trop lourde" in refus.get_json()["error"]
+    assert depose("ok.zip", b"PK\x03\x04contenu", siren="999999999").status_code == 404
+    assert client.post("/suivi/livrables/zip", data={"siren": "111111111"},
+                       content_type="multipart/form-data",
+                       headers=entete).status_code == 400   # aucun fichier choisi
+
+    with base(client) as b:
+        assert b.one("SELECT zip_nom FROM tracked WHERE siren = ?", ("111111111",))["zip_nom"] == ""
+    assert client.get("/suivi/livrables/zip/111111111").status_code == 404
+
+
+def test_l_archive_d_un_autre_collegue_est_accessible(client):
+    """Le repertoire est commun : chacun recupere les livrables de l'equipe."""
+    chef = client
+    connexion(chef)
+    _suivie(chef, "111111111", "Alpha Coiffure")
+    with chef.application.app_context():
+        chemin = os.path.join(views._dossier_livrables(), "111111111.zip")
+        with open(chemin, "wb") as sortie:
+            sortie.write(b"PK\x03\x04archive de l'equipe")
+        db.execute("UPDATE tracked SET zip_nom = 'vitrine.zip' WHERE siren = ?", ("111111111",))
+
+    associe = chef.application.test_client()
+    connexion(associe, username="associe", password="MBDV-associe-2026")  # noqa: S106
+    page = associe.get("/suivi").get_data(as_text=True)
+    assert "vitrine.zip" in page
+    assert associe.get("/suivi/livrables/zip/111111111").data == b"PK\x03\x04archive de l'equipe"

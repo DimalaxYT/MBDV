@@ -21,6 +21,7 @@
       </p>
     </div>
     <p class="repertoire-compteurs">
+      <button class="btn btn-ink btn-sm" data-ajouter>{{ icon('plus', 13) }} Ajouter une entreprise</button>
       {% if compteurs.en_retard %}<span class="compteur is-alerte">{{ compteurs.en_retard }} en retard</span>{% endif %}
       {% if compteurs.aujourd_hui %}<span class="compteur">{{ compteurs.aujourd_hui }} aujourd'hui</span>{% endif %}
       <span class="compteur">{{ compteurs.reste }} à venir</span>
@@ -39,6 +40,7 @@
           <th>Référent</th>
           <th>Dernier appel</th>
           <th>À rappeler</th>
+          <th class="col-livrables">Livrables</th>
           <th class="col-actions"></th>
         </tr>
       </thead>
@@ -67,6 +69,9 @@
             <span class="row-sub" data-appels>{{ c.appels_label }}</span>
           </td>
           <td><span class="badge u-{{ c.urgence }}" data-relance>{{ c.urgence_label }}</span></td>
+          <td class="col-livrables" data-livrables-cellule>
+            {% include "partials/livrables.html" %}
+          </td>
           <td class="col-actions">
             <button class="btn btn-ink btn-sm" data-appel="{{ c.siren }}">
               {{ icon('phone', 13) }} Appel passé
@@ -87,10 +92,11 @@
   </p>
   {% else %}
   <div class="empty">
-    <p class="empty-title">Aucun appel en attente</p>
-    <p class="empty-desc">Toutes les entreprises suivies sont clientes ou classées.
-    Ajoutez-en au portefeuille depuis la recherche pour préparer de nouveaux appels.</p>
-    <a class="btn btn-ink" href="/">{{ icon('search', 14) }} Lancer une recherche</a>
+    <p class="empty-title">Le répertoire est vide</p>
+    <p class="empty-desc">Ajoutez une entreprise par son nom ou son SIREN : sa fiche est
+    reprise de la base officielle (adresse, activité, dirigeant), puis vous pourrez y
+    ranger le dossier du site, l'archive .zip et l'URL de la vitrine.</p>
+    <button class="btn btn-ink" data-ajouter>{{ icon('plus', 14) }} Ajouter une entreprise</button>
   </div>
   {% endif %}
 </section>

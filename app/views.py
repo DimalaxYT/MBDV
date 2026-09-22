@@ -3,6 +3,7 @@ import csv
 import io
 import json
 import math
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse
@@ -17,6 +18,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     session,
     url_for,
 )
@@ -771,6 +773,7 @@ def _suivi_de_l_entreprise(ligne, aujourd_hui: str) -> dict:
     c["relance_le"] = ligne["relance_le"] or ""
     c["note"] = ligne["note"] or ""
     c["historique"] = _libelle_appels(c)
+    c.update(_livrables_de(ligne))
     # Libelles prets a afficher (page et reponses aux actions utilisent les memes).
     c["prise_par_moi"] = c["pris_par"] == (current_user() or {}).get("username")
     c["pris_le_texte"] = _heure_de_paris(c["pris_le"]) if c["pris_le"] else ""
@@ -871,7 +874,227 @@ def _etat_pour_js(siren: str) -> dict:
         "note": c["note"],
         "relance_le": c["relance_le"],
         "badge_html": _badge_site(c),
+        "livrables_html": _cellule_livrables(ligne),
+        "nom": c["nom"],
     }
+
+
+# --------------------------------------------------------------------------
+# Repertoire : ajouter une entreprise, et ranger ses livrables
+# --------------------------------------------------------------------------
+
+# Taille maximale d'une archive televersee, et extensions acceptees.
+ZIP_MAX_OCTETS = 25 * 1024 * 1024
+LIVRABLES_DOSSIER = "livrables"
+
+
+def _dossier_livrables() -> str:
+    """Dossier local ou sont rangees les archives deposees (hors depots Git)."""
+    chemin = os.path.join(current_app.config["DATA_DIR"], LIVRABLES_DOSSIER)
+    os.makedirs(chemin, exist_ok=True)
+    return chemin
+
+
+def _adresse_valide(valeur: str) -> bool:
+    """Vrai pour une adresse http(s) complete : c'est ce qu'on peut ouvrir."""
+    return bool(re.match(r"^https?://[^\s/$.?#][^\s]*$", valeur or ""))
+
+
+def _cellule_livrables(ligne) -> str:
+    """Cellule « Livrables » de la ligne du repertoire (page et reponses d'action)."""
+    c = {"siren": ligne["siren"]}
+    c.update(_livrables_de(ligne))
+    return render_template("partials/livrables.html", c=c).strip()
+
+
+def _livrables_de(ligne) -> dict:
+    """Livrables d'une entreprise, avec ce qu'il faut pour les afficher."""
+    c = {
+        "siren": ligne["siren"],
+        "url_vitrine": ligne["url_vitrine"] or "",
+        "dossier_site": ligne["dossier_site"] or "",
+        "zip_lien": ligne["zip_lien"] or "",
+        "zip_nom": ligne["zip_nom"] or "",
+        "livrables_maj_le": ligne["livrables_maj_le"] or "",
+    }
+    c["vitrine_hote"] = urlparse(c["url_vitrine"]).netloc if _adresse_valide(c["url_vitrine"]) \
+        else c["url_vitrine"]
+    c["zip_href"] = f"/suivi/livrables/zip/{c['siren']}" if c["zip_nom"] else c["zip_lien"]
+    # Etiquette du .zip : le nom de l'archive deposee, sinon celui du lien.
+    if c["zip_nom"]:
+        c["zip_label"] = c["zip_nom"]
+    elif c["zip_lien"]:
+        c["zip_label"] = os.path.basename(urlparse(c["zip_lien"]).path) or "archive .zip"
+    else:
+        c["zip_label"] = ""
+    c["a_quelque_chose"] = bool(c["url_vitrine"] or c["dossier_site"] or c["zip_href"])
+    return c
+
+
+def _resume_entreprise(c: dict) -> dict:
+    """Ce qu'on affiche d'une entreprise : de quoi la reconnaitre sans l'ouvrir."""
+    return {
+        "siren": c.get("siren"),
+        "nom": c.get("nom") or c.get("siren"),
+        "enseigne": c.get("enseigne"),
+        "commune": c.get("commune"),
+        "code_postal": c.get("code_postal"),
+        "naf_label": c.get("naf_label"),
+        "naf_code": c.get("naf_code"),
+        "effectif": c.get("effectif"),
+        "categorie": c.get("categorie"),
+        "date_creation": c.get("date_creation"),
+        "adresse": c.get("adresse") or c.get("rue"),
+        "departement": c.get("departement"),
+        "actif": c.get("actif", True),
+    }
+
+
+@bp.route("/api/annuaire")
+@login_required
+def api_annuaire():
+    """Cherche une entreprise dans la base officielle pour l'ajouter au repertoire.
+
+    Aucune fiche inventee : la reponse vient de l'API officielle. Si elle est
+    injoignable, on le dit, et la saisie manuelle prend le relais.
+    """
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify({"ok": False, "error": "Indiquez au moins deux caractères."}), 400
+    try:
+        res = gov_api.search(q=q, page=1)
+    except gov_api.ApiError as exc:
+        current_app.logger.warning("Annuaire injoignable (q=%r) : %s", q, exc)
+        return jsonify({"ok": False, "indisponible": True,
+                        "error": "La base officielle est injoignable depuis cet "
+                                 "environnement : renseignez l'entreprise à la main."}), 200
+    deja = {r["siren"] for r in db.query("SELECT siren FROM tracked")}
+    resultats = []
+    for c in res.get("items") or []:
+        resume = _resume_entreprise(c)
+        resume["deja"] = resume["siren"] in deja
+        resultats.append(resume)
+        if len(resultats) >= 8:
+            break
+    return jsonify({"ok": True, "resultats": resultats, "total": res.get("total_results", 0)})
+
+
+def _ajoute_au_repertoire(siren: str, snapshot: dict, source: str):
+    """Cree la ligne du repertoire. Renvoie (etat_json, code_http)."""
+    if db.one("SELECT id FROM tracked WHERE siren = ?", (siren,)):
+        return jsonify({"ok": False, "error": "Cette entreprise est déjà dans le répertoire."}), 409
+    moi = current_user()["username"]
+    db.execute(
+        "INSERT INTO tracked (siren, snapshot, status, added_by, added_at, pris_par, pris_le)"
+        " VALUES (?, ?, 'a_contacter', ?, ?, ?, ?)",
+        (siren, json.dumps(snapshot, ensure_ascii=False), moi, db.now_iso(), moi, db.now_iso()))
+    current_app.logger.info("Repertoire : %s (%s) ajoute par %s", siren, source, moi)
+    return jsonify(_etat_pour_js(siren)), 200
+
+
+@bp.route("/api/suivi/ajouter", methods=["POST"])
+@login_required
+def api_suivi_ajouter():
+    """Ajoute une entreprise au repertoire : base officielle, sinon saisie manuelle."""
+    d = _json()
+    siren = re.sub(r"\D", "", str(d.get("siren") or ""))
+    if not re.fullmatch(r"\d{9}", siren):
+        return jsonify({"ok": False, "error": "SIREN invalide : 9 chiffres attendus."}), 400
+
+    # 1) fiche officielle, 2) instantane deja connu (masquage), 3) saisie manuelle.
+    entreprise, source = _entreprise_complete(siren)
+    if not entreprise:
+        nom = str(d.get("nom") or "").strip()
+        if not nom:
+            return jsonify({"ok": False,
+                            "error": "Entreprise introuvable dans la base officielle : "
+                                     "indiquez au moins son nom."}), 400
+        entreprise = {"siren": siren, "nom": nom,
+                      "enseigne": str(d.get("enseigne") or "").strip() or None,
+                      "commune": str(d.get("commune") or "").strip() or None,
+                      "naf_label": str(d.get("activite") or "").strip() or None,
+                      "adresse": str(d.get("adresse") or "").strip() or None,
+                      "source": "saisie"}
+        source = "saisie"
+    return _ajoute_au_repertoire(siren, entreprise, source)
+
+
+@bp.route("/api/suivi/livrables", methods=["POST"])
+@login_required
+def api_suivi_livrables():
+    """Range les livrables d'une entreprise : dossier du site, .zip, URL de vitrine."""
+    d = _json()
+    siren = str(d.get("siren") or "")
+    if not _entreprise_suivie(siren):
+        return jsonify({"ok": False, "error": "Entreprise non suivie."}), 404
+
+    vitrine = str(d.get("url_vitrine") or "").strip()
+    if vitrine and not _adresse_valide(vitrine):
+        # Une vitrine s'ouvre dans un navigateur : il faut une adresse complete.
+        if re.match(r"^[\w.-]+\.[a-z]{2,}(/.*)?$", vitrine, re.IGNORECASE):
+            vitrine = "https://" + vitrine          # « vitrine.fr » suffit a la saisie
+        else:
+            return jsonify({"ok": False,
+                            "error": "URL de vitrine invalide : attendu une adresse "
+                                     "https://..."}), 400
+    zip_lien = str(d.get("zip_lien") or "").strip()
+    if zip_lien and not _adresse_valide(zip_lien):
+        return jsonify({"ok": False,
+                        "error": "Lien de l'archive invalide : attendu une adresse https://..."}), 400
+
+    db.execute(
+        "UPDATE tracked SET url_vitrine = ?, dossier_site = ?, zip_lien = ?,"
+        " livrables_maj_le = ? WHERE siren = ?",
+        (vitrine, str(d.get("dossier_site") or "").strip()[:500], zip_lien,
+         db.now_iso(), siren))
+    return jsonify(_etat_pour_js(siren))
+
+
+@bp.route("/suivi/livrables/zip", methods=["POST"])
+@login_required
+def suivi_livrables_zip():
+    """Depose l'archive .zip du site (une archive par entreprise, la nouvelle remplace)."""
+    siren = re.sub(r"\D", "", request.form.get("siren") or "")
+    if not _entreprise_suivie(siren):
+        return jsonify({"ok": False, "error": "Entreprise non suivie."}), 404
+    fichier = request.files.get("fichier")
+    if not fichier or not fichier.filename:
+        return jsonify({"ok": False, "error": "Choisissez une archive .zip."}), 400
+    nom = os.path.basename(fichier.filename)[:120]
+    if not nom.lower().endswith(".zip"):
+        return jsonify({"ok": False, "error": "Seules les archives .zip sont acceptées."}), 400
+
+    donnees = fichier.read()
+    if len(donnees) > ZIP_MAX_OCTETS:
+        return jsonify({"ok": False, "error":
+                        f"Archive trop lourde : {len(donnees) // 1048576} Mo "
+                        f"(maximum {ZIP_MAX_OCTETS // 1048576} Mo)."}), 400
+    if donnees[:2] != b"PK":                       # signature d'une archive zip
+        return jsonify({"ok": False, "error": "Ce fichier n'est pas une archive .zip."}), 400
+
+    chemin = os.path.join(_dossier_livrables(), f"{siren}.zip")
+    with open(chemin, "wb") as sortie:
+        sortie.write(donnees)
+    db.execute("UPDATE tracked SET zip_nom = ?, zip_lien = '', livrables_maj_le = ?"
+               " WHERE siren = ?", (nom, db.now_iso(), siren))
+    current_app.logger.info("Repertoire : archive %s deposee pour %s (%s octets)",
+                            nom, siren, len(donnees))
+    etat = _etat_pour_js(siren)
+    etat["message"] = f"Archive {nom} déposée."
+    return jsonify(etat)
+
+
+@bp.route("/suivi/livrables/zip/<siren>")
+@login_required
+def suivi_livrables_zip_telecharger(siren):
+    """Renvoie l'archive deposee pour cette entreprise."""
+    ligne = _entreprise_suivie(siren)
+    if not ligne or not ligne["zip_nom"]:
+        abort(404)
+    chemin = os.path.join(_dossier_livrables(), f"{ligne['siren']}.zip")
+    if not os.path.exists(chemin):
+        abort(404)
+    return send_file(chemin, as_attachment=True, download_name=ligne["zip_nom"])
 
 
 @bp.route("/api/suivi/prendre", methods=["POST"])

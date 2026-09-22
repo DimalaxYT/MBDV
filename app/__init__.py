@@ -69,7 +69,10 @@ def create_app() -> Flask:
         SESSION_COOKIE_SECURE=embarque or _env_flag("MBDV_COOKIE_SECURE"),
         SESSION_COOKIE_PARTITIONED=embarque,
         PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
-        MAX_CONTENT_LENGTH=2 * 1024 * 1024,
+        # Les formulaires sont minuscules, mais une archive .zip de livrable
+        # peut peser quelques dizaines de Mo : la limite est donc haute, et
+        # chaque depot de .zip est verifie (taille et extension) cote route.
+        MAX_CONTENT_LENGTH=32 * 1024 * 1024,
         DATA_DIR=data_dir,
         # Session transportee dans l'URL (jeton signe) : apercu en iframe tierce.
         EMBEDDED_SESSION=embarque,

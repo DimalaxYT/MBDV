@@ -285,6 +285,216 @@
   }
 
   // ------------------------------------------------------------------
+  // Repertoire : ajouter une entreprise, ranger ses livrables
+  // ------------------------------------------------------------------
+  function openAjouterModal() {
+    if (!modalRoot) return;
+    modalRoot.innerHTML =
+      '<div class="modal-backdrop" data-close-modal>' +
+      '<div class="modal" role="dialog" aria-modal="true">' +
+      "<h3>Ajouter une entreprise</h3>" +
+      '<p class="modal-sub">Cherchez par nom, enseigne ou SIREN : la fiche est reprise de ' +
+      "la base officielle (adresse, activité, dirigeant).</p>" +
+      '<div class="stack">' +
+      '<div class="field"><label for="annuaire-q">Nom, enseigne ou SIREN</label>' +
+      '<div class="recherche-ligne">' +
+      '<input id="annuaire-q" type="search" spellcheck="false" ' +
+      'placeholder="ex. coiffure Saint-Nazaire, ou 848902672">' +
+      '<button type="button" class="btn btn-ink" id="annuaire-chercher">Rechercher</button>' +
+      "</div></div>" +
+      '<div id="annuaire-resultats" class="annuaire-resultats"></div>' +
+      '<details class="annuaire-manuel"><summary>Saisie manuelle (si la base officielle ' +
+      "ne répond pas)</summary>" +
+      '<div class="stack stack-serre">' +
+      '<div class="field"><label for="manuel-siren">SIREN <span class="label-note">' +
+      "(9 chiffres)</span></label>" +
+      '<input id="manuel-siren" inputmode="numeric" maxlength="9" placeholder="123456789"></div>' +
+      '<div class="field"><label for="manuel-nom">Nom de l&#39;entreprise</label>' +
+      '<input id="manuel-nom" placeholder="Nom commercial ou raison sociale"></div>' +
+      '<div class="field"><label for="manuel-commune">Commune <span class="label-note">' +
+      "(facultatif)</span></label><input id=\"manuel-commune\"></div>" +
+      '<div class="field"><label for="manuel-activite">Activité <span class="label-note">' +
+      "(facultatif)</span></label><input id=\"manuel-activite\"></div>" +
+      '<button type="button" class="btn btn-ghost" id="manuel-ajouter">' +
+      "Ajouter cette entreprise</button>" +
+      "</div></details>" +
+      "</div>" +
+      '<div class="modal-error" id="annuaire-error"></div>' +
+      '<div class="modal-actions">' +
+      '<button type="button" class="btn btn-ghost" data-close-modal>Fermer</button>' +
+      "</div></div></div>";
+
+    var champ = document.getElementById("annuaire-q");
+    champ.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); chercherAnnuaire(); }
+    });
+    document.getElementById("annuaire-chercher").addEventListener("click", chercherAnnuaire);
+    document.getElementById("manuel-ajouter").addEventListener("click", function () {
+      ajouterAuRepertoire({
+        siren: document.getElementById("manuel-siren").value,
+        nom: document.getElementById("manuel-nom").value,
+        commune: document.getElementById("manuel-commune").value,
+        activite: document.getElementById("manuel-activite").value,
+      });
+    });
+    champ.focus();
+  }
+
+  function chercherAnnuaire() {
+    var q = document.getElementById("annuaire-q").value.trim();
+    var zone = document.getElementById("annuaire-resultats");
+    var erreur = document.getElementById("annuaire-error");
+    if (erreur) erreur.innerHTML = "";
+    if (q.length < 2) {
+      zone.innerHTML = '<p class="row-sub">Indiquez au moins deux caractères.</p>';
+      return;
+    }
+    zone.innerHTML = '<p class="row-sub">Recherche dans la base officielle…</p>';
+    var url = withSession("/api/annuaire") + (withSession("/api/annuaire").indexOf("?") >= 0 ? "&" : "?")
+      + "q=" + encodeURIComponent(q);
+    fetch(url, { headers: { "X-CSRF-Token": CSRF } })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        if (!body.ok) {
+          zone.innerHTML = '<p class="row-sub">' + escapeHtml(body.error || "Recherche impossible.") + "</p>";
+          if (body.indisponible) {
+            var manuel = document.querySelector(".annuaire-manuel");
+            if (manuel) manuel.open = true;
+          }
+          return;
+        }
+        if (!body.resultats.length) {
+          zone.innerHTML = '<p class="row-sub">Aucune entreprise trouvée. Essayez un autre ' +
+            "nom, ou la saisie manuelle ci-dessous.</p>";
+          return;
+        }
+        zone.innerHTML = body.resultats.map(function (r) {
+          var details = [r.commune, r.naf_label, r.effectif].filter(Boolean).join(" · ");
+          return '<article class="annuaire-item' + (r.deja ? " is-deja" : "") + '">' +
+            "<div><span class=\"annuaire-nom\">" + escapeHtml(r.nom || "") + "</span>" +
+            '<span class="row-sub"><code class="mono">' + escapeHtml(r.siren || "") + "</code>" +
+            (details ? " · " + escapeHtml(details) : "") + "</span></div>" +
+            (r.deja
+              ? '<span class="badge">déjà dans le répertoire</span>'
+              : '<button type="button" class="btn btn-ink btn-sm" data-ajouter-siren="' +
+                escapeHtml(r.siren || "") + '">Ajouter</button>') +
+            "</article>";
+        }).join("");
+      })
+      .catch(function () {
+        zone.innerHTML = '<p class="row-sub">Recherche impossible pour le moment.</p>';
+      });
+  }
+
+  function ajouterAuRepertoire(charge) {
+    var erreur = document.getElementById("annuaire-error");
+    var bouton = document.querySelector("#annuaire-manuel .btn, #annuaire-resultats .btn");
+    if (bouton) bouton.disabled = true;
+    post("/api/suivi/ajouter", charge).then(function (body) {
+      if (bouton) bouton.disabled = false;
+      if (!body.ok) {
+        if (erreur) erreur.innerHTML =
+          '<div class="banner banner-error">' + escapeHtml(body.error || "Ajout impossible.") + "</div>";
+        return;
+      }
+      closeHideModal();
+      toast("Entreprise ajoutée au répertoire", "ok");
+      // La ligne apparait dans le tableau : on recharge la page courante.
+      window.location.reload();
+    });
+  }
+
+  function openLivrablesModal(siren, nom, vitrine, dossier, zipLien) {
+    if (!modalRoot) return;
+    ligneAppel = document.querySelector('tr[data-siren="' + siren + '"]');
+    modalRoot.innerHTML =
+      '<div class="modal-backdrop" data-close-modal>' +
+      '<div class="modal" role="dialog" aria-modal="true">' +
+      "<h3>Livrables</h3>" +
+      '<p class="modal-sub"><strong>' + escapeHtml(nom || "") + "</strong> (SIREN " + siren + ")<br>" +
+      "Le dossier du site, l'archive .zip et l'URL de la vitrine restent accessibles " +
+      "à l'équipe depuis le répertoire.</p>" +
+      '<div class="stack">' +
+      '<div class="field"><label for="liv-dossier">Dossier du site ' +
+      '<span class="label-note">(chemin ou lien)</span></label>' +
+      '<input id="liv-dossier" value="' + escapeHtml(dossier || "") + '" ' +
+      'placeholder="ex.\\\\projets\\\\mbdv\\\\vitrines\\\\dupont ou https://…"></div>' +
+      '<div class="field"><label for="liv-zip">Archive .zip ' +
+      '<span class="label-note">(dépôt ci-dessous, ou lien vers une archive)</span></label>' +
+      '<input id="liv-zip" value="' + escapeHtml(zipLien || "") + '" placeholder="https://…/site.zip">' +
+      '<input id="liv-fichier" type="file" accept=".zip,application/zip">' +
+      '<span class="row-sub" id="liv-zip-actuel"></span></div>' +
+      '<div class="field"><label for="liv-vitrine">URL de vitrine</label>' +
+      '<input id="liv-vitrine" value="' + escapeHtml(vitrine || "") + '" ' +
+      'placeholder="https://vitrine.exemple.fr"></div>' +
+      "</div>" +
+      '<div class="modal-error" id="liv-error"></div>' +
+      '<div class="modal-actions">' +
+      '<button type="button" class="btn btn-ghost" data-close-modal>Annuler</button>' +
+      '<button type="button" class="btn btn-ink" id="liv-confirm">Enregistrer</button>' +
+      "</div></div></div>";
+
+    var actuel = document.getElementById("liv-zip-actuel");
+    if (ligneAppel && ligneAppel.querySelector(".livrables .chip[href*='/livrables/zip/']")) {
+      actuel.textContent = "Une archive est déjà déposée : en choisir une autre la remplacera.";
+    }
+    document.getElementById("liv-confirm").addEventListener("click", function () {
+      enregistrerLivrables(siren);
+    });
+  }
+
+  function enregistrerLivrables(siren) {
+    var bouton = document.getElementById("liv-confirm");
+    var erreur = document.getElementById("liv-error");
+    var champ = document.getElementById("liv-fichier");
+    var fichier = champ && champ.files && champ.files[0];
+    if (bouton) bouton.disabled = true;
+    if (erreur) erreur.innerHTML = "";
+
+    var depot = fichier ? deposerArchive(siren, fichier) : Promise.resolve({ ok: true });
+    depot.then(function (reponse) {
+      if (!reponse.ok) {
+        if (erreur) erreur.innerHTML = '<div class="banner banner-error">' +
+          escapeHtml(reponse.error || "Dépôt impossible.") + "</div>";
+        if (bouton) bouton.disabled = false;
+        return;
+      }
+      return post("/api/suivi/livrables", {
+        siren: siren,
+        dossier_site: document.getElementById("liv-dossier").value,
+        zip_lien: document.getElementById("liv-zip").value,
+        url_vitrine: document.getElementById("liv-vitrine").value,
+      }).then(function (body) {
+        if (!body.ok) {
+          if (erreur) erreur.innerHTML = '<div class="banner banner-error">' +
+            escapeHtml(body.error || "Enregistrement impossible.") + "</div>";
+          if (bouton) bouton.disabled = false;
+          return;
+        }
+        appliquerEtatAppel(ligneAppel, body);
+        closeHideModal();
+        toast(reponse.message || "Livrables enregistrés", "ok");
+      });
+    });
+  }
+
+  // Le .zip n'est pas du JSON : envoi multipart, meme jeton CSRF que le reste.
+  function deposerArchive(siren, fichier) {
+    var donnees = new FormData();
+    donnees.append("siren", siren);
+    donnees.append("fichier", fichier);
+    return fetch(withSession("/suivi/livrables/zip"), {
+      method: "POST",
+      headers: { "X-CSRF-Token": CSRF },
+      body: donnees,
+    }).then(function (r) {
+      return r.json().catch(function () {
+        return { ok: false, error: "Réponse invalide du serveur." };
+      });
+    });
+  }
+
+  // ------------------------------------------------------------------
   // Appels a passer : une ligne par entreprise, une modale pour l'appel
   // ------------------------------------------------------------------
   var ligneAppel = null;
@@ -317,6 +527,8 @@
     }
     var badge = ligne.querySelector("[data-site-badge]");
     if (badge && etat.badge_html) badge.parentNode.innerHTML = etat.badge_html;
+    var livrables = ligne.querySelector("[data-livrables-cellule]");
+    if (livrables && etat.livrables_html) livrables.innerHTML = etat.livrables_html;
     // La ligne garde l'etat courant : rouvrir la modale repart de la bonne note.
     try {
       var memo = JSON.parse(ligne.dataset.snapshot || "{}");
@@ -626,7 +838,7 @@
   }
 
   document.addEventListener("click", function (ev) {
-    var target = ev.target.closest("[data-detail],[data-hide],[data-follow],[data-recheck],[data-override],[data-restore],[data-prendre],[data-appel],[data-close-slideover],[data-close-modal]");
+    var target = ev.target.closest("[data-detail],[data-hide],[data-follow],[data-recheck],[data-override],[data-restore],[data-prendre],[data-appel],[data-ajouter],[data-ajouter-siren],[data-livrables],[data-close-slideover],[data-close-modal]");
     if (!target) return;
 
     if (target.hasAttribute("data-close-slideover") || target.hasAttribute("data-close-modal")) {
@@ -646,6 +858,20 @@
     if (target.hasAttribute("data-recheck")) { actionRecheck(target); return; }
     if (target.hasAttribute("data-override")) { actionOverride(target); return; }
     if (target.hasAttribute("data-restore")) { actionRestore(target.getAttribute("data-restore")); return; }
+    if (target.hasAttribute("data-ajouter")) { openAjouterModal(); return; }
+    if (target.hasAttribute("data-ajouter-siren")) {
+      target.disabled = true;
+      ajouterAuRepertoire({ siren: target.getAttribute("data-ajouter-siren") });
+      return;
+    }
+    if (target.hasAttribute("data-livrables")) {
+      var ligneLiv = target.closest("tr");
+      openLivrablesModal(target.getAttribute("data-livrables"),
+                         (ligneLiv && ligneLiv.querySelector(".row-name") || {}).textContent,
+                         target.getAttribute("data-vitrine"), target.getAttribute("data-dossier"),
+                         target.getAttribute("data-ziplien"));
+      return;
+    }
     if (target.hasAttribute("data-prendre")) { actionPrendre(target); return; }
     if (target.hasAttribute("data-appel")) {
       var ligne = target.closest("tr");

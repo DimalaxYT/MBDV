@@ -102,26 +102,42 @@ couleur du site detecte et le benefice gagne (saisi au panel staff).
 Page commune aux deux associes : un **repertoire**, une ligne par entreprise en
 attente d'appel, du plus urgent au moins urgent (retards, puis aujourd'hui, puis
 relances a venir). Les clients signes, les affaires classees et les entreprises
-masquees ne figurent pas dans la liste.
+masquees ne figurent pas dans la liste ; rien n'y est invente.
 
 - Colonnes : entreprise (SIREN, commune), activite, etat du site web, **referent**,
-  dernier appel et prochain appel. Le nom ouvre le dossier complet (adresse,
-  dirigeant, effectif, liens, carte) : rien a choisir avant d'appeler.
+  dernier appel, prochain appel et **livrables**. Le nom ouvre le dossier complet
+  (adresse, dirigeant, effectif, liens, carte).
+- **« Ajouter une entreprise »** : la recherche interroge la base officielle par
+  nom, enseigne ou SIREN et propose les fiches trouvees (celles deja suivies sont
+  signalees). Si la base est injoignable, l'application le dit et propose la
+  **saisie manuelle** (SIREN a 9 chiffres, nom, commune, activite) : la fiche
+  porte alors la provenance `saisie`, jamais de donnees fabriquees.
+- **Livrables** de chaque entreprise, ranges depuis le repertoire : **dossier du
+  site** (chemin reseau ou lien), **archive .zip** (deposee depuis le navigateur
+  et retelchargeable, ou lien vers une archive) et **URL de vitrine** (ouverte
+  dans un nouvel onglet). Une seule archive est conservee par entreprise : un
+  nouveau depot remplace le precedent.
 - Une entreprise n'a qu'**un referent a la fois** : « Je m'en occupe » la prend,
   « laisser » la remet dans la file commune. Seul le referent ou le dirigeant
-  peut la liberer ; le nom du referent et la date de prise sont affiches.
+  peut la liberer.
 - « Appel passe » ouvre une petite fenetre : compte rendu, prochain appel
   (facultatif). L'appel est compte et date, la ligne se met a jour sur place, le
   statut passe de « A contacter » a « Contacte » (jamais l'inverse) et
   l'entreprise est attribuee si elle etait libre.
-- En tete, trois compteurs (en retard, aujourd'hui, a venir, sans referent) et,
+- En tete, quatre compteurs (en retard, aujourd'hui, a venir, sans referent) et,
   en pied, la charge de chacun (entreprises travaillees, appels des 7 derniers jours).
 
-Actions JSON : `POST /api/suivi/prendre` (`siren`, `prendre`),
-`POST /api/suivi/appel` (`siren`, `note`, `relance_le`) et
-`POST /api/suivi/note` (`siren`, `note`). Le serveur renvoie les libelles deja
-calcules, le navigateur se contente de les afficher.
+Actions : `GET /api/annuaire?q=`, `POST /api/suivi/ajouter` (`siren`, et `nom` /
+`commune` / `activite` en secours), `POST /api/suivi/prendre` (`siren`,
+`prendre`), `POST /api/suivi/appel` (`siren`, `note`, `relance_le`),
+`POST /api/suivi/note` (`siren`, `note`), `POST /api/suivi/livrables` (`siren`,
+`dossier_site`, `zip_lien`, `url_vitrine`), `POST /suivi/livrables/zip`
+(multipart `siren` + `fichier`, 25 Mo maximum) et
+`GET /suivi/livrables/zip/<siren>` pour la recuperer. Le serveur renvoie les
+libelles deja calcules, le navigateur se contente de les afficher.
 
+Les archives deposees sont rangees dans `data/livrables/` (hors Git), sous le nom
+`<siren>.zip`.
 ## Donnees locales
 
 Tout est stocke dans `data/` (base SQLite + cle de sessions), hors Git :
