@@ -39,7 +39,12 @@
     </a>
 
     <nav class="pres-nav">
-      <a href="#studio" class="pres-nav-link" style="color:var(--accent);font-weight:700;">{{ icon('radar', 14) }} Studio Opérationnel</a>
+      <a href="#studio" class="pres-nav-link" data-nav-pane="recherche" style="color:var(--accent);font-weight:700;">{{ icon('search', 14) }} Recherche</a>
+      <a href="#studio" class="pres-nav-link" data-nav-pane="suivi">{{ icon('phone', 14) }} Suivi d'équipe</a>
+      <a href="#studio" class="pres-nav-link" data-nav-pane="portefeuille">{{ icon('briefcase', 14) }} Portefeuille CRM</a>
+      <a href="#studio" class="pres-nav-link" data-nav-pane="staff">{{ icon('shield', 14) }} Panel Staff</a>
+      <a href="#studio" class="pres-nav-link" data-nav-pane="dashboard">{{ icon('bar-chart', 14) }} Indicateurs</a>
+      <a href="#probleme" class="pres-nav-link">{{ icon('radar', 14) }} Méthode</a>
       <a href="#probleme" class="pres-nav-link">Le Problème</a>
       <a href="#workflow" class="pres-nav-link">Workflow</a>
       <a href="#detection" class="pres-nav-link">Détection</a>
@@ -131,249 +136,6 @@
     </div>
   </section>
 
-  <!-- SECTION 01 : LE PROBLÈME -->
-  <section id="probleme" class="pres-section pres-section-alt">
-    <div class="pres-container">
-      <div class="section-badge">01 · LE CONSTAT</div>
-      <h2 class="section-title">La prospection locale artisanale est souvent aveugle.</h2>
-      <p class="section-lede">
-        La recherche manuelle sur Google Maps ou dans les annuaires fait perdre des heures en tombant sur des entreprises déjà équipées, des chaînes franchisées ou des structures fermées.
-      </p>
-
-      <div class="compare-grid">
-        <div class="compare-card compare-bad">
-          <div class="compare-header">
-            {{ icon('alert', 18) }}
-            <h3>La méthode manuelle classique</h3>
-          </div>
-          <ul class="compare-list">
-            <li>Recherche aléatoire sur Google Maps et annuaires web</li>
-            <li>Démarchage de franchises nationales dont le site est centralisé au siège</li>
-            <li>Temps perdu à vérifier manuellement chaque nom de domaine un par un</li>
-            <li>Doublons d’appels fréquents entre collaborateurs de l'agence</li>
-            <li>Aucune visibilité sur le statut réel de l'entreprise (active ou radiée)</li>
-          </ul>
-        </div>
-
-        <div class="compare-card compare-good">
-          <div class="compare-header">
-            {{ icon('check', 18) }}
-            <h3>La précision Balise</h3>
-          </div>
-          <ul class="compare-list">
-            <li>Interrogation directe des registres officiels français (INSEE &amp; RNE)</li>
-            <li>Exclusion algorithmique stricte des grandes enseignes et réseaux multi-établissements</li>
-            <li>Détection DNS ultra-rapide sur les domaines probables (.fr prioritaire)</li>
-            <li>Mise en évidence immédiate du signal d'opportunité <strong>« Aucun site détecté »</strong></li>
-            <li>Tableau de suivi d'équipe empêchant les collisions commerciales</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SECTION 02 : LE WORKFLOW -->
-  <section id="workflow" class="pres-section">
-    <div class="pres-container">
-      <div class="section-badge">02 · WORKFLOW</div>
-      <h2 class="section-title">Un pipeline commercial direct, sans friction.</h2>
-      <p class="section-lede">
-        De la requête initiale jusqu'à la signature du devis de création de site web : chaque étape est calibrée pour aller vite.
-      </p>
-
-      <div class="workflow-chain">
-        <div class="chain-step">
-          <div class="step-num">01</div>
-          <div class="step-icon">{{ icon('search', 20) }}</div>
-          <h4>Recherche</h4>
-          <p>Ciblage précis par département, code postal, activité ou code NAF.</p>
-        </div>
-        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
-
-        <div class="chain-step">
-          <div class="step-num">02</div>
-          <div class="step-icon">{{ icon('refresh', 20) }}</div>
-          <h4>Détection</h4>
-          <p>Vérification DNS instantanée des domaines associés à l'enseigne.</p>
-        </div>
-        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
-
-        <div class="chain-step">
-          <div class="step-num">03</div>
-          <div class="step-icon">{{ icon('shield', 20) }}</div>
-          <h4>Qualification</h4>
-          <p>Élimination automatique des grands groupes, réseaux et ONG.</p>
-        </div>
-        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
-
-        <div class="chain-step">
-          <div class="step-num">04</div>
-          <div class="step-icon">{{ icon('phone', 20) }}</div>
-          <h4>Prospection</h4>
-          <p>Attribution du prospect en 1 clic et enregistrement des appels.</p>
-        </div>
-        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
-
-        <div class="chain-step">
-          <div class="step-num">05</div>
-          <div class="step-icon">{{ icon('briefcase', 20) }}</div>
-          <h4>Suivi</h4>
-          <p>Planning de relances, livrables (maquette, zip) et pipeline client.</p>
-        </div>
-        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
-
-        <div class="chain-step step-highlight">
-          <div class="step-num">06</div>
-          <div class="step-icon">{{ icon('check', 20) }}</div>
-          <h4>Vente</h4>
-          <p>Encaissement enregistré et reporting sur 12 mois.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SECTION 03 : LA DÉTECTION DU SIGNAL -->
-  <section id="detection" class="pres-section pres-section-alt">
-    <div class="pres-container">
-      <div class="pres-grid-split">
-        <div>
-          <div class="section-badge">03 · DÉTECTION</div>
-          <h2 class="section-title">Faire émerger le signal invisible.</h2>
-          <p class="section-text">
-            Pour un artisan ou un commerce indépendant, ne pas avoir de site web n’est pas un défaut : <strong>c’est votre opportunité d’affaires</strong>.
-          </p>
-          <p class="section-text">
-            Balise interroge les serveurs DNS sur une douzaine de combinaisons candidates formées à partir de la raison sociale et de l'enseigne de l'entreprise (ex. <code>fournil-martin.fr</code>, <code>boulangeriemartin.com</code>).
-          </p>
-          <div class="signal-quote">
-            <span class="signal-quote-icon">●</span>
-            <div>
-              <strong>« Aucun site détecté »</strong>
-              <p>Ce badge ambre signale les entreprises prioritaires : celles qui génèrent du chiffre d'affaires réel mais restent absentes du web.</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="pres-card signal-demo-card">
-          <div class="signal-card-head">
-            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
-            <span class="signal-date">Vérification DNS instantanée</span>
-          </div>
-          <div class="signal-card-body">
-            <h3>PLOMBERIE CHAUFFAGE 91</h3>
-            <p class="signal-meta">SARL · SIREN 910 345 678 · Massy (91300)</p>
-            <div class="signal-checks">
-              <div class="check-line ok">{{ icon('check', 14) }} <span>Entreprise active immatriculée au RNE</span></div>
-              <div class="check-line ok">{{ icon('check', 14) }} <span>Dirigeant physique identifié</span></div>
-              <div class="check-line highlight">{{ icon('alert', 14) }} <span>Aucun domaine actif résolu (.fr, .com, .net)</span></div>
-              <div class="check-line ok">{{ icon('check', 14) }} <span>1 établissement unique (artisan indépendant cible)</span></div>
-            </div>
-            <div class="signal-action-row">
-              <a href="/connexion" class="btn btn-ink btn-sm">{{ icon('phone', 13) }} Contacter ce prospect</a>
-              <span class="signal-pot">Potentiel : Site vitrine clé en main</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SECTION 04 : LA QUALIFICATION INTELIGENTE -->
-  <section id="qualification" class="pres-section">
-    <div class="pres-container">
-      <div class="section-badge">04 · QUALIFICATION</div>
-      <h2 class="section-title">Éliminez le bruit, gardez la valeur.</h2>
-      <p class="section-lede">
-        La base officielle contient des millions d'entités qui ne signeront jamais de devis chez un artisan du web. Balise les filtre avant même qu'elles n'apparaissent à l'écran.
-      </p>
-
-      <div class="filters-cards-grid">
-        <div class="feat-card">
-          <div class="feat-icon">{{ icon('shield', 22) }}</div>
-          <h4>Grandes enseignes &amp; Chaînes</h4>
-          <p>Carrefour, Auchan, Leclerc, Lidl, McDonald's, Burger King... toutes les enseignes nationales de distribution et de restauration rapide sont écartées.</p>
-        </div>
-
-        <div class="feat-card">
-          <div class="feat-icon">{{ icon('briefcase', 22) }}</div>
-          <h4>Réseaux &amp; Multi-sites</h4>
-          <p>Toute entité possédant 10 établissements ou plus est automatiquement classée comme réseau structuré et filtrée par défaut.</p>
-        </div>
-
-        <div class="feat-card">
-          <div class="feat-icon">{{ icon('home', 22) }}</div>
-          <h4>Grandes ONG &amp; Administrations</h4>
-          <p>La Croix-Rouge, le Secours Populaire, les ministères, collectivités territoriales et organismes sociaux (codes 7xxx/8xxx) sont exclus.</p>
-        </div>
-
-        <div class="feat-card feat-card-target">
-          <div class="feat-icon feat-target-icon">{{ icon('check', 22) }}</div>
-          <h4>Préservation des artisans locaux</h4>
-          <p>Un commerce portant un nom géographique à un carrefour routier (ex. <em>Café du Carrefour</em>, <em>Boulangerie du Carrefour</em>) reste quant à lui parfaitement ciblé.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SECTION 05 : LE SUIVI OPÉRATIONNEL -->
-  <section id="suivi" class="pres-section pres-section-alt">
-    <div class="pres-container">
-      <div class="section-badge">05 · SUIVI COMMERCIAL</div>
-      <h2 class="section-title">Un CRM opérationnel pensé pour l'équipe.</h2>
-      <p class="section-lede">
-        Fini les tableurs désynchronisés ou les appels en doublon. Chaque prospect est suivi en temps réel.
-      </p>
-
-      <div class="suivi-preview-box">
-        <div class="suivi-bar">
-          <span class="suivi-pill active">Tous (4)</span>
-          <span class="suivi-pill is-alerte">1 en retard</span>
-          <span class="suivi-pill">1 aujourd'hui</span>
-          <span class="suivi-pill">Mes dossiers</span>
-          <span class="suivi-pill">1 sans référent</span>
-        </div>
-
-        <div class="suivi-row-mock">
-          <div class="mock-col-main">
-            <strong>GARAGE DE L'ESSONNE</strong>
-            <small>91000 Évry · Réparation automobile (45.20A)</small>
-          </div>
-          <div class="mock-col-badge">
-            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
-          </div>
-          <div class="mock-col-ref">
-            <span class="badge-ref">Prise par vous (admin)</span>
-          </div>
-          <div class="mock-col-urg">
-            <span class="badge u-aujourd_hui">Aujourd'hui à 14h30</span>
-          </div>
-          <div class="mock-col-act">
-            <a href="/connexion" class="btn btn-ink btn-sm">{{ icon('phone', 13) }} Appel passé</a>
-          </div>
-        </div>
-
-        <div class="suivi-row-mock">
-          <div class="mock-col-main">
-            <strong>FOURNIL DE LA MARNE</strong>
-            <small>77000 Melun · Boulangerie (10.71C)</small>
-          </div>
-          <div class="mock-col-badge">
-            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
-          </div>
-          <div class="mock-col-ref">
-            <span class="badge-free">Personne pour l'instant</span>
-          </div>
-          <div class="mock-col-urg">
-            <span class="badge u-a_faire">Premier contact</span>
-          </div>
-          <div class="mock-col-act">
-            <a href="/connexion" class="btn btn-ghost btn-sm">Je m'en occupe</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- SECTION 06 : STUDIO OPÉRATIONNEL COMPLET -->
   <section id="studio" class="pres-section">
     <div class="pres-container">
@@ -406,6 +168,9 @@
             <button type="button" class="studio-tab" data-pane="staff">
               {{ icon('shield', 14) }} <span>Panel Staff</span>
               <span class="tab-count" id="studioMaskedCount">0</span>
+            </button>
+            <button type="button" class="studio-tab" data-pane="dashboard">
+              {{ icon('bar-chart', 14) }} <span>Tableau de bord</span>
             </button>
           </div>
         </div>
@@ -597,6 +362,32 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- Formulaire d'ajout rapide au suivi par SIREN -->
+            <div class="panel" style="margin-top:20px; padding:16px;">
+              <h4 style="font-size:13px; font-weight:700; margin:0 0 8px; color:var(--ink);">{{ icon('plus', 14) }} Ajouter une entreprise au suivi</h4>
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <input type="text" id="addSuiviSiren" class="studio-mini-input" style="flex:1; min-width:140px;" placeholder="SIREN à 9 chiffres">
+                <input type="text" id="addSuiviNom" class="studio-mini-input" style="flex:1.5; min-width:180px;" placeholder="Dénomination commerciale">
+                <input type="text" id="addSuiviCommune" class="studio-mini-input" style="flex:1; min-width:120px;" placeholder="Commune">
+                <button type="button" id="btnAddSuiviSubmit" class="btn btn-ink btn-sm">{{ icon('plus', 13) }} Ajouter au suivi</button>
+              </div>
+            </div>
+
+            <!-- Charge de travail d'équipe -->
+            <div class="panel" style="margin-top:16px; padding:16px;">
+              <h4 style="font-size:13px; font-weight:700; margin:0 0 10px; color:var(--ink);">Charge de travail et appels récents de l'équipe</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+                <div style="background:var(--paper-2); padding:10px; border-radius:6px; border:1px solid var(--line);">
+                  <strong style="font-size:13px; color:var(--ink);">@admin (Dirigeant)</strong>
+                  <div style="font-size:12px; color:var(--muted); margin-top:4px;" id="workloadAdmin">8 entreprises suivies · 14 appels (7j)</div>
+                </div>
+                <div style="background:var(--paper-2); padding:10px; border-radius:6px; border:1px solid var(--line);">
+                  <strong style="font-size:13px; color:var(--ink);">@associe (Associé)</strong>
+                  <div style="font-size:12px; color:var(--muted); margin-top:4px;" id="workloadAssocie">5 entreprises suivies · 9 appels (7j)</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- VOLET 3 : PORTEFEUILLE CRM & PIPELINE -->
@@ -623,6 +414,33 @@
             <!-- Tableau Kanban des 6 étapes -->
             <div class="studio-kanban" id="studioKanbanBoard">
               <!-- Colonnes Kanban générées par JS -->
+            </div>
+
+            <!-- Enregistrement d'encaissements / bénéfices -->
+            <div class="panel" style="margin-top:24px; padding:20px;">
+              <h4 style="font-size:14px; font-weight:700; margin:0 0 12px; color:var(--ink);">{{ icon('wallet', 15) }} Enregistrer un encaissement</h4>
+              <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+                <div class="studio-field" style="flex:1; min-width:140px;">
+                  <label for="encaisseSiren">SIREN client</label>
+                  <input type="text" id="encaisseSiren" class="studio-mini-input" placeholder="810764231">
+                </div>
+                <div class="studio-field" style="flex:1; min-width:120px;">
+                  <label for="encaisseMontant">Montant encaissé (€)</label>
+                  <input type="number" id="encaisseMontant" class="studio-mini-input" placeholder="1500" value="1500">
+                </div>
+                <div class="studio-field" style="flex:1.5; min-width:180px;">
+                  <label for="encaisseLibelle">Description / Facture</label>
+                  <input type="text" id="encaisseLibelle" class="studio-mini-input" placeholder="Acompte création site vitrine">
+                </div>
+                <button type="button" id="btnEncaisseSubmit" class="btn btn-ink" style="height:35px;">Encaisser</button>
+              </div>
+
+              <div style="margin-top:16px;">
+                <h5 style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--muted); margin:0 0 8px;">Derniers encaissements enregistrés</h5>
+                <div id="encaissementsList" style="display:flex; flex-direction:column; gap:6px;">
+                  <!-- Rempli dynamiquement -->
+                </div>
+              </div>
             </div>
           </div>
 
@@ -653,6 +471,73 @@
                   <!-- Rempli dynamiquement par JS -->
                 </tbody>
               </table>
+            </div>
+
+            <!-- Gestion des comptes d'accès de l'équipe -->
+            <div class="panel" style="margin-top:24px; padding:20px;">
+              <h4 style="font-size:14px; font-weight:700; margin:0 0 12px; color:var(--ink);">{{ icon('shield', 15) }} Comptes d'accès de l'équipe</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:14px;">
+                <div style="background:var(--paper-2); padding:14px; border-radius:6px; border:1px solid var(--line);">
+                  <strong style="color:var(--ink); font-size:13px;">admin</strong> <span class="badge" style="background:#E2E8F0; margin-left:6px;">Dirigeant</span>
+                  <p style="font-size:12px; color:var(--muted); margin:4px 0 10px;">Accès total : gestion d'équipe, suppressions, finances et export.</p>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btnPassAdmin">Changer mot de passe</button>
+                </div>
+                <div style="background:var(--paper-2); padding:14px; border-radius:6px; border:1px solid var(--line);">
+                  <strong style="color:var(--ink); font-size:13px;">associe</strong> <span class="badge" style="background:#E2E8F0; margin-left:6px;">Associé</span>
+                  <p style="font-size:12px; color:var(--muted); margin:4px 0 10px;">Accès opérationnel : recherche, appels, portefeuille et masquage.</p>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btnPassAssocie">Changer mot de passe</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- VOLET 5 : TABLEAU DE BORD & INDICATEURS GLOBAUX -->
+          <div id="pane-dashboard" class="studio-pane">
+            <div class="widgets" style="margin-bottom:24px;">
+              <article class="widget">
+                <span class="widget-icon">{{ icon('bookmark', 16) }}</span>
+                <span class="widget-value" id="dashSuivies">18</span>
+                <span class="widget-label">Entreprises suivies</span>
+                <span class="widget-note">Portefeuille actif partagé</span>
+              </article>
+              <article class="widget">
+                <span class="widget-icon">{{ icon('ban', 16) }}</span>
+                <span class="widget-value" id="dashSansSite">68 %</span>
+                <span class="widget-label">Sans site détecté</span>
+                <span class="widget-note">Taux d'opportunités immédiates</span>
+              </article>
+              <article class="widget">
+                <span class="widget-icon">{{ icon('globe', 16) }}</span>
+                <span class="widget-value" id="dashAvecSite">16</span>
+                <span class="widget-label">Sites déjà en ligne</span>
+                <span class="widget-note">Écartées de la prospection</span>
+              </article>
+              <article class="widget">
+                <span class="widget-icon">{{ icon('eye-off', 16) }}</span>
+                <span class="widget-value" id="dashMasquees">5</span>
+                <span class="widget-label">Entreprises masquées</span>
+                <span class="widget-note">Motif auditable au Panel Staff</span>
+              </article>
+            </div>
+
+            <div class="home-two-cols">
+              <section class="panel pip-block" style="margin:0;">
+                <h3 class="home-title">Avancement du cycle commercial</h3>
+                <p class="pip-lede">Répartition des prospects selon leur maturité dans le cycle de conversion.</p>
+                <ul class="pip" id="dashPipelineProgress">
+                  <!-- Jauges remplies dynamiquement -->
+                </ul>
+              </section>
+
+              <section class="panel guide" style="margin:0;">
+                <h3 class="home-title">Guide rapide en 4 gestes</h3>
+                <ol class="guide-list">
+                  <li><span class="guide-num">1</span><div><strong>Cherchez</strong> par nom, métier ou SIREN avec filtres stricts.</div></li>
+                  <li><span class="guide-num">2</span><div><strong>Activez « sans site détecté »</strong> pour isoler les cibles.</div></li>
+                  <li><span class="guide-num">3</span><div><strong>Vérifiez la fiche</strong> et attribuez l'entreprise à votre suivi.</div></li>
+                  <li><span class="guide-num">4</span><div><strong>Appelez et avancez</strong> jusqu'à la signature du site.</div></li>
+                </ol>
+              </section>
             </div>
           </div>
         </div>
@@ -829,6 +714,34 @@
     </div>
   </div>
 
+  <!-- MODAL MOT DE PASSE -->
+  <div id="modalPassword" class="studio-modal-overlay">
+    <div class="studio-modal-box">
+      <div class="studio-modal-head">
+        <h3>Modifier le mot de passe</h3>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnModalPassClose">{{ icon('x', 14) }}</button>
+      </div>
+      <div class="studio-modal-body">
+        <div class="studio-field">
+          <label for="passUser">Compte sélectionné</label>
+          <input type="text" id="passUser" class="studio-mini-input" readonly value="admin">
+        </div>
+        <div class="studio-field">
+          <label for="passNew">Nouveau mot de passe (min. 10 caractères)</label>
+          <input type="password" id="passNew" class="studio-mini-input" placeholder="••••••••••••">
+        </div>
+        <div class="studio-field">
+          <label for="passConfirm">Confirmer le nouveau mot de passe</label>
+          <input type="password" id="passConfirm" class="studio-mini-input" placeholder="••••••••••••">
+        </div>
+      </div>
+      <div class="studio-modal-foot">
+        <button type="button" class="btn btn-ghost" id="btnModalPassCancel">Annuler</button>
+        <button type="button" class="btn btn-ink" id="btnModalPassSave">Mettre à jour</button>
+      </div>
+    </div>
+  </div>
+
   <!-- CONTENEUR DE TOASTS -->
   <div id="studioToasts" class="studio-toast-container"></div>
 
@@ -850,6 +763,7 @@
     var livrables = JSON.parse(localStorage.getItem('balise_livrables') || '{}');
     var referees = JSON.parse(localStorage.getItem('balise_referees') || '{"810764231": "admin"}');
     var pipelineStatuses = JSON.parse(localStorage.getItem('balise_pipeline') || '{"810764231": "a_contacter", "901234567": "contacte"}');
+    var encaissements = JSON.parse(localStorage.getItem('balise_encaissements') || '[{"siren":"901234567","nom":"Garage de l\'Essonne","montant":1500,"date":"20/09/2026","libelle":"Acompte site vitrine","par":"admin"}]');
 
     var currentSelectedSiren = null;
 
@@ -884,11 +798,37 @@
       if (targetPaneId === 'suivi') renderSuiviTable();
       if (targetPaneId === 'portefeuille') renderKanban();
       if (targetPaneId === 'staff') renderStaffTable();
+      if (targetPaneId === 'dashboard') renderDashboard();
     }
+
+    window.switchPane = function(targetPaneId) {
+      tabBtns.forEach(function(b) {
+        if (b.dataset.pane === targetPaneId) b.classList.add('active');
+        else b.classList.remove('active');
+      });
+      panes.forEach(function(p) {
+        if (p.id === 'pane-' + targetPaneId) p.classList.add('active');
+        else p.classList.remove('active');
+      });
+      if (targetPaneId === 'suivi') renderSuiviTable();
+      if (targetPaneId === 'portefeuille') renderKanban();
+      if (targetPaneId === 'staff') renderStaffTable();
+      if (targetPaneId === 'dashboard') renderDashboard();
+    };
 
     tabBtns.forEach(function(b) {
       b.addEventListener('click', function() {
-        switchPane(this.dataset.pane);
+        window.switchPane(this.dataset.pane);
+      });
+    });
+
+    document.querySelectorAll('[data-nav-pane]').forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        var target = this.dataset.navPane;
+        window.switchPane(target);
+        var studioEl = document.getElementById('studio');
+        if (studioEl) studioEl.scrollIntoView({ behavior: 'smooth' });
       });
     });
 
@@ -1422,6 +1362,158 @@
           renderSuiviTable();
         });
       });
+
+      renderEncaissementsList();
+    }
+
+    // Password Modal Logic
+    var modalPass = document.getElementById('modalPassword');
+    window.openPasswordModal = function(username) {
+      document.getElementById('passUser').value = username;
+      document.getElementById('passNew').value = '';
+      document.getElementById('passConfirm').value = '';
+      modalPass.classList.add('open');
+    };
+    document.getElementById('btnModalPassClose').addEventListener('click', function() { modalPass.classList.remove('open'); });
+    document.getElementById('btnModalPassCancel').addEventListener('click', function() { modalPass.classList.remove('open'); });
+    document.getElementById('btnModalPassSave').addEventListener('click', function() {
+      var n = document.getElementById('passNew').value;
+      var c = document.getElementById('passConfirm').value;
+      if (!n || n.length < 10) {
+        showToast('Le mot de passe doit faire au moins 10 caractères.', '<span style="color:#DC2626;">✕</span>');
+        return;
+      }
+      if (n !== c) {
+        showToast('Les mots de passe ne correspondent pas.', '<span style="color:#DC2626;">✕</span>');
+        return;
+      }
+      modalPass.classList.remove('open');
+      showToast('Mot de passe mis à jour avec succès (haché scrypt).');
+    });
+
+    document.getElementById('btnPassAdmin').addEventListener('click', function() { window.openPasswordModal('admin'); });
+    document.getElementById('btnPassAssocie').addEventListener('click', function() { window.openPasswordModal('associe'); });
+
+    // Ajout manuel au suivi par SIREN
+    document.getElementById('btnAddSuiviSubmit').addEventListener('click', function() {
+      var s = (document.getElementById('addSuiviSiren').value || '').trim();
+      var n = (document.getElementById('addSuiviNom').value || '').trim();
+      var com = (document.getElementById('addSuiviCommune').value || '').trim();
+
+      if (!s || s.length !== 9) {
+        showToast('SIREN invalide : 9 chiffres requis.', '<span style="color:#DC2626;">✕</span>');
+        return;
+      }
+      if (!n) {
+        showToast('Indiquez au moins la dénomination commerciale.', '<span style="color:#DC2626;">✕</span>');
+        return;
+      }
+
+      var existing = getCompany(s);
+      if (!existing) {
+        existing = {
+          siren: s, nom: n, commune: com, naf_label: 'Saisie manuelle', naf_code: '00.00Z',
+          effectif: 'Non précisé', site: { status: 'aucun' }
+        };
+        companies.push(existing);
+      }
+      if (trackedSirens.indexOf(s) === -1) trackedSirens.push(s);
+      referees[s] = 'admin';
+      pipelineStatuses[s] = 'a_contacter';
+
+      localStorage.setItem('balise_tracked', JSON.stringify(trackedSirens));
+      localStorage.setItem('balise_referees', JSON.stringify(referees));
+      localStorage.setItem('balise_pipeline', JSON.stringify(pipelineStatuses));
+
+      document.getElementById('addSuiviSiren').value = '';
+      document.getElementById('addSuiviNom').value = '';
+      document.getElementById('addSuiviCommune').value = '';
+
+      showToast(n + ' ajoutée avec succès au suivi d'équipe !');
+      updateCounters();
+      renderSuiviTable();
+      renderSearchTable();
+    });
+
+    // Encaissements logic
+    function renderEncaissementsList() {
+      var container = document.getElementById('encaissementsList');
+      if (!container) return;
+      if (encaissements.length === 0) {
+        container.innerHTML = '<span style="font-size:12px; color:var(--muted);">Aucun encaissement enregistré pour l'instant.</span>';
+        return;
+      }
+      var html = '';
+      encaissements.forEach(function(e, idx) {
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; background:var(--paper-2); padding:8px 12px; border-radius:6px; border:1px solid var(--line); font-size:12.5px;">' +
+          '<div><strong>' + (e.nom || ('SIREN ' + e.siren)) + '</strong> &middot; <span style="color:var(--muted);">' + (e.libelle || 'Facture site') + ' &middot; ' + e.date + '</span></div>' +
+          '<div style="display:flex; align-items:center; gap:10px;">' +
+            '<strong style="color:var(--success); font-size:13px;">' + e.montant.toLocaleString('fr-FR') + ' €</strong>' +
+            '<button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger); padding:2px 6px;" data-del-encaisse="' + idx + '">✕</button>' +
+          '</div>' +
+        '</div>';
+      });
+      container.innerHTML = html;
+
+      container.querySelectorAll('[data-del-encaisse]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var idx = parseInt(this.dataset.delEncaisse);
+          encaissements.splice(idx, 1);
+          localStorage.setItem('balise_encaissements', JSON.stringify(encaissements));
+          showToast('Encaissement supprimé.');
+          renderKanban();
+        });
+      });
+    }
+
+    document.getElementById('btnEncaisseSubmit').addEventListener('click', function() {
+      var s = (document.getElementById('encaisseSiren').value || '').trim();
+      var m = parseInt(document.getElementById('encaisseMontant').value || '0', 10);
+      var lib = (document.getElementById('encaisseLibelle').value || '').trim();
+
+      if (!m || m <= 0) {
+        showToast('Montant invalide.', '<span style="color:#DC2626;">✕</span>');
+        return;
+      }
+      var c = getCompany(s);
+      encaissements.unshift({
+        siren: s, nom: c ? c.nom : ('SIREN ' + s), montant: m, libelle: lib,
+        date: new Date().toLocaleDateString('fr-FR'), par: 'admin'
+      });
+      localStorage.setItem('balise_encaissements', JSON.stringify(encaissements));
+      document.getElementById('encaisseSiren').value = '';
+      document.getElementById('encaisseLibelle').value = '';
+      showToast('Encaissement de ' + m + ' € enregistré !', '<span style="color:#10B981;">€</span>');
+      renderKanban();
+    });
+
+    // Tableau de bord indicateurs
+    function renderDashboard() {
+      document.getElementById('dashSuivies').textContent = trackedSirens.length;
+      document.getElementById('dashMasquees').textContent = hides.length;
+
+      var pipeUl = document.getElementById('dashPipelineProgress');
+      if (!pipeUl) return;
+
+      var counts = {};
+      initialPipeline.forEach(function(st) { counts[st[0]] = 0; });
+      trackedSirens.forEach(function(siren) {
+        var st = pipelineStatuses[siren] || 'a_contacter';
+        if (counts[st] !== undefined) counts[st]++;
+      });
+      var maxVal = Math.max.apply(null, Object.values(counts).concat([1]));
+
+      var html = '';
+      initialPipeline.forEach(function(st) {
+        var c = counts[st[0]] || 0;
+        var pct = Math.round((c / maxVal) * 100);
+        html += '<li class="pip-row">' +
+          '<span class="pip-label">' + st[1] + '</span>' +
+          '<span class="pip-track"><span class="pip-fill st-' + st[0] + '" style="--part:' + pct + '%;"></span></span>' +
+          '<span class="pip-count">' + c + '</span>' +
+        '</li>';
+      });
+      pipeUl.innerHTML = html;
     }
 
     // Tableau Panel Staff
@@ -1542,6 +1634,249 @@
     renderSearchTable();
   })();
   </script>
+
+  <!-- SECTION 01 : LE PROBLÈME -->
+  <section id="probleme" class="pres-section pres-section-alt">
+    <div class="pres-container">
+      <div class="section-badge">01 · LE CONSTAT</div>
+      <h2 class="section-title">La prospection locale artisanale est souvent aveugle.</h2>
+      <p class="section-lede">
+        La recherche manuelle sur Google Maps ou dans les annuaires fait perdre des heures en tombant sur des entreprises déjà équipées, des chaînes franchisées ou des structures fermées.
+      </p>
+
+      <div class="compare-grid">
+        <div class="compare-card compare-bad">
+          <div class="compare-header">
+            {{ icon('alert', 18) }}
+            <h3>La méthode manuelle classique</h3>
+          </div>
+          <ul class="compare-list">
+            <li>Recherche aléatoire sur Google Maps et annuaires web</li>
+            <li>Démarchage de franchises nationales dont le site est centralisé au siège</li>
+            <li>Temps perdu à vérifier manuellement chaque nom de domaine un par un</li>
+            <li>Doublons d’appels fréquents entre collaborateurs de l'agence</li>
+            <li>Aucune visibilité sur le statut réel de l'entreprise (active ou radiée)</li>
+          </ul>
+        </div>
+
+        <div class="compare-card compare-good">
+          <div class="compare-header">
+            {{ icon('check', 18) }}
+            <h3>La précision Balise</h3>
+          </div>
+          <ul class="compare-list">
+            <li>Interrogation directe des registres officiels français (INSEE &amp; RNE)</li>
+            <li>Exclusion algorithmique stricte des grandes enseignes et réseaux multi-établissements</li>
+            <li>Détection DNS ultra-rapide sur les domaines probables (.fr prioritaire)</li>
+            <li>Mise en évidence immédiate du signal d'opportunité <strong>« Aucun site détecté »</strong></li>
+            <li>Tableau de suivi d'équipe empêchant les collisions commerciales</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 02 : LE WORKFLOW -->
+  <section id="workflow" class="pres-section">
+    <div class="pres-container">
+      <div class="section-badge">02 · WORKFLOW</div>
+      <h2 class="section-title">Un pipeline commercial direct, sans friction.</h2>
+      <p class="section-lede">
+        De la requête initiale jusqu'à la signature du devis de création de site web : chaque étape est calibrée pour aller vite.
+      </p>
+
+      <div class="workflow-chain">
+        <div class="chain-step">
+          <div class="step-num">01</div>
+          <div class="step-icon">{{ icon('search', 20) }}</div>
+          <h4>Recherche</h4>
+          <p>Ciblage précis par département, code postal, activité ou code NAF.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">02</div>
+          <div class="step-icon">{{ icon('refresh', 20) }}</div>
+          <h4>Détection</h4>
+          <p>Vérification DNS instantanée des domaines associés à l'enseigne.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">03</div>
+          <div class="step-icon">{{ icon('shield', 20) }}</div>
+          <h4>Qualification</h4>
+          <p>Élimination automatique des grands groupes, réseaux et ONG.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">04</div>
+          <div class="step-icon">{{ icon('phone', 20) }}</div>
+          <h4>Prospection</h4>
+          <p>Attribution du prospect en 1 clic et enregistrement des appels.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">05</div>
+          <div class="step-icon">{{ icon('briefcase', 20) }}</div>
+          <h4>Suivi</h4>
+          <p>Planning de relances, livrables (maquette, zip) et pipeline client.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step step-highlight">
+          <div class="step-num">06</div>
+          <div class="step-icon">{{ icon('check', 20) }}</div>
+          <h4>Vente</h4>
+          <p>Encaissement enregistré et reporting sur 12 mois.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 03 : LA DÉTECTION DU SIGNAL -->
+  <section id="detection" class="pres-section pres-section-alt">
+    <div class="pres-container">
+      <div class="pres-grid-split">
+        <div>
+          <div class="section-badge">03 · DÉTECTION</div>
+          <h2 class="section-title">Faire émerger le signal invisible.</h2>
+          <p class="section-text">
+            Pour un artisan ou un commerce indépendant, ne pas avoir de site web n’est pas un défaut : <strong>c’est votre opportunité d’affaires</strong>.
+          </p>
+          <p class="section-text">
+            Balise interroge les serveurs DNS sur une douzaine de combinaisons candidates formées à partir de la raison sociale et de l'enseigne de l'entreprise (ex. <code>fournil-martin.fr</code>, <code>boulangeriemartin.com</code>).
+          </p>
+          <div class="signal-quote">
+            <span class="signal-quote-icon">●</span>
+            <div>
+              <strong>« Aucun site détecté »</strong>
+              <p>Ce badge ambre signale les entreprises prioritaires : celles qui génèrent du chiffre d'affaires réel mais restent absentes du web.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pres-card signal-demo-card">
+          <div class="signal-card-head">
+            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+            <span class="signal-date">Vérification DNS instantanée</span>
+          </div>
+          <div class="signal-card-body">
+            <h3>PLOMBERIE CHAUFFAGE 91</h3>
+            <p class="signal-meta">SARL · SIREN 910 345 678 · Massy (91300)</p>
+            <div class="signal-checks">
+              <div class="check-line ok">{{ icon('check', 14) }} <span>Entreprise active immatriculée au RNE</span></div>
+              <div class="check-line ok">{{ icon('check', 14) }} <span>Dirigeant physique identifié</span></div>
+              <div class="check-line highlight">{{ icon('alert', 14) }} <span>Aucun domaine actif résolu (.fr, .com, .net)</span></div>
+              <div class="check-line ok">{{ icon('check', 14) }} <span>1 établissement unique (artisan indépendant cible)</span></div>
+            </div>
+            <div class="signal-action-row">
+              <a href="/connexion" class="btn btn-ink btn-sm">{{ icon('phone', 13) }} Contacter ce prospect</a>
+              <span class="signal-pot">Potentiel : Site vitrine clé en main</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 04 : LA QUALIFICATION INTELIGENTE -->
+  <section id="qualification" class="pres-section">
+    <div class="pres-container">
+      <div class="section-badge">04 · QUALIFICATION</div>
+      <h2 class="section-title">Éliminez le bruit, gardez la valeur.</h2>
+      <p class="section-lede">
+        La base officielle contient des millions d'entités qui ne signeront jamais de devis chez un artisan du web. Balise les filtre avant même qu'elles n'apparaissent à l'écran.
+      </p>
+
+      <div class="filters-cards-grid">
+        <div class="feat-card">
+          <div class="feat-icon">{{ icon('shield', 22) }}</div>
+          <h4>Grandes enseignes &amp; Chaînes</h4>
+          <p>Carrefour, Auchan, Leclerc, Lidl, McDonald's, Burger King... toutes les enseignes nationales de distribution et de restauration rapide sont écartées.</p>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">{{ icon('briefcase', 22) }}</div>
+          <h4>Réseaux &amp; Multi-sites</h4>
+          <p>Toute entité possédant 10 établissements ou plus est automatiquement classée comme réseau structuré et filtrée par défaut.</p>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">{{ icon('home', 22) }}</div>
+          <h4>Grandes ONG &amp; Administrations</h4>
+          <p>La Croix-Rouge, le Secours Populaire, les ministères, collectivités territoriales et organismes sociaux (codes 7xxx/8xxx) sont exclus.</p>
+        </div>
+
+        <div class="feat-card feat-card-target">
+          <div class="feat-icon feat-target-icon">{{ icon('check', 22) }}</div>
+          <h4>Préservation des artisans locaux</h4>
+          <p>Un commerce portant un nom géographique à un carrefour routier (ex. <em>Café du Carrefour</em>, <em>Boulangerie du Carrefour</em>) reste quant à lui parfaitement ciblé.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 05 : LE SUIVI OPÉRATIONNEL -->
+  <section id="suivi" class="pres-section pres-section-alt">
+    <div class="pres-container">
+      <div class="section-badge">05 · SUIVI COMMERCIAL</div>
+      <h2 class="section-title">Un CRM opérationnel pensé pour l'équipe.</h2>
+      <p class="section-lede">
+        Fini les tableurs désynchronisés ou les appels en doublon. Chaque prospect est suivi en temps réel.
+      </p>
+
+      <div class="suivi-preview-box">
+        <div class="suivi-bar">
+          <span class="suivi-pill active">Tous (4)</span>
+          <span class="suivi-pill is-alerte">1 en retard</span>
+          <span class="suivi-pill">1 aujourd'hui</span>
+          <span class="suivi-pill">Mes dossiers</span>
+          <span class="suivi-pill">1 sans référent</span>
+        </div>
+
+        <div class="suivi-row-mock">
+          <div class="mock-col-main">
+            <strong>GARAGE DE L'ESSONNE</strong>
+            <small>91000 Évry · Réparation automobile (45.20A)</small>
+          </div>
+          <div class="mock-col-badge">
+            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+          </div>
+          <div class="mock-col-ref">
+            <span class="badge-ref">Prise par vous (admin)</span>
+          </div>
+          <div class="mock-col-urg">
+            <span class="badge u-aujourd_hui">Aujourd'hui à 14h30</span>
+          </div>
+          <div class="mock-col-act">
+            <a href="/connexion" class="btn btn-ink btn-sm">{{ icon('phone', 13) }} Appel passé</a>
+          </div>
+        </div>
+
+        <div class="suivi-row-mock">
+          <div class="mock-col-main">
+            <strong>FOURNIL DE LA MARNE</strong>
+            <small>77000 Melun · Boulangerie (10.71C)</small>
+          </div>
+          <div class="mock-col-badge">
+            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+          </div>
+          <div class="mock-col-ref">
+            <span class="badge-free">Personne pour l'instant</span>
+          </div>
+          <div class="mock-col-urg">
+            <span class="badge u-a_faire">Premier contact</span>
+          </div>
+          <div class="mock-col-act">
+            <a href="/connexion" class="btn btn-ghost btn-sm">Je m'en occupe</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- SECTION 07 : CTA FINAL -->
   <section class="pres-final-cta">
