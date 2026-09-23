@@ -22,7 +22,7 @@ app = create_app()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT") or os.environ.get("MBDV_PORT") or "5050")
     host = os.environ.get("MBDV_HOST", "0.0.0.0")  # noqa: S104 - conteneur/hebergement
-    print(f"MBDV - Prospection  |  http://{host}:{port}")
+    print(f"Balise Prospection  |  http://{host}:{port}")
     try:
         from waitress import serve
         serve(app, host=host, port=port, threads=8)

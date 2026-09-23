@@ -1,4 +1,4 @@
-"""Application MBDV - prospection d'entreprises francaises sans site web."""
+"""Application Balise Prospection - prospection d'entreprises francaises sans site web."""
 import gzip
 import hashlib
 import logging
@@ -166,11 +166,15 @@ def create_app() -> Flask:
 
     @app.after_request
     def _en_tetes(reponse):
+        reponse.headers.setdefault("X-Content-Type-Options", "nosniff")
+        reponse.headers.setdefault("X-XSS-Protection", "1; mode=block")
         if embarque:
             # Le jeton de session circule dans l'URL : pas de fuite par Referer,
             # pas de mise en cache par un intermediaire.
             reponse.headers.setdefault("Referrer-Policy", "same-origin")
             reponse.headers.setdefault("Cache-Control", "no-store")
+        else:
+            reponse.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         return reponse
 
     @app.errorhandler(HTTPException)

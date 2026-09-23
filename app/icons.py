@@ -6,6 +6,8 @@ from markupsafe import Markup
 
 _ICONS = {
     "search": '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>',
+    "radar": ('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/>'
+              '<circle cx="12" cy="12" r="1.5"/><path d="M12 3v9l6 6"/>'),
     "briefcase": ('<rect x="2.5" y="7" width="19" height="13" rx="2"/>'
                   '<path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>'
                   '<path d="M2.5 12h19"/>'),

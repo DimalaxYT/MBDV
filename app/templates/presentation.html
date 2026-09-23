@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Balise — Plateforme de prospection B2B locale pour créateurs de sites web</title>
+  <meta name="description" content="Recherchez des entreprises locales, filtrez les prospects pertinents et identifiez rapidement ceux dont aucun site web n'a été détecté.">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}?v={{ asset_version }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ asset_version }}">
+  <meta name="color-scheme" content="light dark">
+  <script>
+    (function () {
+      document.documentElement.classList.add("js");
+      try {
+        var choix = localStorage.getItem("mbdv-theme");
+        var sombre = choix ? choix === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = sombre ? "dark" : "light";
+      } catch (e) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
+</head>
+<body class="presentation-body">
+
+<!-- En-tête Vitrine -->
+<header class="pres-header">
+  <div class="pres-header-inner">
+    <a href="/presentation" class="pres-brand">
+      <svg class="pres-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.3"/>
+        <circle cx="16" cy="16" r="8" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.6"/>
+        <circle cx="16" cy="16" r="3" fill="#F59E0B"/>
+        <line x1="16" y1="2" x2="16" y2="8" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="16" y1="24" x2="16" y2="30" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+      <span class="pres-brand-title">Balise<span class="dot">.</span></span>
+      <span class="pres-brand-pill">Prospection</span>
+    </a>
+
+    <nav class="pres-nav">
+      <a href="#probleme" class="pres-nav-link">Le Problème</a>
+      <a href="#workflow" class="pres-nav-link">Workflow</a>
+      <a href="#detection" class="pres-nav-link">Détection</a>
+      <a href="#qualification" class="pres-nav-link">Qualification</a>
+      <a href="#suivi" class="pres-nav-link">Suivi & CRM</a>
+      <a href="#preview" class="pres-nav-link">Aperçu</a>
+    </nav>
+
+    <div class="pres-header-actions">
+      <button type="button" class="icon-btn theme-btn" data-theme-toggle title="Basculer le mode sombre / clair">
+        {{ icon('sun', 16, 'icon-sun') }} {{ icon('moon', 16, 'icon-moon') }}
+      </button>
+      <a href="/connexion" class="btn btn-ghost btn-sm">Se connecter</a>
+      <a href="/connexion" class="btn btn-ink btn-sm">Accéder à l'outil</a>
+    </div>
+  </div>
+</header>
+
+<!-- HERO SECTION AVEC CANVAS SIGNAL BEACON -->
+<main>
+  <section class="pres-hero">
+    <div class="pres-container">
+      <div class="pres-hero-grid">
+        <div class="pres-hero-content">
+          <div class="pres-eyebrow">
+            <span class="signal-indicator"></span>
+            <span>Signal de prospection B2B haute précision</span>
+          </div>
+
+          <h1 class="pres-hero-title">
+            Trouvez les entreprises locales qui ont <span class="highlight-text">besoin d’un site</span>.
+          </h1>
+
+          <p class="pres-hero-subtitle">
+            Recherchez des entreprises locales, filtrez les prospects pertinents et identifiez rapidement ceux dont aucun site web n’a été détecté.
+          </p>
+
+          <div class="pres-hero-cta">
+            <a href="/connexion" class="btn btn-ink btn-tall pres-btn-primary">
+              {{ icon('search', 16) }} Commencer à prospecter
+            </a>
+            <a href="#detection" class="btn btn-ghost btn-tall pres-btn-secondary">
+              {{ icon('radar', 16) }} Comprendre le signal
+            </a>
+          </div>
+
+          <div class="pres-hero-metrics">
+            <div class="metric-item">
+              <strong>Base officielle</strong>
+              <span>INSEE &amp; RNE en temps réel</span>
+            </div>
+            <div class="metric-separator"></div>
+            <div class="metric-item">
+              <strong>Résolution DNS</strong>
+              <span>Vérification d’extension .fr &amp; .com</span>
+            </div>
+            <div class="metric-separator"></div>
+            <div class="metric-item">
+              <strong>Filtre Anti-Chaînes</strong>
+              <span>GE, ETI &amp; franchises exclues</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Radar Beacon Interactive Canvas -->
+        <div class="pres-hero-visual">
+          <div class="beacon-viewport">
+            <canvas id="signalBeaconCanvas" width="560" height="480"></canvas>
+            <div class="beacon-overlay-card" id="beaconInfoCard">
+              <div class="beacon-card-header">
+                <span class="beacon-pulse-dot"></span>
+                <span class="beacon-signal-label">SIGNAL DÉTECTÉ</span>
+                <span class="beacon-coords">91000 · Évry</span>
+              </div>
+              <div class="beacon-card-body">
+                <h4 id="beaconCompanyName">Boulangerie du Parc</h4>
+                <p id="beaconActivity">Boulangerie et pâtisserie · NAF 10.71C</p>
+                <div class="beacon-status-pill">
+                  <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+                </div>
+              </div>
+            </div>
+            <div class="beacon-caption">
+              <span>SCAN RADAR LOCAL</span>
+              <em>Bruit → Détection → Signal → Action</em>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 01 : LE PROBLÈME -->
+  <section id="probleme" class="pres-section pres-section-alt">
+    <div class="pres-container">
+      <div class="section-badge">01 · LE CONSTAT</div>
+      <h2 class="section-title">La prospection locale artisanale est souvent aveugle.</h2>
+      <p class="section-lede">
+        La recherche manuelle sur Google Maps ou dans les annuaires fait perdre des heures en tombant sur des entreprises déjà équipées, des chaînes franchisées ou des structures fermées.
+      </p>
+
+      <div class="compare-grid">
+        <div class="compare-card compare-bad">
+          <div class="compare-header">
+            {{ icon('alert', 18) }}
+            <h3>La méthode manuelle classique</h3>
+          </div>
+          <ul class="compare-list">
+            <li>Recherche aléatoire sur Google Maps et annuaires web</li>
+            <li>Démarchage de franchises nationales dont le site est centralisé au siège</li>
+            <li>Temps perdu à vérifier manuellement chaque nom de domaine un par un</li>
+            <li>Doublons d’appels fréquents entre collaborateurs de l'agence</li>
+            <li>Aucune visibilité sur le statut réel de l'entreprise (active ou radiée)</li>
+          </ul>
+        </div>
+
+        <div class="compare-card compare-good">
+          <div class="compare-header">
+            {{ icon('check', 18) }}
+            <h3>La précision Balise</h3>
+          </div>
+          <ul class="compare-list">
+            <li>Interrogation directe des registres officiels français (INSEE &amp; RNE)</li>
+            <li>Exclusion algorithmique stricte des grandes enseignes et réseaux multi-établissements</li>
+            <li>Détection DNS ultra-rapide sur les domaines probables (.fr prioritaire)</li>
+            <li>Mise en évidence immédiate du signal d'opportunité <strong>« Aucun site détecté »</strong></li>
+            <li>Tableau de suivi d'équipe empêchant les collisions commerciales</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 02 : LE WORKFLOW -->
+  <section id="workflow" class="pres-section">
+    <div class="pres-container">
+      <div class="section-badge">02 · WORKFLOW</div>
+      <h2 class="section-title">Un pipeline commercial direct, sans friction.</h2>
+      <p class="section-lede">
+        De la requête initiale jusqu'à la signature du devis de création de site web : chaque étape est calibrée pour aller vite.
+      </p>
+
+      <div class="workflow-chain">
+        <div class="chain-step">
+          <div class="step-num">01</div>
+          <div class="step-icon">{{ icon('search', 20) }}</div>
+          <h4>Recherche</h4>
+          <p>Ciblage précis par département, code postal, activité ou code NAF.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">02</div>
+          <div class="step-icon">{{ icon('refresh', 20) }}</div>
+          <h4>Détection</h4>
+          <p>Vérification DNS instantanée des domaines associés à l'enseigne.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">03</div>
+          <div class="step-icon">{{ icon('shield', 20) }}</div>
+          <h4>Qualification</h4>
+          <p>Élimination automatique des grands groupes, réseaux et ONG.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">04</div>
+          <div class="step-icon">{{ icon('phone', 20) }}</div>
+          <h4>Prospection</h4>
+          <p>Attribution du prospect en 1 clic et enregistrement des appels.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">05</div>
+          <div class="step-icon">{{ icon('briefcase', 20) }}</div>
+          <h4>Suivi</h4>
+          <p>Planning de relances, livrables (maquette, zip) et pipeline client.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step step-highlight">
+          <div class="step-num">06</div>
+          <div class="step-icon">{{ icon('check', 20) }}</div>
+          <h4>Vente</h4>
+          <p>Encaissement enregistré et reporting sur 12 mois.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 03 : LA DÉTECTION DU SIGNAL -->
+  <section id="detection" class="pres-section pres-section-alt">
+    <div class="pres-container">
+      <div class="pres-grid-split">
+        <div>
+          <div class="section-badge">03 · DÉTECTION</div>
+          <h2 class="section-title">Faire émerger le signal invisible.</h2>
+          <p class="section-text">
+            Pour un artisan ou un commerce indépendant, ne pas avoir de site web n’est pas un défaut : <strong>c’est votre opportunité d’affaires</strong>.
+          </p>
+          <p class="section-text">
+            Balise interroge les serveurs DNS sur une douzaine de combinaisons candidates formées à partir de la raison sociale et de l'enseigne de l'entreprise (ex. <code>fournil-martin.fr</code>, <code>boulangeriemartin.com</code>).
+          </p>
+          <div class="signal-quote">
+            <span class="signal-quote-icon">●</span>
+            <div>
+              <strong>« Aucun site détecté »</strong>
+              <p>Ce badge ambre signale les entreprises prioritaires : celles qui génèrent du chiffre d'affaires réel mais restent absentes du web.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pres-card signal-demo-card">
+          <div class="signal-card-head">
+            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+            <span class="signal-date">Vérification DNS instantanée</span>
+          </div>
+          <div class="signal-card-body">
+            <h3>PLOMBERIE CHAUFFAGE 91</h3>
+            <p class="signal-meta">SARL · SIREN 910 345 678 · Massy (91300)</p>
+            <div class="signal-checks">
+              <div class="check-line ok">{{ icon('check', 14) }} <span>Entreprise active immatriculée au RNE</span></div>
+              <div class="check-line ok">{{ icon('check', 14) }} <span>Dirigeant physique identifié</span></div>
+              <div class="check-line highlight">{{ icon('alert', 14) }} <span>Aucun domaine actif résolu (.fr, .com, .net)</span></div>
+              <div class="check-line ok">{{ icon('check', 14) }} <span>1 établissement unique (artisan indépendant cible)</span></div>
+            </div>
+            <div class="signal-action-row">
+              <a href="/connexion" class="btn btn-ink btn-sm">{{ icon('phone', 13) }} Contacter ce prospect</a>
+              <span class="signal-pot">Potentiel : Site vitrine clé en main</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 04 : LA QUALIFICATION INTELIGENTE -->
+  <section id="qualification" class="pres-section">
+    <div class="pres-container">
+      <div class="section-badge">04 · QUALIFICATION</div>
+      <h2 class="section-title">Éliminez le bruit, gardez la valeur.</h2>
+      <p class="section-lede">
+        La base officielle contient des millions d'entités qui ne signeront jamais de devis chez un artisan du web. Balise les filtre avant même qu'elles n'apparaissent à l'écran.
+      </p>
+
+      <div class="filters-cards-grid">
+        <div class="feat-card">
+          <div class="feat-icon">{{ icon('shield', 22) }}</div>
+          <h4>Grandes enseignes &amp; Chaînes</h4>
+          <p>Carrefour, Auchan, Leclerc, Lidl, McDonald's, Burger King... toutes les enseignes nationales de distribution et de restauration rapide sont écartées.</p>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">{{ icon('briefcase', 22) }}</div>
+          <h4>Réseaux &amp; Multi-sites</h4>
+          <p>Toute entité possédant 10 établissements ou plus est automatiquement classée comme réseau structuré et filtrée par défaut.</p>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">{{ icon('home', 22) }}</div>
+          <h4>Grandes ONG &amp; Administrations</h4>
+          <p>La Croix-Rouge, le Secours Populaire, les ministères, collectivités territoriales et organismes sociaux (codes 7xxx/8xxx) sont exclus.</p>
+        </div>
+
+        <div class="feat-card feat-card-target">
+          <div class="feat-icon feat-target-icon">{{ icon('check', 22) }}</div>
+          <h4>Préservation des artisans locaux</h4>
+          <p>Un commerce portant un nom géographique à un carrefour routier (ex. <em>Café du Carrefour</em>, <em>Boulangerie du Carrefour</em>) reste quant à lui parfaitement ciblé.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 05 : LE SUIVI OPÉRATIONNEL -->
+  <section id="suivi" class="pres-section pres-section-alt">
+    <div class="pres-container">
+      <div class="section-badge">05 · SUIVI COMMERCIAL</div>
+      <h2 class="section-title">Un CRM opérationnel pensé pour l'équipe.</h2>
+      <p class="section-lede">
+        Fini les tableurs désynchronisés ou les appels en doublon. Chaque prospect est suivi en temps réel.
+      </p>
+
+      <div class="suivi-preview-box">
+        <div class="suivi-bar">
+          <span class="suivi-pill active">Tous (4)</span>
+          <span class="suivi-pill is-alerte">1 en retard</span>
+          <span class="suivi-pill">1 aujourd'hui</span>
+          <span class="suivi-pill">Mes dossiers</span>
+          <span class="suivi-pill">1 sans référent</span>
+        </div>
+
+        <div class="suivi-row-mock">
+          <div class="mock-col-main">
+            <strong>GARAGE DE L'ESSONNE</strong>
+            <small>91000 Évry · Réparation automobile (45.20A)</small>
+          </div>
+          <div class="mock-col-badge">
+            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+          </div>
+          <div class="mock-col-ref">
+            <span class="badge-ref">Prise par vous (admin)</span>
+          </div>
+          <div class="mock-col-urg">
+            <span class="badge u-aujourd_hui">Aujourd'hui à 14h30</span>
+          </div>
+          <div class="mock-col-act">
+            <a href="/connexion" class="btn btn-ink btn-sm">{{ icon('phone', 13) }} Appel passé</a>
+          </div>
+        </div>
+
+        <div class="suivi-row-mock">
+          <div class="mock-col-main">
+            <strong>FOURNIL DE LA MARNE</strong>
+            <small>77000 Melun · Boulangerie (10.71C)</small>
+          </div>
+          <div class="mock-col-badge">
+            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+          </div>
+          <div class="mock-col-ref">
+            <span class="badge-free">Personne pour l'instant</span>
+          </div>
+          <div class="mock-col-urg">
+            <span class="badge u-a_faire">Premier contact</span>
+          </div>
+          <div class="mock-col-act">
+            <a href="/connexion" class="btn btn-ghost btn-sm">Je m'en occupe</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 06 : APERÇU PRODUIT -->
+  <section id="preview" class="pres-section">
+    <div class="pres-container">
+      <div class="section-badge">06 · INTERFACE</div>
+      <h2 class="section-title">Sobre, compact, calibré pour aller vite.</h2>
+      <p class="section-lede">
+        Une interface à haute densité d’informations conçue avec les standards des meilleurs outils professionnels contemporains.
+      </p>
+
+      <div class="app-interface-preview">
+        <div class="interface-topbar">
+          <div class="dots-group">
+            <span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span>
+          </div>
+          <div class="mock-search-input">
+            {{ icon('search', 14) }} <span>boulangerie · dept. 91 · sans site détecté</span>
+          </div>
+          <div class="mock-user">
+            <span class="user-avatar-sm">D</span>
+            <span>Dirigeant</span>
+          </div>
+        </div>
+        <div class="interface-body">
+          <div class="mock-sidebar">
+            <span class="mock-nav-item active">{{ icon('search', 15) }} Recherche</span>
+            <span class="mock-nav-item">{{ icon('phone', 15) }} Suivi d'équipe</span>
+            <span class="mock-nav-item">{{ icon('briefcase', 15) }} Portefeuille</span>
+            <span class="mock-nav-item">{{ icon('shield', 15) }} Panel Staff</span>
+          </div>
+          <div class="mock-table-area">
+            <div class="mock-table-head">
+              <span>Entreprise</span><span>Localité</span><span>Activité</span><span>Site web</span><span>Action</span>
+            </div>
+            <div class="mock-table-row">
+              <strong>BOULANGERIE DU PARC</strong>
+              <span>Évry (91000)</span>
+              <span>Boulangerie-pâtisserie</span>
+              <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+              <button class="btn btn-ink btn-sm">Contacter</button>
+            </div>
+            <div class="mock-table-row">
+              <strong>SALON BRIE COIFFURE</strong>
+              <span>Fontainebleau (77300)</span>
+              <span>Coiffure mixte</span>
+              <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+              <button class="btn btn-ink btn-sm">Contacter</button>
+            </div>
+            <div class="mock-table-row">
+              <strong>PLOMBERIE CHAUFFAGE 91</strong>
+              <span>Massy (91300)</span>
+              <span>Plomberie &amp; Gaz</span>
+              <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+              <button class="btn btn-ink btn-sm">Contacter</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 07 : CTA FINAL -->
+  <section class="pres-final-cta">
+    <div class="pres-container">
+      <div class="final-cta-box">
+        <h2>Passez de la recherche à la vente.</h2>
+        <p>Identifiez les entreprises locales sans site dès aujourd'hui et construisez un pipeline commercial solide et partagé.</p>
+        <div class="final-cta-actions">
+          <a href="/connexion" class="btn btn-ink btn-tall">
+            {{ icon('search', 16) }} Ouvrir Balise Prospection
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- PIED DE PAGE -->
+<footer class="pres-footer">
+  <div class="pres-container pres-footer-inner">
+    <div class="pres-footer-brand">
+      <strong>Balise<span class="dot">.</span></strong>
+      <p>Plateforme de prospection B2B locale pour créateurs de sites et agences.</p>
+    </div>
+    <div class="pres-footer-links">
+      <a href="/connexion">Espace associés</a>
+      <a href="#probleme">Le constat</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#detection">Détection</a>
+      <a href="#qualification">Qualification</a>
+    </div>
+    <div class="pres-footer-copy">
+      © {{ now_iso()[:4] if now_iso is defined else '2026' }} Balise Prospection · Tous droits réservés.
+    </div>
+  </div>
+</footer>
+
+<!-- SCRIPT DU SIGNAL BEACON CANVAS RADAR -->
+<script>
+(function() {
+  var canvas = document.getElementById('signalBeaconCanvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  var infoName = document.getElementById('beaconCompanyName');
+  var infoAct = document.getElementById('beaconActivity');
+
+  // Donnees prospect cibles
+  var targets = [
+    { name: "Boulangerie du Parc", city: "Évry (91000)", act: "Boulangerie et pâtisserie · NAF 10.71C", angle: 0.6, dist: 130 },
+    { name: "Garage de l'Essonne", city: "Corbeil-Essonnes (91100)", act: "Entretien mécanique automobile · NAF 45.20A", angle: 1.8, dist: 180 },
+    { name: "Plomberie Chauffage 91", city: "Massy (91300)", act: "Installation d'eau et de gaz · NAF 43.22A", angle: 3.4, dist: 150 },
+    { name: "Fournil de la Marne", city: "Melun (77000)", act: "Artisan boulanger · NAF 10.71C", angle: 4.6, dist: 200 },
+    { name: "Salon Brie Coiffure", city: "Fontainebleau (77300)", act: "Coiffure et esthétique · NAF 96.02A", angle: 5.5, dist: 120 }
+  ];
+
+  // Bruit de fond (entreprises ordinaires)
+  var noiseNodes = [];
+  var nodeCount = 55;
+  for (var i = 0; i < nodeCount; i++) {
+    var a = Math.random() * Math.PI * 2;
+    var d = 40 + Math.random() * 200;
+    noiseNodes.push({ angle: a, dist: d, size: 1.5 + Math.random() * 1.5 });
+  }
+
+  var sweepAngle = 0;
+  var activeTargetIndex = 0;
+  var lastTargetTime = 0;
+
+  function resize() {
+    var rect = canvas.getBoundingClientRect();
+    if (rect.width > 0) {
+      canvas.width = rect.width * (window.devicePixelRatio || 1);
+      canvas.height = rect.height * (window.devicePixelRatio || 1);
+    }
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function render(time) {
+    var w = canvas.width;
+    var h = canvas.height;
+    var dpr = window.devicePixelRatio || 1;
+    var cx = w / 2;
+    var cy = h / 2;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Cercles concentriques radar
+    var isDark = document.documentElement.dataset.theme === 'dark';
+    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(15, 23, 42, 0.08)';
+    ctx.lineWidth = 1 * dpr;
+
+    [60, 120, 180, 230].forEach(function(r) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * dpr, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+
+    // Lignes d'axes
+    ctx.beginPath();
+    ctx.moveTo(cx - 230 * dpr, cy);
+    ctx.lineTo(cx + 230 * dpr, cy);
+    ctx.moveTo(cx, cy - 230 * dpr);
+    ctx.lineTo(cx, cy + 230 * dpr);
+    ctx.stroke();
+
+    // Bras radar en rotation
+    sweepAngle += 0.016;
+    if (sweepAngle > Math.PI * 2) sweepAngle -= Math.PI * 2;
+
+    // Faisceau de detection (gradient conique/secteur)
+    var grad = ctx.createRadialGradient(cx, cy, 10 * dpr, cx, cy, 230 * dpr);
+    grad.addColorStop(0, isDark ? 'rgba(37, 99, 235, 0.25)' : 'rgba(37, 99, 235, 0.15)');
+    grad.addColorStop(1, 'rgba(37, 99, 235, 0)');
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, 230 * dpr, sweepAngle - 0.45, sweepAngle);
+    ctx.closePath();
+    ctx.fill();
+
+    // Ligne balayante
+    ctx.strokeStyle = '#2563EB';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(sweepAngle) * 230 * dpr, cy + Math.sin(sweepAngle) * 230 * dpr);
+    ctx.stroke();
+
+    // Point central de la balise
+    ctx.fillStyle = '#2563EB';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Dessin du bruit de fond (entreprises non cibles)
+    ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(71, 85, 105, 0.35)';
+    noiseNodes.forEach(function(n) {
+      var nx = cx + Math.cos(n.angle) * n.dist * dpr;
+      var ny = cy + Math.sin(n.angle) * n.dist * dpr;
+      ctx.beginPath();
+      ctx.arc(nx, ny, n.size * dpr, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Dessin des cibles prioritaires (Signaux Ambres)
+    targets.forEach(function(t, idx) {
+      var tx = cx + Math.cos(t.angle) * t.dist * dpr;
+      var ty = cy + Math.sin(t.angle) * t.dist * dpr;
+
+      // Calcul de la distance angulaire avec le balayage
+      var diff = sweepAngle - t.angle;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+
+      var isNear = Math.abs(diff) < 0.2;
+      if (isNear && (time - lastTargetTime > 1200)) {
+        activeTargetIndex = idx;
+        lastTargetTime = time;
+        if (infoName) infoName.textContent = t.name;
+        if (infoAct) infoAct.textContent = t.act;
+      }
+
+      var isCurrent = (activeTargetIndex === idx);
+
+      // Signal ambre actif
+      ctx.fillStyle = '#F59E0B';
+      ctx.beginPath();
+      ctx.arc(tx, ty, (isCurrent ? 6 : 4) * dpr, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Onde de choc / halo ambre
+      if (isCurrent || isNear) {
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.beginPath();
+        var pulseR = (6 + (time % 1000) / 1000 * 12) * dpr;
+        ctx.arc(tx, ty, pulseR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Libelle prospect
+        ctx.fillStyle = isDark ? '#F8FAFC' : '#0F172A';
+        ctx.font = 'bold ' + (11 * dpr) + 'px sans-serif';
+        ctx.fillText(t.name, tx + 10 * dpr, ty - 4 * dpr);
+      }
+    });
+
+    requestAnimationFrame(render);
+  }
+
+  requestAnimationFrame(render);
+})();
+</script>
+</body>
+</html>

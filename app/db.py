@@ -214,6 +214,17 @@ def _migration_role(conn) -> None:
                      " WHERE id = (SELECT MIN(id) FROM users)")
 
 
+def _migration_indexes(conn) -> None:
+    """Cree les index de performances sur les tables si absents."""
+    conn.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_hides_siren ON hides(siren, restored_at);
+        CREATE INDEX IF NOT EXISTS idx_tracked_status ON tracked(status);
+        CREATE INDEX IF NOT EXISTS idx_tracked_pris_par ON tracked(pris_par);
+        CREATE INDEX IF NOT EXISTS idx_benefices_siren ON benefices(siren);
+        CREATE INDEX IF NOT EXISTS idx_benefices_encaisse_le ON benefices(encaisse_le);
+    """)
+
+
 def init_app(app) -> None:
     base = os.path.join(app.config["DATA_DIR"], "mbdv.sqlite3")
     conn = _connect(base)
@@ -224,6 +235,7 @@ def init_app(app) -> None:
         _migration_suivi(conn)
         _migration_livrables(conn)
         _migration_benefices(conn)
+        _migration_indexes(conn)
         conn.commit()
     finally:
         conn.close()

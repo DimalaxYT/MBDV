@@ -1,4 +1,4 @@
-/* MBDV - Prospection : interactions (panneau fiche, masquage, suivi, toasts) */
+/* Balise Prospection : interactions (panneau fiche, masquage, suivi, toasts) */
 (function () {
   "use strict";
 
@@ -56,9 +56,13 @@
   function snapshotFor(el) {
     // Priorite : ligne du tableau, sinon panneau fiche ouvert
     var row = el.closest("tr");
-    if (row && row.dataset.snapshot) return JSON.parse(row.dataset.snapshot);
+    if (row && row.dataset.snapshot) {
+      try { return JSON.parse(row.dataset.snapshot); } catch (e) { return null; }
+    }
     var over = document.querySelector(".slideover");
-    if (over && over.dataset.snapshot) return JSON.parse(over.dataset.snapshot);
+    if (over && over.dataset.snapshot) {
+      try { return JSON.parse(over.dataset.snapshot); } catch (e) { return null; }
+    }
     return null;
   }
 
@@ -910,6 +914,29 @@
     var interrupteur = ev.target.closest(".toggle");
     if (interrupteur && ev.target.type === "checkbox") {
       interrupteur.classList.toggle("on", ev.target.checked);
+    }
+  });
+
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target.closest("[data-filtre-suivi]");
+    if (!btn) return;
+    var filtre = btn.dataset.filtreSuivi;
+    var cont = btn.closest(".repertoire-compteurs");
+    if (cont) {
+      var tousBtn = cont.querySelectorAll("[data-filtre-suivi]");
+      for (var i = 0; i < tousBtn.length; i++) {
+        tousBtn[i].classList.toggle("active", tousBtn[i] === btn);
+      }
+    }
+    var rows = document.querySelectorAll("tbody tr[data-siren]");
+    for (var j = 0; j < rows.length; j++) {
+      var r = rows[j];
+      var visible = true;
+      if (filtre === "en_retard") visible = r.dataset.urgence === "en_retard";
+      else if (filtre === "aujourd_hui") visible = r.dataset.urgence === "aujourd_hui";
+      else if (filtre === "moi") visible = r.dataset.moi === "1";
+      else if (filtre === "personne") visible = !r.dataset.prisPar;
+      r.style.display = visible ? "" : "none";
     }
   });
 

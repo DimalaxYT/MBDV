@@ -8,7 +8,7 @@ officielle est utilisee et ce jeu de donnees n'apparaît jamais.
 Les entreprises ci-dessous sont fictives mais realistes, et structurees
 exactement comme la sortie de gov_api.normalize_result().
 """
-from .gov_api import EFFECTIFS, NAF_LABELS, NATURE_JURIDIQUE, section_de
+from .gov_api import EFFECTIFS, NAF_LABELS, NATURE_JURIDIQUE, est_grande_entreprise, section_de
 
 
 def _e(siren, nom, forme_code, naf, date_creation, rue, cp, commune, dept, region,
@@ -190,6 +190,42 @@ DEMO_COMPANIES = [
     _e("979356824", "BOULANGERIE DU CANAL", "5442", "10.71C", "2014-04-02",
        "88 rue du Landy", "93200", "Saint-Denis", "93", "Île-de-France",
        "02", "00019", [_pp("Traoré", "Moussa", "Gérant", "1977")], 132900, 7600, "2024"),
+    # --- Essonne (91) ---
+    _e("910123456", "BOULANGERIE DE L'ESSONNE", "5442", "10.71C", "2019-05-10",
+       "12 rue de Paris", "91000", "Évry-Courcouronnes", "91", "Île-de-France",
+       "02", "00018", [_pp("Martin", "Luc", "Gérant", "1980")], 152000, 9400, "2024"),
+    _e("910234567", "COIFFURE DU PLATEAU", "5443", "96.02A", "2020-09-15",
+       "4 place de la Gare", "91120", "Palaiseau", "91", "Île-de-France",
+       "01", "00012", [_pp("Dubois", "Chloé", "Gérante", "1991")], 46000, 3100, "2023"),
+    _e("910345678", "PLOMBERIE CHAUFFAGE 91", "1000", "43.22A", "2017-03-22",
+       "8 allée des Lilas", "91300", "Massy", "91", "Île-de-France",
+       "01", "00015", [_pp("Bernard", "David", "Entrepreneur individuel", "1975")],
+       88000, 5600, "2024"),
+    # --- Seine-et-Marne (77) ---
+    _e("770123456", "FOURNIL DE LA MARNE", "5442", "10.71C", "2018-04-18",
+       "15 rue du Miroir", "77000", "Melun", "77", "Île-de-France",
+       "02", "00017", [_pp("Leroy", "François", "Gérant", "1978")], 168000, 10200, "2024"),
+    _e("770234567", "SALON BRIE COIFFURE", "5443", "96.02A", "2021-11-04",
+       "27 rue Grande", "77300", "Fontainebleau", "77", "Île-de-France",
+       "01", "00011", [_pp("Robert", "Céline", "Gérante", "1988")], 52000, 3800, "2023"),
+    # --- Grande entreprise (hors cible prospection MBDV) ---
+    _e("999888777", "HYPERMARCHÉ ET DISTRIBUTION", "5515", "47.11F", "2005-01-01",
+       "100 avenue des Entreprises", "75008", "Paris", "75", "Île-de-France",
+       "52", "00050", [_pp("Grand", "Pierre", "Directeur", "1960")],
+       50000000, 2000000, "2024", categorie="GE", nb_etab=120),
+    # --- Enseignes nationales et ONG exclues par defaut (type Carrefour, Croix-Rouge) ---
+    _e("910456789", "CARREFOUR EXPRESS ESSONNE", "5442", "47.11C", "2018-06-12",
+       "20 rue Nationale", "91000", "Évry-Courcouronnes", "91", "Île-de-France",
+       "02", "00014", [_pp("Benoit", "Marc", "Gérant", "1982")], 340000, 12000, "2024",
+       enseigne="CARREFOUR EXPRESS"),
+    _e("910567890", "CROIX-ROUGE FRANCAISE UNITE 91", "9220", "88.99B", "1995-01-01",
+       "5 boulevard des Champs", "91000", "Évry-Courcouronnes", "91", "Île-de-France",
+       "01", "00010", [_pp("Lemoine", "Sophie", "Présidente", "1972")], None, None, None,
+       categorie="PME"),
+    # --- Commerce local au carrefour routier (reste visible comme prospect) ---
+    _e("910678901", "CAFE DU CARREFOUR", "5442", "56.30Z", "2016-10-15",
+       "1 place du Carrefour", "91000", "Évry-Courcouronnes", "91", "Île-de-France",
+       "01", "00012", [_pp("Moreau", "Philippe", "Gérant", "1979")], 82000, 4800, "2024"),
 ]
 
 # Departements couverts par le jeu de demonstration (affiche dans l'interface,
@@ -198,11 +234,13 @@ DEPARTEMENTS = sorted({e["departement"] for e in DEMO_COMPANIES})
 
 
 def cherche(q="", departement="", code_postal="", section="", effectif="",
-            actives=True, page=1):
+            actives=True, page=1, inclure_grandes=False):
     """Filtre le jeu de demonstration, meme contrat que gov_api.search()."""
     from .gov_api import slug_ascii
 
     def correspond(e):
+        if not inclure_grandes and est_grande_entreprise(e):
+            return False
         if actives and not e["actif"]:
             return False
         if departement and e["departement"] != departement.strip():

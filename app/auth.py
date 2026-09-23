@@ -247,7 +247,7 @@ def admin_required(view):
     return wrapped
 
 
-_PAGES_SANS_CONNEXION_AUTO = ("/connexion", "/deconnexion", "/static/")
+_PAGES_SANS_CONNEXION_AUTO = ("/connexion", "/deconnexion", "/static/", "/presentation")
 
 
 def _apercu_deja_connecte() -> None:
