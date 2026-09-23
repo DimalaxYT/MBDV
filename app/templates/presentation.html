@@ -2517,38 +2517,47 @@
   </div>
 </footer>
 
-<!-- SCRIPT DU SIGNAL BEACON CANVAS RADAR -->
+<!-- SCRIPT DU SIGNAL BEACON CANVAS RADAR 3D & EFFETS PARALLAXE -->
 <script>
 (function() {
-  var canvas = document.getElementById('signalBeaconCanvas');
+  var canvas = document.getElementById("signalBeaconCanvas");
   if (!canvas) return;
-  var ctx = canvas.getContext('2d');
+  var ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  var infoName = document.getElementById('beaconCompanyName');
-  var infoAct = document.getElementById('beaconActivity');
+  var infoName = document.getElementById("beaconCompanyName");
+  var infoAct = document.getElementById("beaconActivity");
+  var viewport = document.querySelector(".beacon-viewport");
 
-  // Donnees prospect cibles
+  // Données prospects cibles
   var targets = [
-    { name: "Boulangerie du Parc", city: "Évry (91000)", act: "Boulangerie et pâtisserie · NAF 10.71C", angle: 0.6, dist: 130 },
-    { name: "Garage de l'Essonne", city: "Corbeil-Essonnes (91100)", act: "Entretien mécanique automobile · NAF 45.20A", angle: 1.8, dist: 180 },
-    { name: "Plomberie Chauffage 91", city: "Massy (91300)", act: "Installation d'eau et de gaz · NAF 43.22A", angle: 3.4, dist: 150 },
-    { name: "Fournil de la Marne", city: "Melun (77000)", act: "Artisan boulanger · NAF 10.71C", angle: 4.6, dist: 200 },
-    { name: "Salon Brie Coiffure", city: "Fontainebleau (77300)", act: "Coiffure et esthétique · NAF 96.02A", angle: 5.5, dist: 120 }
+    { name: "Boulangerie du Parc", city: "Évry (91000)", act: "Boulangerie et pâtisserie · NAF 10.71C", angle: 0.65, dist: 130 },
+    { name: "Garage de l\u0027Essonne", city: "Corbeil-Essonnes (91100)", act: "Entretien mécanique automobile · NAF 45.20A", angle: 1.85, dist: 175 },
+    { name: "Plomberie Chauffage 91", city: "Massy (91300)", act: "Installation d\u0027eau et de gaz · NAF 43.22A", angle: 3.45, dist: 145 },
+    { name: "Fournil de la Marne", city: "Melun (77000)", act: "Artisan boulanger · NAF 10.71C", angle: 4.65, dist: 195 },
+    { name: "Salon Brie Coiffure", city: "Fontainebleau (77300)", act: "Coiffure et esthétique · NAF 96.02A", angle: 5.55, dist: 125 }
   ];
 
-  // Bruit de fond (entreprises ordinaires)
+  // Bruit de fond (entreprises non prioritaires dispersées sur le terrain)
   var noiseNodes = [];
-  var nodeCount = 55;
+  var nodeCount = 50;
   for (var i = 0; i < nodeCount; i++) {
     var a = Math.random() * Math.PI * 2;
-    var d = 40 + Math.random() * 200;
-    noiseNodes.push({ angle: a, dist: d, size: 1.5 + Math.random() * 1.5 });
+    var d = 35 + Math.random() * 190;
+    noiseNodes.push({ angle: a, dist: d, size: 1.2 + Math.random() * 1.5 });
   }
 
   var sweepAngle = 0;
   var activeTargetIndex = 0;
   var lastTargetTime = 0;
+
+  // Paramètres de projection 3D (Pitch & Yaw)
+  var defaultPitch = 0.54;
+  var currentPitch = defaultPitch;
+  var targetPitch = defaultPitch;
+  var currentYaw = 0.0;
+  var targetYaw = 0.0;
+  var prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function resize() {
     var rect = canvas.getBoundingClientRect();
@@ -2557,88 +2566,159 @@
       canvas.height = rect.height * (window.devicePixelRatio || 1);
     }
   }
-  window.addEventListener('resize', resize);
+  window.addEventListener("resize", resize);
   resize();
+
+  // Interaction 3D Tilt sur le Viewport du Radar
+  if (viewport && !prefersReducedMotion) {
+    viewport.addEventListener("mousemove", function(e) {
+      var rect = viewport.getBoundingClientRect();
+      var nx = (e.clientX - rect.left) / rect.width - 0.5;
+      var ny = (e.clientY - rect.top) / rect.height - 0.5;
+      targetYaw = nx * 0.35;
+      targetPitch = defaultPitch + ny * 0.16;
+
+      var tiltX = (-ny * 11).toFixed(2);
+      var tiltY = (nx * 13).toFixed(2);
+      viewport.style.transform = "perspective(1100px) rotateX(" + tiltX + "deg) rotateY(" + tiltY + "deg)";
+    });
+
+    viewport.addEventListener("mouseleave", function() {
+      targetYaw = 0;
+      targetPitch = defaultPitch;
+      viewport.style.transform = "perspective(1100px) rotateX(0deg) rotateY(0deg)";
+    });
+  }
+
+  // Fonction de projection 3D isométrique/perspective
+  function project(rx, ry, rz, cx, cy, dpr) {
+    var cosY = Math.cos(currentYaw);
+    var sinY = Math.sin(currentYaw);
+    var rxRot = rx * cosY - ry * sinY;
+    var ryRot = rx * sinY + ry * cosY;
+
+    var px = cx + rxRot * dpr;
+    var py = cy + (ryRot * currentPitch - rz) * dpr;
+    return { x: px, y: py };
+  }
 
   function render(time) {
     var w = canvas.width;
     var h = canvas.height;
     var dpr = window.devicePixelRatio || 1;
     var cx = w / 2;
-    var cy = h / 2;
+    var cy = h / 2 + 16 * dpr; // Léger décalage vers le bas pour accueillir les colonnes 3D
+
+    // Interpolation fluide du pitch et du yaw
+    if (!prefersReducedMotion) {
+      currentPitch += (targetPitch - currentPitch) * 0.08;
+      currentYaw += (targetYaw - currentYaw) * 0.08;
+    }
 
     ctx.clearRect(0, 0, w, h);
 
-    // Cercles concentriques radar
-    var isDark = document.documentElement.dataset.theme === 'dark';
-    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(15, 23, 42, 0.08)';
+    var isDark = document.documentElement.dataset.theme === "dark";
+
+    // 1. Anneaux elliptiques 3D au sol (Z = 0)
+    var ringRadii = [60, 115, 165, 215];
     ctx.lineWidth = 1 * dpr;
 
-    [60, 120, 180, 230].forEach(function(r) {
+    ringRadii.forEach(function(r, rIdx) {
+      ctx.strokeStyle = isDark ? "rgba(255, 255, 255, 0.07)" : "rgba(15, 23, 42, 0.08)";
       ctx.beginPath();
-      ctx.arc(cx, cy, r * dpr, 0, Math.PI * 2);
+      var steps = 48;
+      for (var s = 0; s <= steps; s++) {
+        var th = (s / steps) * Math.PI * 2;
+        var pt = project(r * Math.cos(th), r * Math.sin(th), 0, cx, cy, dpr);
+        if (s === 0) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+      }
+      ctx.stroke();
+
+      // Courbes de niveau topographiques en élévation (Z = 14)
+      if (rIdx < 3) {
+        ctx.strokeStyle = isDark ? "rgba(37, 99, 235, 0.05)" : "rgba(37, 99, 235, 0.06)";
+        ctx.beginPath();
+        for (var s2 = 0; s2 <= steps; s2++) {
+          var th2 = (s2 / steps) * Math.PI * 2;
+          var pt2 = project((r - 12) * Math.cos(th2), (r - 12) * Math.sin(th2), 14, cx, cy, dpr);
+          if (s2 === 0) ctx.moveTo(pt2.x, pt2.y);
+          else ctx.lineTo(pt2.x, pt2.y);
+        }
+        ctx.stroke();
+      }
+    });
+
+    // 2. Axes cardinaux 3D au sol
+    ctx.strokeStyle = isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(15, 23, 42, 0.06)";
+    [0, Math.PI / 2, Math.PI, Math.PI * 1.5].forEach(function(axAngle) {
+      var pStart = project(0, 0, 0, cx, cy, dpr);
+      var pEnd = project(215 * Math.cos(axAngle), 215 * Math.sin(axAngle), 0, cx, cy, dpr);
+      ctx.beginPath();
+      ctx.moveTo(pStart.x, pStart.y);
+      ctx.lineTo(pEnd.x, pEnd.y);
       ctx.stroke();
     });
 
-    // Lignes d'axes
-    ctx.beginPath();
-    ctx.moveTo(cx - 230 * dpr, cy);
-    ctx.lineTo(cx + 230 * dpr, cy);
-    ctx.moveTo(cx, cy - 230 * dpr);
-    ctx.lineTo(cx, cy + 230 * dpr);
-    ctx.stroke();
-
-    // Bras radar en rotation
-    sweepAngle += 0.016;
+    // 3. Faisceau radar de balayage 3D
+    sweepAngle += 0.015;
     if (sweepAngle > Math.PI * 2) sweepAngle -= Math.PI * 2;
 
-    // Faisceau de detection (gradient conique/secteur)
-    var grad = ctx.createRadialGradient(cx, cy, 10 * dpr, cx, cy, 230 * dpr);
-    grad.addColorStop(0, isDark ? 'rgba(37, 99, 235, 0.25)' : 'rgba(37, 99, 235, 0.15)');
-    grad.addColorStop(1, 'rgba(37, 99, 235, 0)');
+    // Secteur conique au sol
+    var sweepSteps = 16;
+    var sweepSpan = 0.42;
+    var pCenter = project(0, 0, 0, cx, cy, dpr);
 
-    ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, 230 * dpr, sweepAngle - 0.45, sweepAngle);
+    ctx.moveTo(pCenter.x, pCenter.y);
+    for (var sw = 0; sw <= sweepSteps; sw++) {
+      var curAngle = (sweepAngle - sweepSpan) + (sw / sweepSteps) * sweepSpan;
+      var pArc = project(215 * Math.cos(curAngle), 215 * Math.sin(curAngle), 0, cx, cy, dpr);
+      ctx.lineTo(pArc.x, pArc.y);
+    }
     ctx.closePath();
+
+    var grad = ctx.createRadialGradient(pCenter.x, pCenter.y, 5 * dpr, pCenter.x, pCenter.y, 180 * dpr);
+    grad.addColorStop(0, isDark ? "rgba(37, 99, 235, 0.22)" : "rgba(37, 99, 235, 0.14)");
+    grad.addColorStop(1, "rgba(37, 99, 235, 0)");
+    ctx.fillStyle = grad;
     ctx.fill();
 
-    // Ligne balayante
-    ctx.strokeStyle = '#2563EB';
+    // Ligne balayante principale 3D
+    var pSweepEdge = project(215 * Math.cos(sweepAngle), 215 * Math.sin(sweepAngle), 0, cx, cy, dpr);
+    ctx.strokeStyle = "rgba(37, 99, 235, 0.85)";
     ctx.lineWidth = 1.5 * dpr;
     ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(sweepAngle) * 230 * dpr, cy + Math.sin(sweepAngle) * 230 * dpr);
+    ctx.moveTo(pCenter.x, pCenter.y);
+    ctx.lineTo(pSweepEdge.x, pSweepEdge.y);
     ctx.stroke();
 
     // Point central de la balise
-    ctx.fillStyle = '#2563EB';
+    ctx.fillStyle = "#2563EB";
     ctx.beginPath();
-    ctx.arc(cx, cy, 4 * dpr, 0, Math.PI * 2);
+    ctx.arc(pCenter.x, pCenter.y, 4 * dpr, 0, Math.PI * 2);
     ctx.fill();
 
-    // Dessin du bruit de fond (entreprises non cibles)
-    ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(71, 85, 105, 0.35)';
+    // 4. Points du bruit de fond (entreprises non cibles dispersées au sol)
+    ctx.fillStyle = isDark ? "rgba(255, 255, 255, 0.25)" : "rgba(71, 85, 105, 0.35)";
     noiseNodes.forEach(function(n) {
-      var nx = cx + Math.cos(n.angle) * n.dist * dpr;
-      var ny = cy + Math.sin(n.angle) * n.dist * dpr;
+      var pNoise = project(n.dist * Math.cos(n.angle), n.dist * Math.sin(n.angle), 0, cx, cy, dpr);
       ctx.beginPath();
-      ctx.arc(nx, ny, n.size * dpr, 0, Math.PI * 2);
+      ctx.arc(pNoise.x, pNoise.y, n.size * dpr, 0, Math.PI * 2);
       ctx.fill();
     });
 
-    // Dessin des cibles prioritaires (Signaux Ambres)
+    // 5. Cibles prioritaires (Balises 3D avec colonnes d'élévation et orbes ambres)
     targets.forEach(function(t, idx) {
-      var tx = cx + Math.cos(t.angle) * t.dist * dpr;
-      var ty = cy + Math.sin(t.angle) * t.dist * dpr;
+      var tx = t.dist * Math.cos(t.angle);
+      var ty = t.dist * Math.sin(t.angle);
 
-      // Calcul de la distance angulaire avec le balayage
+      // Calcul de la proximité angulaire avec le balayage radar
       var diff = sweepAngle - t.angle;
       while (diff < -Math.PI) diff += Math.PI * 2;
       while (diff > Math.PI) diff -= Math.PI * 2;
 
-      var isNear = Math.abs(diff) < 0.2;
+      var isNear = Math.abs(diff) < 0.22;
       if (isNear && (time - lastTargetTime > 1200)) {
         activeTargetIndex = idx;
         lastTargetTime = time;
@@ -2647,26 +2727,66 @@
       }
 
       var isCurrent = (activeTargetIndex === idx);
+      var beaconHeight = 46; // Hauteur de la colonne 3D en pixels virtuels
 
-      // Signal ambre actif
-      ctx.fillStyle = '#F59E0B';
+      // Points projetés : sol et tête de colonne
+      var pBase = project(tx, ty, 0, cx, cy, dpr);
+      var pHead = project(tx, ty, beaconHeight, cx, cy, dpr);
+
+      // Cercle d'ancrage au sol (ellipse projetée)
+      ctx.strokeStyle = "rgba(245, 158, 11, 0.4)";
+      ctx.lineWidth = 1 * dpr;
       ctx.beginPath();
-      ctx.arc(tx, ty, (isCurrent ? 6 : 4) * dpr, 0, Math.PI * 2);
+      for (var bSt = 0; bSt <= 16; bSt++) {
+        var bAngle = (bSt / 16) * Math.PI * 2;
+        var pRing = project(tx + 6 * Math.cos(bAngle), ty + 6 * Math.sin(bAngle), 0, cx, cy, dpr);
+        if (bSt === 0) ctx.moveTo(pRing.x, pRing.y);
+        else ctx.lineTo(pRing.x, pRing.y);
+      }
+      ctx.stroke();
+
+      // Colonne de signal 3D luminescente (Laser ambré)
+      var colGrad = ctx.createLinearGradient(pBase.x, pBase.y, pHead.x, pHead.y);
+      colGrad.addColorStop(0, "rgba(245, 158, 11, 0.25)");
+      colGrad.addColorStop(1, isCurrent ? "rgba(245, 158, 11, 0.95)" : "rgba(245, 158, 11, 0.65)");
+      ctx.strokeStyle = colGrad;
+      ctx.lineWidth = (isCurrent ? 2 : 1.2) * dpr;
+      ctx.beginPath();
+      ctx.moveTo(pBase.x, pBase.y);
+      ctx.lineTo(pHead.x, pHead.y);
+      ctx.stroke();
+
+      // Onde montante le long de la colonne 3D
+      var pulseZ = ((time * 0.035 + idx * 12) % beaconHeight);
+      var pPulse = project(tx, ty, pulseZ, cx, cy, dpr);
+      ctx.fillStyle = "rgba(245, 158, 11, 0.7)";
+      ctx.beginPath();
+      ctx.arc(pPulse.x, pPulse.y, 2 * dpr, 0, Math.PI * 2);
       ctx.fill();
 
-      // Onde de choc / halo ambre
+      // Orbe de la balise en tête de colonne 3D
+      ctx.fillStyle = "#F59E0B";
+      ctx.beginPath();
+      ctx.arc(pHead.x, pHead.y, (isCurrent ? 5.5 : 4) * dpr, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Halo pulsant si actif ou balayé
       if (isCurrent || isNear) {
-        ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
+        var auraR = (5 + (time % 1200) / 1200 * 14) * dpr;
+        ctx.strokeStyle = "rgba(245, 158, 11, 0.45)";
         ctx.lineWidth = 1.5 * dpr;
         ctx.beginPath();
-        var pulseR = (6 + (time % 1000) / 1000 * 12) * dpr;
-        ctx.arc(tx, ty, pulseR, 0, Math.PI * 2);
+        ctx.arc(pHead.x, pHead.y, auraR, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Libelle prospect
-        ctx.fillStyle = isDark ? '#F8FAFC' : '#0F172A';
-        ctx.font = 'bold ' + (11 * dpr) + 'px sans-serif';
-        ctx.fillText(t.name, tx + 10 * dpr, ty - 4 * dpr);
+        // Tag prospect flottant en 3D
+        ctx.fillStyle = isDark ? "#F8FAFC" : "#0F172A";
+        ctx.font = "bold " + (11 * dpr) + "px sans-serif";
+        ctx.fillText(t.name, pHead.x + 10 * dpr, pHead.y - 3 * dpr);
+
+        ctx.fillStyle = "#F59E0B";
+        ctx.font = "600 " + (9.5 * dpr) + "px monospace";
+        ctx.fillText("SIGNAL +48m · " + t.city, pHead.x + 10 * dpr, pHead.y + 11 * dpr);
       }
     });
 
@@ -2674,6 +2794,37 @@
   }
 
   requestAnimationFrame(render);
+
+  // 6. Effet 3D Tilt interactif sur les cartes de la page
+  if (!prefersReducedMotion) {
+    var tiltCards = document.querySelectorAll(".pres-tilt, .compare-card, .step-card, .studio-box");
+    tiltCards.forEach(function(card) {
+      card.addEventListener("mousemove", function(e) {
+        var rect = card.getBoundingClientRect();
+        var x = (e.clientX - rect.left) / rect.width - 0.5;
+        var y = (e.clientY - rect.top) / rect.height - 0.5;
+        var rx = (-y * 7).toFixed(2);
+        var ry = (x * 8).toFixed(2);
+        card.style.transform = "perspective(1000px) rotateX(" + rx + "deg) rotateY(" + ry + "deg) scale3d(1.01, 1.01, 1.01)";
+      });
+      card.addEventListener("mouseleave", function() {
+        card.style.transform = "";
+      });
+    });
+
+    // 7. Parallaxe de défilement topographique fluide
+    var ticking = false;
+    window.addEventListener("scroll", function() {
+      if (!ticking) {
+        window.requestAnimationFrame(function() {
+          var sy = window.pageYOffset || document.documentElement.scrollTop;
+          document.documentElement.style.setProperty("--pres-scroll", sy + "px");
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }, { passive: true });
+  }
 })();
 </script>
 </body>

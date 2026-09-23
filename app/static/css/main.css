@@ -2157,7 +2157,13 @@ button.compteur.is-alerte.active {
 .metric-item span { font-size: 12px; color: var(--muted); }
 .metric-separator { width: 1px; height: 28px; background: var(--line); }
 
-/* Beacon Radar Viewport */
+/* Effets 3D et Parallaxe Topographique Balise */
+.pres-hero-visual {
+  perspective: 1200px;
+  perspective-origin: center center;
+}
+
+/* Beacon Radar Viewport 3D */
 .beacon-viewport {
   position: relative;
   background: var(--card);
@@ -2168,6 +2174,19 @@ button.compteur.is-alerte.active {
   display: flex;
   flex-direction: column;
   align-items: center;
+  transform-style: preserve-3d;
+  transition: transform 0.15s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.15s ease;
+  will-change: transform;
+}
+
+.beacon-viewport::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1px solid var(--accent-line);
+  pointer-events: none;
+  opacity: 0.6;
 }
 #signalBeaconCanvas {
   width: 100%;
@@ -2179,16 +2198,59 @@ button.compteur.is-alerte.active {
 }
 .beacon-overlay-card {
   position: absolute;
-  bottom: 42px;
-  left: 28px;
-  right: 28px;
+  bottom: 38px;
+  left: 26px;
+  right: 26px;
   background: var(--card);
   border: 1px solid var(--signal-line);
   border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  padding: 13px 15px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
   pointer-events: none;
   animation: fadeIn 0.3s ease;
+  transform: translateZ(42px);
+  transform-style: preserve-3d;
+  transition: transform 0.2s ease;
+}
+
+.beacon-caption {
+  transform: translateZ(16px);
+}
+
+/* Cartes interactives inclinables en 3D (Tilt) */
+.pres-tilt {
+  transform-style: preserve-3d;
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.18s ease;
+  will-change: transform;
+}
+.pres-tilt:hover {
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.09), 0 3px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Grille cartographique d'arrière-plan en parallaxe */
+.pres-hero {
+  position: relative;
+  overflow: hidden;
+}
+.pres-hero::before {
+  content: "";
+  position: absolute;
+  inset: -60px;
+  background-image:
+    radial-gradient(circle at center, var(--accent-line) 1px, transparent 1px),
+    linear-gradient(to right, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  background-size: 40px 40px, 80px 80px, 80px 80px;
+  background-position: center center;
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 0;
+  transform: translateY(calc(var(--pres-scroll, 0px) * 0.18));
+  will-change: transform;
+}
+.pres-hero-grid {
+  position: relative;
+  z-index: 1;
 }
 .beacon-card-header {
   display: flex;
@@ -3079,4 +3141,16 @@ button.compteur.is-alerte.active {
   .filters-cards-grid { grid-template-columns: 1fr; }
   .workflow-chain { flex-direction: column; }
   .chain-arrow { transform: rotate(90deg); margin: 6px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beacon-viewport,
+  .beacon-overlay-card,
+  .beacon-caption,
+  .pres-tilt,
+  .pres-hero::before {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
 }
