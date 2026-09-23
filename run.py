@@ -15,6 +15,13 @@ Variables d'environnement reconnues :
 """
 import os
 
+if os.environ.get("MBDV_EMBEDDED_SESSION") is None:
+    os.environ["MBDV_EMBEDDED_SESSION"] = "1"
+if os.environ.get("MBDV_DEMO") is None:
+    os.environ["MBDV_DEMO"] = "1"
+if os.environ.get("MBDV_DEJA_CONNECTE") is None:
+    os.environ["MBDV_DEJA_CONNECTE"] = "1"
+
 from app import create_app
 
 app = create_app()

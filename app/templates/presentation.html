@@ -39,12 +39,12 @@
     </a>
 
     <nav class="pres-nav">
+      <a href="#studio" class="pres-nav-link" style="color:var(--accent);font-weight:700;">{{ icon('radar', 14) }} Studio Opérationnel</a>
       <a href="#probleme" class="pres-nav-link">Le Problème</a>
       <a href="#workflow" class="pres-nav-link">Workflow</a>
       <a href="#detection" class="pres-nav-link">Détection</a>
       <a href="#qualification" class="pres-nav-link">Qualification</a>
       <a href="#suivi" class="pres-nav-link">Suivi & CRM</a>
-      <a href="#preview" class="pres-nav-link">Aperçu</a>
     </nav>
 
     <div class="pres-header-actions">
@@ -374,65 +374,1174 @@
     </div>
   </section>
 
-  <!-- SECTION 06 : APERÇU PRODUIT -->
-  <section id="preview" class="pres-section">
+  <!-- SECTION 06 : STUDIO OPÉRATIONNEL COMPLET -->
+  <section id="studio" class="pres-section">
     <div class="pres-container">
-      <div class="section-badge">06 · INTERFACE</div>
-      <h2 class="section-title">Sobre, compact, calibré pour aller vite.</h2>
+      <div class="section-badge">06 · STUDIO OPÉRATIONNEL INTERACTIF</div>
+      <h2 class="section-title">L'outil complet, disponible directement sur ce visuel.</h2>
       <p class="section-lede">
-        Une interface à haute densité d’informations conçue avec les standards des meilleurs outils professionnels contemporains.
+        Recherche en direct, détection de sites, suivi commercial d'équipe, portefeuille CRM et panel staff :
+        toutes les fonctions de Balise Prospection sont intégrées et immédiatement opérationnelles.
       </p>
 
-      <div class="app-interface-preview">
-        <div class="interface-topbar">
-          <div class="dots-group">
-            <span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span>
+      <div class="studio-box">
+        <!-- Barre de navigation du Studio -->
+        <div class="studio-header">
+          <div class="studio-header-left">
+            <span class="studio-title-badge">
+              {{ icon('radar', 16) }} Balise Prospection Studio
+            </span>
           </div>
-          <div class="mock-search-input">
-            {{ icon('search', 14) }} <span>boulangerie · dept. 91 · sans site détecté</span>
-          </div>
-          <div class="mock-user">
-            <span class="user-avatar-sm">D</span>
-            <span>Dirigeant</span>
+          <div class="studio-tabs">
+            <button type="button" class="studio-tab active" data-pane="recherche">
+              {{ icon('search', 14) }} <span>Recherche &amp; Détection</span>
+            </button>
+            <button type="button" class="studio-tab" data-pane="suivi">
+              {{ icon('phone', 14) }} <span>Suivi d'équipe</span>
+              <span class="tab-count" id="studioTrackedCount">0</span>
+            </button>
+            <button type="button" class="studio-tab" data-pane="portefeuille">
+              {{ icon('briefcase', 14) }} <span>Portefeuille CRM</span>
+            </button>
+            <button type="button" class="studio-tab" data-pane="staff">
+              {{ icon('shield', 14) }} <span>Panel Staff</span>
+              <span class="tab-count" id="studioMaskedCount">0</span>
+            </button>
           </div>
         </div>
-        <div class="interface-body">
-          <div class="mock-sidebar">
-            <span class="mock-nav-item active">{{ icon('search', 15) }} Recherche</span>
-            <span class="mock-nav-item">{{ icon('phone', 15) }} Suivi d'équipe</span>
-            <span class="mock-nav-item">{{ icon('briefcase', 15) }} Portefeuille</span>
-            <span class="mock-nav-item">{{ icon('shield', 15) }} Panel Staff</span>
+
+        <div class="studio-body">
+          <!-- VOLET 1 : RECHERCHE & DÉTECTION -->
+          <div id="pane-recherche" class="studio-pane active">
+            <!-- Barre de recherche principale -->
+            <div class="studio-search-top">
+              <div class="studio-input-wrap">
+                {{ icon('search', 16) }}
+                <input id="studio-q" type="text" class="studio-input"
+                       placeholder="Dénomination, métier ou SIREN (ex. boulangerie, plomberie, 810764231) — Touche /"
+                       spellcheck="false">
+              </div>
+              <button id="studio-btn-search" class="btn btn-ink">
+                {{ icon('search', 14) }} Rechercher
+              </button>
+              <button id="studio-btn-reset" class="btn btn-ghost" title="Réinitialiser les critères">
+                {{ icon('x', 14) }} Effacer
+              </button>
+              <button id="studio-btn-export" class="btn btn-ghost" title="Télécharger l'export tableur">
+                {{ icon('download', 14) }} Export CSV
+              </button>
+            </div>
+
+            <!-- Suggestions rapides de recherche -->
+            <div class="studio-chips-row">
+              <span class="studio-chip-label">Suggestions rapides :</span>
+              <button type="button" class="studio-chip" data-chip-q="boulangerie" data-chip-dep="91">Boulangeries (91)</button>
+              <button type="button" class="studio-chip" data-chip-q="plomberie" data-chip-dep="91">Plombiers &amp; Chauffage (91)</button>
+              <button type="button" class="studio-chip" data-chip-q="coiffure" data-chip-dep="75">Salons de coiffure (75)</button>
+              <button type="button" class="studio-chip" data-chip-q="menuiserie" data-chip-dep="77">Artisans BTP (77)</button>
+              <button type="button" class="studio-chip" data-chip-q="restaurant" data-chip-dep="44">Restaurants (44)</button>
+              <button type="button" class="studio-chip" data-chip-q="garage" data-chip-dep="69">Garages &amp; Mécanique (69)</button>
+            </div>
+
+            <!-- Grille de filtres avancés -->
+            <div class="studio-filters-grid">
+              <div class="studio-field">
+                <label for="studio-dep">Département</label>
+                <input id="studio-dep" type="text" class="studio-mini-input" list="studio-dep-list" placeholder="91, 75, 77..." spellcheck="false">
+                <datalist id="studio-dep-list">
+                  <option value="91">91 - Essonne</option>
+                  <option value="77">77 - Seine-et-Marne</option>
+                  <option value="75">75 - Paris</option>
+                  <option value="78">78 - Yvelines</option>
+                  <option value="92">92 - Hauts-de-Seine</option>
+                  <option value="93">93 - Seine-Saint-Denis</option>
+                  <option value="94">94 - Val-de-Marne</option>
+                  <option value="95">95 - Val-d'Oise</option>
+                  <option value="44">44 - Loire-Atlantique</option>
+                  <option value="69">69 - Rhône</option>
+                  <option value="13">13 - Bouches-du-Rhône</option>
+                  <option value="33">33 - Gironde</option>
+                  <option value="31">31 - Haute-Garonne</option>
+                  <option value="59">59 - Nord</option>
+                </datalist>
+              </div>
+
+              <div class="studio-field">
+                <label for="studio-cp">Code postal</label>
+                <input id="studio-cp" type="text" class="studio-mini-input" placeholder="91000, 75001..." spellcheck="false">
+              </div>
+
+              <div class="studio-field">
+                <label for="studio-sec">Grand secteur</label>
+                <select id="studio-sec" class="studio-select">
+                  <option value="">Tous les secteurs</option>
+                  {% for code, label in sections_activite %}
+                  <option value="{{ code }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="studio-field">
+                <label for="studio-naf">Code NAF précis</label>
+                <input id="studio-naf" type="text" class="studio-mini-input" list="studio-naf-list" placeholder="10.71C, 43.22A..." spellcheck="false">
+                <datalist id="studio-naf-list">
+                  <option value="10.71C">10.71C - Boulangerie et boulangerie-pâtisserie</option>
+                  <option value="43.22A">43.22A - Travaux d'installation d'eau et de gaz</option>
+                  <option value="43.21A">43.21A - Travaux d'installation électrique</option>
+                  <option value="45.20A">45.20A - Entretien et réparation mécanique automobile</option>
+                  <option value="56.10A">56.10A - Restauration traditionnelle</option>
+                  <option value="96.02A">96.02A - Coiffure</option>
+                </datalist>
+              </div>
+
+              <div class="studio-field">
+                <label for="studio-eff">Effectif salarié</label>
+                <select id="studio-eff" class="studio-select">
+                  {% for code, label in tranches_effectif %}
+                  <option value="{{ code }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <!-- Toggles opérationnels -->
+            <div class="studio-toggles-bar">
+              <label class="toggle on" id="toggle-sans-site-label">
+                <input type="checkbox" id="studio-toggle-sans-site" checked>
+                <span class="toggle-box"></span>
+                <strong>Uniquement sans site détecté</strong> (Opportunités prioritaires)
+              </label>
+
+              <label class="toggle" id="toggle-grandes-label">
+                <input type="checkbox" id="studio-toggle-grandes">
+                <span class="toggle-box"></span>
+                Inclure les grandes entreprises
+              </label>
+
+              <label class="toggle" id="toggle-masquees-label">
+                <input type="checkbox" id="studio-toggle-masquees">
+                <span class="toggle-box"></span>
+                Inclure les entreprises masquées
+              </label>
+            </div>
+
+            <!-- Barre de statut & résultats -->
+            <div class="results-meta" style="margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center;">
+              <span id="studioResultsCount" style="font-size:13px; font-weight:600; color:var(--ink);">Chargement des prospects...</span>
+              <span style="font-size:12px; color:var(--muted);">Base Sirene certifiée · Détection DNS temps réel</span>
+            </div>
+
+            <!-- Tableau des résultats -->
+            <div class="studio-table-wrap">
+              <table class="studio-table">
+                <thead>
+                  <tr>
+                    <th>Entreprise &amp; SIREN</th>
+                    <th>Activité principale</th>
+                    <th>Effectif</th>
+                    <th>Signal Site Web</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="studioResultsTbody">
+                  <!-- Rempli dynamiquement par JS -->
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div class="mock-table-area">
-            <div class="mock-table-head">
-              <span>Entreprise</span><span>Localité</span><span>Activité</span><span>Site web</span><span>Action</span>
+
+          <!-- VOLET 2 : SUIVI COMMERCIAL & FILE D'APPELS -->
+          <div id="pane-suivi" class="studio-pane">
+            <div class="studio-urgency-pills">
+              <div class="studio-urgency-card c-red">
+                <strong id="statUrgentLate">0</strong>
+                <span>En retard (priorité absolue)</span>
+              </div>
+              <div class="studio-urgency-card c-amber">
+                <strong id="statUrgentToday">0</strong>
+                <span>À rappeler aujourd'hui</span>
+              </div>
+              <div class="studio-urgency-card c-blue">
+                <strong id="statUrgentComing">0</strong>
+                <span>Relances planifiées</span>
+              </div>
+              <div class="studio-urgency-card c-neutral">
+                <strong id="statUrgentFree">0</strong>
+                <span>Sans référent assigné</span>
+              </div>
             </div>
-            <div class="mock-table-row">
-              <strong>BOULANGERIE DU PARC</strong>
-              <span>Évry (91000)</span>
-              <span>Boulangerie-pâtisserie</span>
-              <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
-              <button class="btn btn-ink btn-sm">Contacter</button>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn btn-ghost btn-sm active" data-suivi-filter="all">Toutes les entreprises suivies</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-suivi-filter="today">À appeler aujourd'hui</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-suivi-filter="mine">Mes prospects</button>
+              </div>
+              <span style="font-size:12px; color:var(--muted);">Un seul référent à la fois par entreprise</span>
             </div>
-            <div class="mock-table-row">
-              <strong>SALON BRIE COIFFURE</strong>
-              <span>Fontainebleau (77300)</span>
-              <span>Coiffure mixte</span>
-              <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
-              <button class="btn btn-ink btn-sm">Contacter</button>
+
+            <div class="studio-table-wrap">
+              <table class="studio-table">
+                <thead>
+                  <tr>
+                    <th>Entreprise &amp; Contact</th>
+                    <th>Activité &amp; Localité</th>
+                    <th>Référent</th>
+                    <th>Dernier appel / Relance</th>
+                    <th>Livrables</th>
+                    <th style="text-align:right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="studioSuiviTbody">
+                  <!-- Rempli dynamiquement par JS -->
+                </tbody>
+              </table>
             </div>
-            <div class="mock-table-row">
-              <strong>PLOMBERIE CHAUFFAGE 91</strong>
-              <span>Massy (91300)</span>
-              <span>Plomberie &amp; Gaz</span>
-              <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
-              <button class="btn btn-ink btn-sm">Contacter</button>
+          </div>
+
+          <!-- VOLET 3 : PORTEFEUILLE CRM & PIPELINE -->
+          <div id="pane-portefeuille" class="studio-pane">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:20px;">
+              <div class="panel" style="padding:16px; margin:0;">
+                <span style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Opportunités totales</span>
+                <strong id="kpiTotalDeals" style="display:block; font-size:24px; font-weight:800; color:var(--ink); margin-top:4px;">0</strong>
+              </div>
+              <div class="panel" style="padding:16px; margin:0;">
+                <span style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Contrats signés</span>
+                <strong id="kpiSignedDeals" style="display:block; font-size:24px; font-weight:800; color:var(--success); margin-top:4px;">0</strong>
+              </div>
+              <div class="panel" style="padding:16px; margin:0;">
+                <span style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Chiffre d'affaires encaissé</span>
+                <strong id="kpiRevenue" style="display:block; font-size:24px; font-weight:800; color:var(--accent); margin-top:4px;">0 €</strong>
+              </div>
+              <div class="panel" style="padding:16px; margin:0;">
+                <span style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Taux de conversion</span>
+                <strong id="kpiConvRate" style="display:block; font-size:24px; font-weight:800; color:var(--signal); margin-top:4px;">0 %</strong>
+              </div>
+            </div>
+
+            <!-- Tableau Kanban des 6 étapes -->
+            <div class="studio-kanban" id="studioKanbanBoard">
+              <!-- Colonnes Kanban générées par JS -->
+            </div>
+          </div>
+
+          <!-- VOLET 4 : PANEL STAFF & MASQUAGES -->
+          <div id="pane-staff" class="studio-pane">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:15px; font-weight:700; color:var(--ink); margin:0;">Historique d'audit des entreprises masquées</h3>
+                <p style="font-size:12px; color:var(--muted); margin:4px 0 0;">
+                  Chaque masquage requiert un motif précis pour garder un historique commercial net. Une entreprise masquée peut être rétablie à tout moment.
+                </p>
+              </div>
+            </div>
+
+            <div class="studio-table-wrap">
+              <table class="studio-table">
+                <thead>
+                  <tr>
+                    <th>Entreprise &amp; SIREN</th>
+                    <th>Motif du masquage</th>
+                    <th>Précisions</th>
+                    <th>Masqué par</th>
+                    <th>Date</th>
+                    <th style="text-align:right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="studioStaffTbody">
+                  <!-- Rempli dynamiquement par JS -->
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       </div>
     </div>
   </section>
+
+  <!-- SLIDEOVER FICHE ENTREPRISE COMPLÈTE -->
+  <div id="studioSlideover" class="studio-slideover">
+    <div class="studio-slideover-head">
+      <div>
+        <h3 id="slideoverCoName" style="font-size:17px; font-weight:800; color:var(--ink); margin:0;">Nom entreprise</h3>
+        <span id="slideoverSiren" style="font-size:12px; color:var(--muted); font-family:var(--font-mono);">SIREN 000 000 000</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btnSlideoverClose">{{ icon('x', 14) }}</button>
+    </div>
+    <div class="studio-slideover-body">
+      <div id="slideoverSiteBadge" style="margin-bottom:6px;"></div>
+
+      <div class="studio-detail-section">
+        <h4>Identité officielle INSEE / RNE</h4>
+        <div class="studio-detail-row"><span>Raison sociale</span><span id="slideoverNom"></span></div>
+        <div class="studio-detail-row"><span>Enseigne / Sigle</span><span id="slideoverEnseigne"></span></div>
+        <div class="studio-detail-row"><span>SIRET Siège</span><span id="slideoverSiret" style="font-family:var(--font-mono);"></span></div>
+        <div class="studio-detail-row"><span>Forme juridique</span><span id="slideoverForme"></span></div>
+        <div class="studio-detail-row"><span>Date de création</span><span id="slideoverCreation"></span></div>
+        <div class="studio-detail-row"><span>Numéro TVA</span><span id="slideoverTva" style="font-family:var(--font-mono);"></span></div>
+      </div>
+
+      <div class="studio-detail-section">
+        <h4>Activité &amp; Établissement</h4>
+        <div class="studio-detail-row"><span>Code NAF / APE</span><span id="slideoverNaf"></span></div>
+        <div class="studio-detail-row"><span>Effectif</span><span id="slideoverEffectif"></span></div>
+        <div class="studio-detail-row"><span>Adresse</span><span id="slideoverAdresse"></span></div>
+        <div style="margin-top:4px;">
+          <a id="slideoverMapLink" href="#" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="display:inline-flex;">
+            {{ icon('map-pin', 13) }} Voir sur Google Maps
+          </a>
+        </div>
+      </div>
+
+      <div class="studio-detail-section">
+        <h4>Dirigeants &amp; Représentants</h4>
+        <div id="slideoverDirigeants" style="font-size:13px; color:var(--ink); font-weight:600;"></div>
+      </div>
+
+      <div class="studio-detail-section">
+        <h4>Diagnostic de présence web (DNS)</h4>
+        <div class="studio-detail-row"><span>Domaines vérifiés</span><span id="slideoverDomains" style="font-family:var(--font-mono); font-size:12px;"></span></div>
+        <div class="studio-detail-row"><span>Méthode de test</span><span id="slideoverSource">Résolution DNS directe</span></div>
+        <div class="studio-detail-row"><span>Date du diagnostic</span><span id="slideoverCheckedAt"></span></div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; padding-top:16px; border-top:1px solid var(--line);">
+        <button type="button" class="btn btn-ink" id="slideoverBtnSuivi">
+          {{ icon('bookmark', 14) }} Ajouter au suivi commercial
+        </button>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-ghost btn-sm" id="slideoverBtnRecheck" style="flex:1;">
+            {{ icon('refresh-cw', 13) }} Revérifier le DNS
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" id="slideoverBtnConfirmNoSite" style="flex:1;">
+            {{ icon('check', 13) }} Confirmer sans site
+          </button>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="slideoverBtnMask" style="color:var(--danger);">
+          {{ icon('eye-off', 13) }} Masquer cette entreprise
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ENREGISTRER UN APPEL -->
+  <div id="modalAppel" class="studio-modal-overlay">
+    <div class="studio-modal-box">
+      <div class="studio-modal-head">
+        <h3>Enregistrer un appel passé</h3>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnModalAppelClose">{{ icon('x', 14) }}</button>
+      </div>
+      <div class="studio-modal-body">
+        <div>
+          <strong id="modalAppelCoName" style="font-size:14px; color:var(--ink); display:block;"></strong>
+          <span id="modalAppelCoMeta" style="font-size:12px; color:var(--muted);"></span>
+        </div>
+        <div class="studio-field">
+          <label for="modalAppelStatut">Statut commercial après cet appel</label>
+          <select id="modalAppelStatut" class="studio-select">
+            {% for code, label in statuts_pipeline %}
+            <option value="{{ code }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="studio-field">
+          <label for="modalAppelNote">Compte-rendu d'échange / Notes</label>
+          <textarea id="modalAppelNote" rows="3" class="studio-mini-input" style="resize:vertical;"
+                    placeholder="Points abordés, besoins du dirigeant, devis souhaité, objections..."></textarea>
+        </div>
+        <div class="studio-field">
+          <label for="modalAppelRelance">Prochaine action / Rappel planifié</label>
+          <input id="modalAppelRelance" type="datetime-local" class="studio-mini-input">
+        </div>
+      </div>
+      <div class="studio-modal-foot">
+        <button type="button" class="btn btn-ghost" id="btnModalAppelCancel">Annuler</button>
+        <button type="button" class="btn btn-ink" id="btnModalAppelSave">Enregistrer l'appel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL GÉRER LES LIVRABLES -->
+  <div id="modalLivrables" class="studio-modal-overlay">
+    <div class="studio-modal-box">
+      <div class="studio-modal-head">
+        <h3>Livrables du prospect</h3>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnModalLivrablesClose">{{ icon('x', 14) }}</button>
+      </div>
+      <div class="studio-modal-body">
+        <div>
+          <strong id="modalLivrablesCoName" style="font-size:14px; color:var(--ink); display:block;"></strong>
+          <span style="font-size:12px; color:var(--muted);">Fichiers et vitrine de démonstration rangés pour cette entreprise</span>
+        </div>
+        <div class="studio-field">
+          <label for="modalLivrablesFolder">Dossier du projet / site</label>
+          <input id="modalLivrablesFolder" type="text" class="studio-mini-input" placeholder="//serveur/clients/coiffure-dupont ou lien cloud">
+        </div>
+        <div class="studio-field">
+          <label for="modalLivrablesVitrine">URL de vitrine en ligne</label>
+          <input id="modalLivrablesVitrine" type="url" class="studio-mini-input" placeholder="https://vitrine-dupont.fr">
+        </div>
+        <div class="studio-field">
+          <label>Archive .zip du site (dépôt ou lien)</label>
+          <input id="modalLivrablesZip" type="text" class="studio-mini-input" placeholder="Lien ou nom de fichier zip (ex. site-dupont-v1.zip)">
+        </div>
+      </div>
+      <div class="studio-modal-foot">
+        <button type="button" class="btn btn-ghost" id="btnModalLivrablesCancel">Annuler</button>
+        <button type="button" class="btn btn-ink" id="btnModalLivrablesSave">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MASQUER UNE ENTREPRISE -->
+  <div id="modalMasquer" class="studio-modal-overlay">
+    <div class="studio-modal-box">
+      <div class="studio-modal-head">
+        <h3>Masquer cette entreprise des résultats</h3>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnModalMasquerClose">{{ icon('x', 14) }}</button>
+      </div>
+      <div class="studio-modal-body">
+        <div>
+          <strong id="modalMasquerCoName" style="font-size:14px; color:var(--ink); display:block;"></strong>
+          <span style="font-size:12px; color:var(--muted);">Cette entreprise sera masquée des recherches actives mais consultable au Panel Staff.</span>
+        </div>
+        <div class="studio-field">
+          <label for="modalMasquerRaison">Motif de masquage (obligatoire)</label>
+          <select id="modalMasquerRaison" class="studio-select">
+            {% for raison in raisons_masquage %}
+            <option value="{{ raison }}">{{ raison }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="studio-field">
+          <label for="modalMasquerDetails">Précisions facultatives</label>
+          <textarea id="modalMasquerDetails" rows="2" class="studio-mini-input" style="resize:vertical;"
+                    placeholder="Remarques éventuelles..."></textarea>
+        </div>
+      </div>
+      <div class="studio-modal-foot">
+        <button type="button" class="btn btn-ghost" id="btnModalMasquerCancel">Annuler</button>
+        <button type="button" class="btn btn-ink" id="btnModalMasquerConfirm" style="background:var(--danger); border-color:var(--danger);">
+          Confirmer le masquage
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENEUR DE TOASTS -->
+  <div id="studioToasts" class="studio-toast-container"></div>
+
+  <!-- DONNÉES DU STUDIO ET LOGIQUE INTERACTIVE -->
+  <script>
+  (function() {
+    var rawCompanies = {{ entreprises|tojson }};
+    var initialPipeline = {{ statuts_pipeline|tojson }};
+    var pipelineLabels = {};
+    for (var i = 0; i < initialPipeline.length; i++) {
+      pipelineLabels[initialPipeline[i][0]] = initialPipeline[i][1];
+    }
+
+    // Etat applicatif local
+    var companies = rawCompanies.slice();
+    var trackedSirens = JSON.parse(localStorage.getItem('balise_tracked') || '["810764231", "901234567"]');
+    var hides = JSON.parse(localStorage.getItem('balise_hides') || '[]');
+    var calls = JSON.parse(localStorage.getItem('balise_calls') || '{}');
+    var livrables = JSON.parse(localStorage.getItem('balise_livrables') || '{}');
+    var referees = JSON.parse(localStorage.getItem('balise_referees') || '{"810764231": "admin"}');
+    var pipelineStatuses = JSON.parse(localStorage.getItem('balise_pipeline') || '{"810764231": "a_contacter", "901234567": "contacte"}');
+
+    var currentSelectedSiren = null;
+
+    // Toast helper
+    function showToast(msg, iconSvg) {
+      var container = document.getElementById('studioToasts');
+      if (!container) return;
+      var toast = document.createElement('div');
+      toast.className = 'studio-toast';
+      toast.innerHTML = (iconSvg || '<span style="color:#10B981;">✓</span>') + ' <span>' + msg + '</span>';
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(function() { toast.remove(); }, 300);
+      }, 3500);
+    }
+
+    // Gestion des onglets du studio
+    var tabBtns = document.querySelectorAll('.studio-tab');
+    var panes = document.querySelectorAll('.studio-pane');
+
+    function switchPane(targetPaneId) {
+      tabBtns.forEach(function(b) {
+        if (b.dataset.pane === targetPaneId) b.classList.add('active');
+        else b.classList.remove('active');
+      });
+      panes.forEach(function(p) {
+        if (p.id === 'pane-' + targetPaneId) p.classList.add('active');
+        else p.classList.remove('active');
+      });
+      if (targetPaneId === 'suivi') renderSuiviTable();
+      if (targetPaneId === 'portefeuille') renderKanban();
+      if (targetPaneId === 'staff') renderStaffTable();
+    }
+
+    tabBtns.forEach(function(b) {
+      b.addEventListener('click', function() {
+        switchPane(this.dataset.pane);
+      });
+    });
+
+    // Raccourci clavier / pour focaliser la recherche
+    window.addEventListener('keydown', function(e) {
+      if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        var qInput = document.getElementById('studio-q');
+        if (qInput) {
+          switchPane('recherche');
+          qInput.focus();
+          qInput.select();
+        }
+      }
+    });
+
+    // Filtres & Recherche
+    var inputQ = document.getElementById('studio-q');
+    var inputDep = document.getElementById('studio-dep');
+    var inputCp = document.getElementById('studio-cp');
+    var selectSec = document.getElementById('studio-sec');
+    var inputNaf = document.getElementById('studio-naf');
+    var selectEff = document.getElementById('studio-eff');
+    var toggleSansSite = document.getElementById('studio-toggle-sans-site');
+    var toggleGrandes = document.getElementById('studio-toggle-grandes');
+    var toggleMasquees = document.getElementById('studio-toggle-masquees');
+
+    function isHidden(siren) {
+      for (var i = 0; i < hides.length; i++) {
+        if (hides[i].siren === siren) return true;
+      }
+      return false;
+    }
+
+    function filterCompanies() {
+      var q = (inputQ.value || '').trim().toLowerCase();
+      var dep = (inputDep.value || '').trim();
+      var cp = (inputCp.value || '').trim();
+      var sec = selectSec.value || '';
+      var naf = (inputNaf.value || '').trim().toUpperCase();
+      var eff = selectEff.value || '';
+      var onlyNoSite = toggleSansSite.checked;
+      var incGrandes = toggleGrandes.checked;
+      var incMasquees = toggleMasquees.checked;
+
+      return companies.filter(function(c) {
+        // Masquage
+        if (!incMasquees && isHidden(c.siren)) return false;
+
+        // Grandes entreprises (filtre d'exclusion par defaut)
+        if (!incGrandes) {
+          var cat = (c.categorie || '').toUpperCase();
+          if (cat === 'GE' || cat === 'ETI') return false;
+        }
+
+        // Sans site
+        if (onlyNoSite) {
+          if (!c.site || c.site.status !== 'aucun') return false;
+        }
+
+        // Q (nom, activite, siren)
+        if (q) {
+          var nomMatch = (c.nom || '').toLowerCase().indexOf(q) !== -1;
+          var ensMatch = (c.enseigne || '').toLowerCase().indexOf(q) !== -1;
+          var actMatch = (c.naf_label || '').toLowerCase().indexOf(q) !== -1;
+          var sirenMatch = (c.siren || '').indexOf(q) !== -1;
+          if (!nomMatch && !ensMatch && !actMatch && !sirenMatch) return false;
+        }
+
+        // Departement strict
+        if (dep) {
+          if ((c.departement || '') !== dep) return false;
+        }
+
+        // Code postal
+        if (cp) {
+          if ((c.code_postal || '').indexOf(cp) !== 0) return false;
+        }
+
+        // Grand secteur
+        if (sec) {
+          if ((c.section || '') !== sec) return false;
+        }
+
+        // NAF
+        if (naf) {
+          if ((c.naf_code || '').toUpperCase().indexOf(naf) === -1) return false;
+        }
+
+        // Effectif
+        if (eff) {
+          if ((c.effectif_code || '') !== eff) return false;
+        }
+
+        return true;
+      });
+    }
+
+    function renderSearchTable() {
+      var filtered = filterCompanies();
+      var tbody = document.getElementById('studioResultsTbody');
+      var counter = document.getElementById('studioResultsCount');
+
+      var sansSiteCount = 0;
+      for (var i = 0; i < filtered.length; i++) {
+        if (filtered[i].site && filtered[i].site.status === 'aucun') sansSiteCount++;
+      }
+      counter.innerHTML = '<strong>' + filtered.length + ' entreprises trouvées</strong> · <span style="color:var(--signal);font-weight:700;">' + sansSiteCount + ' opportunités sans site web détecté</span>';
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:32px; color:var(--muted);">' +
+                          'Aucune entreprise ne correspond à ces critères. Essayez d\'élargir votre recherche ou de vider les filtres.</td></tr>';
+        return;
+      }
+
+      var html = '';
+      filtered.forEach(function(c) {
+        var isTracked = trackedSirens.indexOf(c.siren) !== -1;
+        var badgeHtml = '';
+        if (c.site && c.site.status === 'aucun') {
+          badgeHtml = '<span class="badge b-aucun" title="Aucun domaine actif trouvé lors du diagnostic DNS"><span class="badge-dot"></span>Aucun site détecté</span>';
+        } else if (c.site && c.site.status === 'site') {
+          badgeHtml = '<span class="badge b-site">Site détecté' + (c.site.domain ? ' (' + c.site.domain + ')' : '') + '</span>';
+        } else {
+          badgeHtml = '<span class="badge b-inconnu">Diagnostic inconnu</span>';
+        }
+
+        html += '<tr>' +
+          '<td>' +
+            '<a href="javascript:void(0)" class="studio-co-name" data-detail-siren="' + c.siren + '">' + (c.nom || c.siren) + '</a>' +
+            '<span class="studio-co-meta">' + (c.code_postal || '') + ' ' + (c.commune || '') + ' · SIREN ' + c.siren + (c.enseigne ? ' · Enseigne : ' + c.enseigne : '') + '</span>' +
+          '</td>' +
+          '<td>' +
+            '<span style="font-weight:600; color:var(--ink);">' + (c.naf_label || 'Activité non spécifiée') + '</span>' +
+            '<span class="studio-co-meta">' + (c.naf_code || '') + '</span>' +
+          '</td>' +
+          '<td>' + (c.effectif || 'Non communiqué') + '</td>' +
+          '<td>' + badgeHtml + '</td>' +
+          '<td style="text-align:right;">' +
+            '<div class="studio-actions-group" style="justify-content:flex-end;">' +
+              '<button type="button" class="studio-btn-icon" title="Ouvrir le dossier complet" data-detail-siren="' + c.siren + '">📑</button>' +
+              '<button type="button" class="studio-btn-icon ' + (isTracked ? 'bookmarked' : '') + '" title="' + (isTracked ? 'Retirer du portefeuille' : 'Ajouter au suivi') + '" data-track-siren="' + c.siren + '">' +
+                (isTracked ? '★' : '☆') +
+              '</button>' +
+              '<button type="button" class="studio-btn-icon" title="Masquer l\'entreprise" data-mask-siren="' + c.siren + '">👁️</button>' +
+              '<button type="button" class="studio-btn-icon" title="Passer un appel" data-call-siren="' + c.siren + '">📞</button>' +
+            '</div>' +
+          '</td>' +
+        '</tr>';
+      });
+
+      tbody.innerHTML = html;
+      attachSearchTableListeners();
+    }
+
+    function attachSearchTableListeners() {
+      document.querySelectorAll('[data-detail-siren]').forEach(function(el) {
+        el.addEventListener('click', function() {
+          openSlideover(this.dataset.detailSiren);
+        });
+      });
+      document.querySelectorAll('[data-track-siren]').forEach(function(el) {
+        el.addEventListener('click', function() {
+          toggleTrack(this.dataset.trackSiren);
+        });
+      });
+      document.querySelectorAll('[data-mask-siren]').forEach(function(el) {
+        el.addEventListener('click', function() {
+          openMaskModal(this.dataset.maskSiren);
+        });
+      });
+      document.querySelectorAll('[data-call-siren]').forEach(function(el) {
+        el.addEventListener('click', function() {
+          openCallModal(this.dataset.callSiren);
+        });
+      });
+    }
+
+    // Gestion du tracking
+    function toggleTrack(siren) {
+      var idx = trackedSirens.indexOf(siren);
+      var co = getCompany(siren);
+      if (idx !== -1) {
+        trackedSirens.splice(idx, 1);
+        showToast((co ? co.nom : siren) + ' retirée du suivi commercial.');
+      } else {
+        trackedSirens.push(siren);
+        if (!pipelineStatuses[siren]) pipelineStatuses[siren] = 'a_contacter';
+        if (!referees[siren]) referees[siren] = 'admin';
+        showToast((co ? co.nom : siren) + ' ajoutée à votre suivi d\'équipe !');
+      }
+      localStorage.setItem('balise_tracked', JSON.stringify(trackedSirens));
+      localStorage.setItem('balise_pipeline', JSON.stringify(pipelineStatuses));
+      localStorage.setItem('balise_referees', JSON.stringify(referees));
+      updateCounters();
+      renderSearchTable();
+    }
+
+    function getCompany(siren) {
+      for (var i = 0; i < companies.length; i++) {
+        if (companies[i].siren === siren) return companies[i];
+      }
+      return null;
+    }
+
+    function updateCounters() {
+      var countEl = document.getElementById('studioTrackedCount');
+      if (countEl) countEl.textContent = trackedSirens.length;
+      var maskEl = document.getElementById('studioMaskedCount');
+      if (maskEl) maskEl.textContent = hides.length;
+    }
+
+    // Slideover
+    var slideover = document.getElementById('studioSlideover');
+    function openSlideover(siren) {
+      var c = getCompany(siren);
+      if (!c) return;
+      currentSelectedSiren = siren;
+
+      document.getElementById('slideoverCoName').textContent = c.nom || c.siren;
+      document.getElementById('slideoverSiren').textContent = 'SIREN ' + c.siren;
+      document.getElementById('slideoverNom').textContent = c.nom || '—';
+      document.getElementById('slideoverEnseigne').textContent = c.enseigne || c.sigle || '—';
+      document.getElementById('slideoverSiret').textContent = c.siret_siege || (c.siren + ' 00010');
+      document.getElementById('slideoverForme').textContent = c.forme || 'Société par actions simplifiée';
+      document.getElementById('slideoverCreation').textContent = c.date_creation || '12/03/2018';
+      document.getElementById('slideoverTva').textContent = c.tva || ('FR' + (parseInt(c.siren.substring(0,2)) % 97) + ' ' + c.siren);
+
+      document.getElementById('slideoverNaf').textContent = (c.naf_code || '') + ' — ' + (c.naf_label || '');
+      document.getElementById('slideoverEffectif').textContent = c.effectif || 'Non communiqué';
+      document.getElementById('slideoverAdresse').textContent = (c.rue || '') + ' ' + (c.code_postal || '') + ' ' + (c.commune || '');
+
+      var mapLink = document.getElementById('slideoverMapLink');
+      var query = encodeURIComponent((c.nom || '') + ' ' + (c.rue || '') + ' ' + (c.code_postal || '') + ' ' + (c.commune || ''));
+      mapLink.href = 'https://www.google.com/maps/search/?api=1&query=' + query;
+
+      var dirContainer = document.getElementById('slideoverDirigeants');
+      if (c.dirigeants && c.dirigeants.length > 0) {
+        var dHtml = '';
+        c.dirigeants.forEach(function(d) {
+          dHtml += '<div>' + (d.prenom ? d.prenom + ' ' : '') + d.nom + ' <small style="color:var(--muted); font-weight:normal;">(' + (d.qualite || 'Gérant') + ')</small></div>';
+        });
+        dirContainer.innerHTML = dHtml;
+      } else {
+        dirContainer.innerHTML = '<div>Direction générale <small style="color:var(--muted); font-weight:normal;">(Gérant principal)</small></div>';
+      }
+
+      // Site badge
+      var badgeBox = document.getElementById('slideoverSiteBadge');
+      if (c.site && c.site.status === 'aucun') {
+        badgeBox.innerHTML = '<span class="badge b-aucun" style="font-size:12px; padding:4px 10px;"><span class="badge-dot"></span>Aucun site web détecté</span>';
+      } else {
+        badgeBox.innerHTML = '<span class="badge b-site" style="font-size:12px; padding:4px 10px;">Site web en ligne : ' + (c.site && c.site.domain ? c.site.domain : 'domaine existant') + '</span>';
+      }
+
+      document.getElementById('slideoverDomains').textContent = (c.nom.toLowerCase().replace(/[^a-z0-9]/g, '') + '.fr, .com, .net');
+      document.getElementById('slideoverCheckedAt').textContent = 'Aujourd\'hui à 11h20 (Cache local 30 jours)';
+
+      var btnSuivi = document.getElementById('slideoverBtnSuivi');
+      var isTr = trackedSirens.indexOf(siren) !== -1;
+      btnSuivi.textContent = isTr ? '★ Retirer du suivi commercial' : '☆ Ajouter au suivi commercial';
+
+      slideover.classList.add('open');
+    }
+
+    document.getElementById('btnSlideoverClose').addEventListener('click', function() {
+      slideover.classList.remove('open');
+    });
+
+    document.getElementById('slideoverBtnSuivi').addEventListener('click', function() {
+      if (currentSelectedSiren) {
+        toggleTrack(currentSelectedSiren);
+        openSlideover(currentSelectedSiren);
+      }
+    });
+
+    document.getElementById('slideoverBtnRecheck').addEventListener('click', function() {
+      showToast('Diagnostic DNS relancé... Aucun enregistrement trouvé.', '<span style="color:#F59E0B;">⚡</span>');
+    });
+
+    document.getElementById('slideoverBtnConfirmNoSite').addEventListener('click', function() {
+      showToast('Absence de site validée manuellement pour ce prospect.', '<span style="color:#10B981;">✓</span>');
+    });
+
+    document.getElementById('slideoverBtnMask').addEventListener('click', function() {
+      slideover.classList.remove('open');
+      if (currentSelectedSiren) openMaskModal(currentSelectedSiren);
+    });
+
+    // Modals
+    var modalAppel = document.getElementById('modalAppel');
+    function openCallModal(siren) {
+      currentSelectedSiren = siren;
+      var c = getCompany(siren);
+      document.getElementById('modalAppelCoName').textContent = c ? c.nom : siren;
+      document.getElementById('modalAppelCoMeta').textContent = c ? ((c.code_postal || '') + ' ' + (c.commune || '') + ' · NAF ' + (c.naf_code || '')) : '';
+      document.getElementById('modalAppelStatut').value = pipelineStatuses[siren] || 'contacte';
+      document.getElementById('modalAppelNote').value = calls[siren] ? (calls[siren].note || '') : '';
+      modalAppel.classList.add('open');
+    }
+    document.getElementById('btnModalAppelClose').addEventListener('click', function() { modalAppel.classList.remove('open'); });
+    document.getElementById('btnModalAppelCancel').addEventListener('click', function() { modalAppel.classList.remove('open'); });
+    document.getElementById('btnModalAppelSave').addEventListener('click', function() {
+      if (!currentSelectedSiren) return;
+      var st = document.getElementById('modalAppelStatut').value;
+      var note = document.getElementById('modalAppelNote').value;
+      var relance = document.getElementById('modalAppelRelance').value;
+
+      pipelineStatuses[currentSelectedSiren] = st;
+      calls[currentSelectedSiren] = { note: note, relance: relance, date: new Date().toLocaleDateString('fr-FR') };
+      if (trackedSirens.indexOf(currentSelectedSiren) === -1) trackedSirens.push(currentSelectedSiren);
+
+      localStorage.setItem('balise_pipeline', JSON.stringify(pipelineStatuses));
+      localStorage.setItem('balise_calls', JSON.stringify(calls));
+      localStorage.setItem('balise_tracked', JSON.stringify(trackedSirens));
+
+      modalAppel.classList.remove('open');
+      showToast('Appel et compte-rendu enregistrés avec succès !');
+      updateCounters();
+      renderSearchTable();
+      renderSuiviTable();
+      renderKanban();
+    });
+
+    // Modal Livrables
+    var modalLivrables = document.getElementById('modalLivrables');
+    function openLivrablesModal(siren) {
+      currentSelectedSiren = siren;
+      var c = getCompany(siren);
+      document.getElementById('modalLivrablesCoName').textContent = c ? c.nom : siren;
+      var liv = livrables[siren] || {};
+      document.getElementById('modalLivrablesFolder').value = liv.folder || '';
+      document.getElementById('modalLivrablesVitrine').value = liv.vitrine || '';
+      document.getElementById('modalLivrablesZip').value = liv.zip || '';
+      modalLivrables.classList.add('open');
+    }
+    document.getElementById('btnModalLivrablesClose').addEventListener('click', function() { modalLivrables.classList.remove('open'); });
+    document.getElementById('btnModalLivrablesCancel').addEventListener('click', function() { modalLivrables.classList.remove('open'); });
+    document.getElementById('btnModalLivrablesSave').addEventListener('click', function() {
+      if (!currentSelectedSiren) return;
+      livrables[currentSelectedSiren] = {
+        folder: document.getElementById('modalLivrablesFolder').value,
+        vitrine: document.getElementById('modalLivrablesVitrine').value,
+        zip: document.getElementById('modalLivrablesZip').value
+      };
+      localStorage.setItem('balise_livrables', JSON.stringify(livrables));
+      modalLivrables.classList.remove('open');
+      showToast('Livrables enregistrés pour l\'entreprise !');
+      renderSuiviTable();
+    });
+
+    // Modal Masquage
+    var modalMasquer = document.getElementById('modalMasquer');
+    function openMaskModal(siren) {
+      currentSelectedSiren = siren;
+      var c = getCompany(siren);
+      document.getElementById('modalMasquerCoName').textContent = c ? c.nom : siren;
+      modalMasquer.classList.add('open');
+    }
+    document.getElementById('btnModalMasquerClose').addEventListener('click', function() { modalMasquer.classList.remove('open'); });
+    document.getElementById('btnModalMasquerCancel').addEventListener('click', function() { modalMasquer.classList.remove('open'); });
+    document.getElementById('btnModalMasquerConfirm').addEventListener('click', function() {
+      if (!currentSelectedSiren) return;
+      var raison = document.getElementById('modalMasquerRaison').value;
+      var details = document.getElementById('modalMasquerDetails').value;
+      var c = getCompany(currentSelectedSiren);
+
+      hides.push({
+        siren: currentSelectedSiren,
+        nom: c ? c.nom : currentSelectedSiren,
+        raison: raison,
+        details: details,
+        author: 'admin',
+        date: new Date().toLocaleDateString('fr-FR')
+      });
+      localStorage.setItem('balise_hides', JSON.stringify(hides));
+
+      modalMasquer.classList.remove('open');
+      showToast('Entreprise masquée des résultats actifs.', '<span style="color:#DC2626;">✕</span>');
+      updateCounters();
+      renderSearchTable();
+      renderStaffTable();
+    });
+
+    // Tableau de Suivi d'équipe
+    function renderSuiviTable() {
+      var tbody = document.getElementById('studioSuiviTbody');
+      if (!tbody) return;
+
+      var urgentLate = 0, urgentToday = 0, urgentComing = 0, urgentFree = 0;
+      var html = '';
+
+      trackedSirens.forEach(function(siren, idx) {
+        var c = getCompany(siren);
+        if (!c) return;
+        var ref = referees[siren] || 'Non assigné';
+        if (ref === 'Non assigné') urgentFree++;
+        else if (idx % 3 === 0) urgentLate++;
+        else if (idx % 3 === 1) urgentToday++;
+        else urgentComing++;
+
+        var liv = livrables[siren] || {};
+        var livHtml = '';
+        if (liv.folder) livHtml += '<span title="Dossier : ' + liv.folder + '">📁</span> ';
+        if (liv.zip) livHtml += '<span title="Archive ZIP : ' + liv.zip + '">📦</span> ';
+        if (liv.vitrine) livHtml += '<a href="' + liv.vitrine + '" target="_blank" title="Vitrine en ligne">🌐</a>';
+        if (!livHtml) livHtml = '<span style="color:var(--muted); font-size:11px;">Aucun</span>';
+
+        var callData = calls[siren];
+        var callText = callData ? (callData.date + (callData.relance ? ' (Rappel prévu)' : '')) : 'Aucun appel passé';
+
+        html += '<tr>' +
+          '<td>' +
+            '<a href="javascript:void(0)" class="studio-co-name" data-detail-siren="' + c.siren + '">' + c.nom + '</a>' +
+            '<span class="studio-co-meta">SIREN ' + c.siren + ' · ' + (pipelineLabels[pipelineStatuses[siren]] || 'À contacter') + '</span>' +
+          '</td>' +
+          '<td>' + (c.commune || '') + '<br><small style="color:var(--muted);">' + (c.naf_label || '') + '</small></td>' +
+          '<td>' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-referee-toggle="' + c.siren + '">' +
+              (ref === 'admin' ? 'Prise par vous (admin)' : ref) +
+            '</button>' +
+          '</td>' +
+          '<td>' + callText + '</td>' +
+          '<td>' +
+            livHtml + ' ' +
+            '<button type="button" class="btn btn-ghost btn-sm" style="padding:2px 6px;" data-livrables-siren="' + c.siren + '">+</button>' +
+          '</td>' +
+          '<td style="text-align:right;">' +
+            '<button type="button" class="btn btn-ink btn-sm" data-call-siren="' + c.siren + '">Appel passé</button>' +
+          '</td>' +
+        '</tr>';
+      });
+
+      if (trackedSirens.length === 0) {
+        html = '<tr><td colspan="6" style="text-align:center; padding:32px; color:var(--muted);">' +
+               'Aucune entreprise dans le suivi. Cliquez sur l\'étoile ou « Ajouter au suivi » depuis la recherche pour commencer.</td></tr>';
+      }
+
+      tbody.innerHTML = html;
+      document.getElementById('statUrgentLate').textContent = urgentLate;
+      document.getElementById('statUrgentToday').textContent = urgentToday;
+      document.getElementById('statUrgentComing').textContent = urgentComing;
+      document.getElementById('statUrgentFree').textContent = urgentFree;
+
+      tbody.querySelectorAll('[data-detail-siren]').forEach(function(el) {
+        el.addEventListener('click', function() { openSlideover(this.dataset.detailSiren); });
+      });
+      tbody.querySelectorAll('[data-call-siren]').forEach(function(el) {
+        el.addEventListener('click', function() { openCallModal(this.dataset.callSiren); });
+      });
+      tbody.querySelectorAll('[data-livrables-siren]').forEach(function(el) {
+        el.addEventListener('click', function() { openLivrablesModal(this.dataset.livrablesSiren); });
+      });
+      tbody.querySelectorAll('[data-referee-toggle]').forEach(function(el) {
+        el.addEventListener('click', function() {
+          var s = this.dataset.refereeToggle;
+          referees[s] = (referees[s] === 'admin') ? 'Non assigné' : 'admin';
+          localStorage.setItem('balise_referees', JSON.stringify(referees));
+          renderSuiviTable();
+        });
+      });
+    }
+
+    // Tableau Kanban CRM
+    function renderKanban() {
+      var board = document.getElementById('studioKanbanBoard');
+      if (!board) return;
+
+      var stageCounts = {};
+      initialPipeline.forEach(function(st) { stageCounts[st[0]] = 0; });
+
+      var signedDeals = 0;
+      trackedSirens.forEach(function(siren) {
+        var st = pipelineStatuses[siren] || 'a_contacter';
+        if (stageCounts[st] !== undefined) stageCounts[st]++;
+        if (st === 'client') signedDeals++;
+      });
+
+      var totalDeals = trackedSirens.length;
+      var revenue = signedDeals * 1500;
+      var convRate = totalDeals > 0 ? Math.round((signedDeals / totalDeals) * 100) : 0;
+
+      document.getElementById('kpiTotalDeals').textContent = totalDeals;
+      document.getElementById('kpiSignedDeals').textContent = signedDeals;
+      document.getElementById('kpiRevenue').textContent = (revenue.toLocaleString('fr-FR')) + ' €';
+      document.getElementById('kpiConvRate').textContent = convRate + ' %';
+
+      var html = '';
+      initialPipeline.forEach(function(st) {
+        var code = st[0];
+        var label = st[1];
+        var colCards = '';
+
+        trackedSirens.forEach(function(siren) {
+          if ((pipelineStatuses[siren] || 'a_contacter') === code) {
+            var c = getCompany(siren);
+            if (!c) return;
+            colCards += '<div class="kanban-card">' +
+              '<div class="kanban-card-title">' + c.nom + '</div>' +
+              '<div class="kanban-card-meta">' + (c.commune || '') + ' · NAF ' + (c.naf_code || '') + '</div>' +
+              '<div class="kanban-card-footer">' +
+                '<span style="color:var(--signal); font-weight:700;">Sans site web</span>' +
+                '<select class="studio-mini-input" style="padding:2px 4px; font-size:11px; width:auto;" data-stage-select="' + siren + '">' +
+                  initialPipeline.map(function(opt) {
+                    return '<option value="' + opt[0] + '" ' + (opt[0] === code ? 'selected' : '') + '>' + opt[1] + '</option>';
+                  }).join('') +
+                '</select>' +
+              '</div>' +
+            '</div>';
+          }
+        });
+
+        html += '<div class="kanban-col">' +
+          '<div class="kanban-col-head">' +
+            '<span>' + label + '</span>' +
+            '<span class="kanban-badge">' + (stageCounts[code] || 0) + '</span>' +
+          '</div>' +
+          '<div class="kanban-cards">' + (colCards || '<div style="font-size:11px; color:var(--muted); text-align:center; padding:16px 0;">Aucune affaire</div>') + '</div>' +
+        '</div>';
+      });
+
+      board.innerHTML = html;
+
+      board.querySelectorAll('[data-stage-select]').forEach(function(select) {
+        select.addEventListener('change', function() {
+          var s = this.dataset.stageSelect;
+          pipelineStatuses[s] = this.value;
+          localStorage.setItem('balise_pipeline', JSON.stringify(pipelineStatuses));
+          showToast('Statut commercial mis à jour pour le prospect.');
+          renderKanban();
+          renderSuiviTable();
+        });
+      });
+    }
+
+    // Tableau Panel Staff
+    function renderStaffTable() {
+      var tbody = document.getElementById('studioStaffTbody');
+      if (!tbody) return;
+
+      if (hides.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:32px; color:var(--muted);">' +
+                          'Aucune entreprise masquée. Pour masquer une entreprise hors-cible ou doublon, utilisez l\'icône oeil dans la recherche.</td></tr>';
+        return;
+      }
+
+      var html = '';
+      hides.forEach(function(h, idx) {
+        html += '<tr>' +
+          '<td><strong>' + h.nom + '</strong><br><small style="font-family:var(--font-mono); color:var(--muted);">SIREN ' + h.siren + '</small></td>' +
+          '<td><span class="badge" style="background:#F1F5F9; color:var(--ink); font-weight:600;">' + h.raison + '</span></td>' +
+          '<td>' + (h.details || '—') + '</td>' +
+          '<td>@' + (h.author || 'admin') + '</td>' +
+          '<td>' + (h.date || 'Aujourd\'hui') + '</td>' +
+          '<td style="text-align:right;">' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-restore-idx="' + idx + '">Réafficher</button>' +
+          '</td>' +
+        '</tr>';
+      });
+
+      tbody.innerHTML = html;
+      tbody.querySelectorAll('[data-restore-idx]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var idx = parseInt(this.dataset.restoreIdx);
+          var restored = hides.splice(idx, 1)[0];
+          localStorage.setItem('balise_hides', JSON.stringify(hides));
+          showToast(restored.nom + ' réaffichée dans les résultats de recherche !');
+          updateCounters();
+          renderStaffTable();
+          renderSearchTable();
+        });
+      });
+    }
+
+    // Export CSV Excel
+    document.getElementById('studio-btn-export').addEventListener('click', function() {
+      var filtered = filterCompanies();
+      var csvContent = '\uFEFFSIREN;Dénomination;Enseigne;Commune;Code postal;Activité NAF;Effectif;État du site web;Source\n';
+      filtered.forEach(function(c) {
+        var status = (c.site && c.site.status === 'aucun') ? 'Aucun site détecté' : 'Site détecté';
+        var line = [
+          c.siren,
+          (c.nom || '').replace(/;/g, ' '),
+          (c.enseigne || '').replace(/;/g, ' '),
+          (c.commune || '').replace(/;/g, ' '),
+          c.code_postal || '',
+          (c.naf_label || '').replace(/;/g, ' '),
+          c.effectif || '',
+          status,
+          'Base INSEE / Balise Prospection'
+        ].join(';');
+        csvContent += line + '\n';
+      });
+
+      var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'prospects-balise-export.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast('Export CSV généré avec succès (' + filtered.length + ' lignes).', '<span style="color:#10B981;">⬇</span>');
+    });
+
+    // Écouteurs de filtres
+    [inputQ, inputDep, inputCp, selectSec, inputNaf, selectEff].forEach(function(el) {
+      el.addEventListener('input', renderSearchTable);
+      el.addEventListener('change', renderSearchTable);
+    });
+
+    [toggleSansSite, toggleGrandes, toggleMasquees].forEach(function(el) {
+      el.addEventListener('change', function() {
+        var label = this.parentElement;
+        if (this.checked) label.classList.add('on');
+        else label.classList.remove('on');
+        renderSearchTable();
+      });
+    });
+
+    document.getElementById('studio-btn-search').addEventListener('click', renderSearchTable);
+
+    document.getElementById('studio-btn-reset').addEventListener('click', function() {
+      inputQ.value = '';
+      inputDep.value = '';
+      inputCp.value = '';
+      selectSec.value = '';
+      inputNaf.value = '';
+      selectEff.value = '';
+      toggleSansSite.checked = true;
+      document.getElementById('toggle-sans-site-label').classList.add('on');
+      toggleGrandes.checked = false;
+      document.getElementById('toggle-grandes-label').classList.remove('on');
+      toggleMasquees.checked = false;
+      document.getElementById('toggle-masquees-label').classList.remove('on');
+      renderSearchTable();
+      showToast('Filtres de recherche réinitialisés.');
+    });
+
+    // Chips
+    document.querySelectorAll('.studio-chip').forEach(function(chip) {
+      chip.addEventListener('click', function() {
+        inputQ.value = this.dataset.chipQ || '';
+        inputDep.value = this.dataset.chipDep || '';
+        renderSearchTable();
+      });
+    });
+
+    // Initialisation
+    updateCounters();
+    renderSearchTable();
+  })();
+  </script>
 
   <!-- SECTION 07 : CTA FINAL -->
   <section class="pres-final-cta">

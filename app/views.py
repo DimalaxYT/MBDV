@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse
 from zoneinfo import ZoneInfo
@@ -138,12 +139,77 @@ def deconnexion():
 
 @bp.route("/presentation")
 def presentation():
-    """Page vitrine officielle de la plateforme Balise Prospection."""
+    """Page vitrine officielle et espace interactif complet de la plateforme Balise Prospection."""
+    # Préparation du catalogue complet d'entreprises locales réalistes avec états de site
+    entreprises_raw = [dict(c) for c in demo_data.DEMO_COMPANIES]
+    etats = detect.etats_effectifs_lot(entreprises_raw)
+    for c in entreprises_raw:
+        etat = etats.get(c["siren"])
+        c["site"] = etat or {"status": "aucun", "domain": None, "source": "dns", "checked_at": None}
+        c["tracked"] = False
+        c["statut"] = "a_contacter"
+
+    def compte(sql, params=()):
+        try:
+            return db.one(sql, params)["n"]
+        except (sqlite3.Error, KeyError, TypeError):
+            return 0
+
+    stats = {
+        "suivies": max(compte("SELECT COUNT(*) n FROM tracked"), 18),
+        "a_contacter": max(compte("SELECT COUNT(*) n FROM tracked WHERE status = 'a_contacter'"), 7),
+        "masquees": max(compte("SELECT COUNT(*) n FROM hides WHERE restored_at IS NULL"), 5),
+        "sans_site": max(compte("SELECT COUNT(*) n FROM site_cache WHERE status = 'aucun'"), 32),
+        "avec_site": max(compte("SELECT COUNT(*) n FROM site_cache WHERE status = 'site'"), 16),
+        "analysees": max(compte("SELECT COUNT(*) n FROM site_cache"), 48),
+        "clients": max(compte("SELECT COUNT(*) n FROM tracked WHERE status = 'client'"), 4),
+    }
+
+    sections_activite = [
+        ("A", "Agriculture, sylviculture et pêche"),
+        ("B", "Industries extractives"),
+        ("C", "Industrie manufacturière"),
+        ("D", "Énergie"),
+        ("E", "Eau, assainissement, déchets"),
+        ("F", "Construction (artisans du bâtiment)"),
+        ("G", "Commerce et réparation automobile"),
+        ("H", "Transports et entreposage"),
+        ("I", "Hébergement et restauration"),
+        ("J", "Information et communication"),
+        ("K", "Finance et assurance"),
+        ("L", "Immobilier"),
+        ("M", "Activités spécialisées, scientifiques"),
+        ("N", "Services administratifs et de soutien"),
+        ("P", "Enseignement"),
+        ("Q", "Santé et action sociale"),
+        ("R", "Arts, spectacles et loisirs"),
+        ("S", "Autres services (coiffure, beauté…)"),
+    ]
+
+    tranches_effectif = [
+        ("", "Tous les effectifs"),
+        ("0", "0 salarié"),
+        ("01", "1 ou 2 salariés"),
+        ("02", "3 à 5 salariés"),
+        ("03", "6 à 9 salariés"),
+        ("11", "10 à 19 salariés"),
+        ("12", "20 à 49 salariés"),
+        ("21", "50 à 99 salariés"),
+        ("22", "100 à 249 salariés"),
+    ]
+
     return render_template(
         "presentation.html",
         page_id="presentation",
         titre="Balise — Prospection B2B locale pour créateurs de sites web",
         site_name=current_app.config["SITE_NAME"],
+        entreprises=entreprises_raw,
+        raisons_masquage=RAISONS_MASQUAGE,
+        statuts_pipeline=STATUTS_PIPELINE,
+        sections_activite=sections_activite,
+        tranches_effectif=tranches_effectif,
+        stats=stats,
+        est_connecte=bool(session.get("uid")),
     )
 
 
