@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block titre_page %}Panel staff - {{ site_name }} Prospection{% endblock %}
-{% block titre %}Panel staff{% endblock %}
-{% block sous_titre %}{{ sous_titre }}{% endblock %}
+{% block titre_page %}Staff - {{ site_name }} Prospection{% endblock %}
+{% block titre %}Staff{% endblock %}
+{% block sous_titre %}{{ sous_titre or "Gérez les comptes, les accès et la sécurité de votre équipe." }}{% endblock %}
 
 {% block content %}
 

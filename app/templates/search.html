@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block titre_page %}Recherche - {{ site_name }} Prospection{% endblock %}
-{% block titre %}Recherche d'entreprises{% endblock %}
-{% block sous_titre %}{{ sous_titre }}{% endblock %}
+{% block titre %}{{ titre or "Trouvez les entreprises qui n'ont pas encore de site" }}{% endblock %}
+{% block sous_titre %}{{ sous_titre or "Recherchez des entreprises locales, filtrez les prospects pertinents et identifiez rapidement ceux dont aucun site web n'a été détecté." }}{% endblock %}
 
 {% block content %}
 
@@ -15,13 +15,43 @@
     <button type="submit" class="btn btn-ink btn-tall">
       {{ icon('search', 15) }} Rechercher
     </button>
+    {% if p.q or p.departement or p.code_postal or p.naf or p.section or p.effectif %}
+    <a href="/" class="btn btn-ghost btn-tall" title="Réinitialiser la recherche">
+      {{ icon('x', 14) }} Effacer
+    </a>
+    {% endif %}
+  </div>
+
+  <div class="start-chips" style="margin: 8px 0 14px; display: flex; gap: 8px; flex-wrap: wrap;">
+    <a class="chip" href="/?q=boulangerie&departement=91&sans_site=1{% if p.demo %}&demo=1{% endif %}">Boulangeries (91)</a>
+    <a class="chip" href="/?q=plomberie&departement=91&sans_site=1{% if p.demo %}&demo=1{% endif %}">Plombiers &amp; Chauffage (91)</a>
+    <a class="chip" href="/?q=coiffure&departement=75&sans_site=1{% if p.demo %}&demo=1{% endif %}">Coiffure (75)</a>
+    <a class="chip" href="/?q=menuiserie&departement=77&sans_site=1{% if p.demo %}&demo=1{% endif %}">Artisans BTP (77)</a>
+    <a class="chip" href="/?q=restaurant&departement=44&sans_site=1{% if p.demo %}&demo=1{% endif %}">Restaurants (44)</a>
+    <a class="chip" href="/?q=garage&departement=69&sans_site=1{% if p.demo %}&demo=1{% endif %}">Garages (69)</a>
   </div>
 
   <div class="filters-grid">
     <div class="field">
-      <label for="f-dep">Departement</label>
+      <label for="f-dep">Département</label>
       <input id="f-dep" type="text" name="departement" value="{{ p.departement }}"
-             inputmode="numeric" pattern="[0-9A-Za-z]{1,3}" placeholder="44, 75, 971..." spellcheck="false">
+             list="dep-suggestions" placeholder="91, 75, Essonne..." spellcheck="false">
+      <datalist id="dep-suggestions">
+        <option value="91">91 - Essonne</option>
+        <option value="77">77 - Seine-et-Marne</option>
+        <option value="75">75 - Paris</option>
+        <option value="78">78 - Yvelines</option>
+        <option value="92">92 - Hauts-de-Seine</option>
+        <option value="93">93 - Seine-Saint-Denis</option>
+        <option value="94">94 - Val-de-Marne</option>
+        <option value="95">95 - Val-d'Oise</option>
+        <option value="13">13 - Bouches-du-Rhône</option>
+        <option value="33">33 - Gironde</option>
+        <option value="44">44 - Loire-Atlantique</option>
+        <option value="69">69 - Rhône</option>
+        <option value="31">31 - Haute-Garonne</option>
+        <option value="59">59 - Nord</option>
+      </datalist>
     </div>
     <div class="field">
       <label for="f-cp">Code postal</label>
@@ -99,6 +129,11 @@
       <input type="checkbox" name="sans_site" value="1" {% if p.sans_site %}checked{% endif %}>
       <span class="toggle-box"></span>
       Afficher uniquement les entreprises sans site détecté
+    </label>
+    <label class="toggle {% if p.inclure_grandes %}on{% endif %}">
+      <input type="checkbox" name="inclure_grandes" value="1" {% if p.inclure_grandes %}checked{% endif %}>
+      <span class="toggle-box"></span>
+      Inclure les grandes entreprises
     </label>
     <label class="toggle {% if p.inclure_masquees %}on{% endif %}">
       <input type="checkbox" name="inclure_masquees" value="1" {% if p.inclure_masquees %}checked{% endif %}>
@@ -273,8 +308,13 @@
     <div class="start-inner">
       <h2>Prêt à prospecter</h2>
       <p>Recherchez par nom, activité, secteur ou zone. L'outil vérifie ensuite pour
-      chaque entreprise la présence d'un site web et met en evidence celles qui n'en
+      chaque entreprise la présence d'un site web et met en évidence celles qui n'en
       ont pas détecté : vos futurs clients.</p>
+      <div style="margin: 16px 0 22px;">
+        <a href="/presentation" class="btn btn-ink btn-tall">
+          {{ icon('radar', 16) }} Découvrir le Studio Balise &amp; Scanner Radar
+        </a>
+      </div>
       <div class="start-chips">
         <a class="chip" href="/?q=coiffure&departement=44&sans_site=1">Coiffures en Loire-Atlantique {{ icon('arrow-right', 13) }}</a>
         <a class="chip" href="/?q=boulangerie&departement=16&sans_site=1">Boulangeries en Charente {{ icon('arrow-right', 13) }}</a>

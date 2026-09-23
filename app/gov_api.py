@@ -3,6 +3,8 @@
 API publique du Ministere de l'Economie, donnees INSEE / RNE sous licence ouverte.
 Aucune cle d'API n'est necessaire.
 """
+import re
+import threading
 import time
 import unicodedata
 
@@ -30,6 +32,7 @@ NATURE_JURIDIQUE = {
     "5720": "SAS unipersonnelle (SASU)",
     "6540": "Société civile de construction-vente",
     "6901": "Société civile immobilière (SCI)",
+    "9220": "Association déclarée d'utilité publique",
 }
 
 EFFECTIFS = {
@@ -82,6 +85,36 @@ REGIONS = {
     "44": "Grand Est", "52": "Pays de la Loire", "53": "Bretagne",
     "75": "Nouvelle-Aquitaine", "76": "Occitanie",
     "84": "Auvergne-Rhône-Alpes", "93": "Provence-Alpes-Côte d'Azur", "94": "Corse",
+}
+
+DEPARTEMENTS_FR = {
+    "01": "Ain", "02": "Aisne", "03": "Allier", "04": "Alpes-de-Haute-Provence",
+    "05": "Hautes-Alpes", "06": "Alpes-Maritimes", "07": "Ardèche", "08": "Ardennes",
+    "09": "Ariège", "10": "Aube", "11": "Aude", "12": "Aveyron",
+    "13": "Bouches-du-Rhône", "14": "Calvados", "15": "Cantal", "16": "Charente",
+    "17": "Charente-Maritime", "18": "Cher", "19": "Corrèze", "2A": "Corse-du-Sud",
+    "2B": "Haute-Corse", "21": "Côte-d'Or", "22": "Côtes-d'Armor", "23": "Creuse",
+    "24": "Dordogne", "25": "Doubs", "26": "Drôme", "27": "Eure",
+    "28": "Eure-et-Loir", "29": "Finistère", "30": "Gard", "31": "Haute-Garonne",
+    "32": "Gers", "33": "Gironde", "34": "Hérault", "35": "Ille-et-Vilaine",
+    "36": "Indre", "37": "Indre-et-Loire", "38": "Isère", "39": "Jura",
+    "40": "Landes", "41": "Loir-et-Cher", "42": "Loire", "43": "Haute-Loire",
+    "44": "Loire-Atlantique", "45": "Loiret", "46": "Lot", "47": "Lot-et-Garonne",
+    "48": "Lozère", "49": "Maine-et-Loire", "50": "Manche", "51": "Marne",
+    "52": "Haute-Marne", "53": "Mayenne", "54": "Meurthe-et-Moselle", "55": "Meuse",
+    "56": "Morbihan", "57": "Moselle", "58": "Nièvre", "59": "Nord",
+    "60": "Oise", "61": "Orne", "62": "Pas-de-Calais", "63": "Puy-de-Dôme",
+    "64": "Pyrénées-Atlantiques", "65": "Hautes-Pyrénées", "66": "Pyrénées-Orientales",
+    "67": "Bas-Rhin", "68": "Haut-Rhin", "69": "Rhône", "70": "Haute-Saône",
+    "71": "Saône-et-Loire", "72": "Sarthe", "73": "Savoie", "74": "Haute-Savoie",
+    "75": "Paris", "76": "Seine-Maritime", "77": "Seine-et-Marne", "78": "Yvelines",
+    "79": "Deux-Sèvres", "80": "Somme", "81": "Tarn", "82": "Tarn-et-Garonne",
+    "83": "Var", "84": "Vaucluse", "85": "Vendée", "86": "Vienne",
+    "87": "Haute-Vienne", "88": "Vosges", "89": "Yonne", "90": "Territoire de Belfort",
+    "91": "Essonne", "92": "Hauts-de-Seine", "93": "Seine-Saint-Denis",
+    "94": "Val-de-Marne", "95": "Val-d'Oise",
+    "971": "Guadeloupe", "972": "Martinique", "973": "Guyane",
+    "974": "La Réunion", "976": "Mayotte",
 }
 
 NAF_LABELS = {
@@ -137,6 +170,7 @@ NAF_LABELS = {
     "85.59A": "Formation continue d'adultes",
     "86.21Z": "Médecine générale et spécialisée",
     "86.23Z": "Chirurgiens-dentistes",
+    "88.99B": "Action sociale sans hébergement",
     "93.13Z": "Salles de sport et installations sportives",
     "95.23Z": "Cordonnerie, réparation de cuir",
     "96.01Z": "Blanchisserie, teinturerie, pressing",
@@ -195,9 +229,152 @@ def naf_label(code):
     return NAF_LABELS.get(code)
 
 
-def normalize_result(r: dict) -> dict:
+def _est_marque_carrefour(nom: str, enseigne: str, naf: str) -> bool:
+    texte = slug_ascii(f"{nom} {enseigne}").upper()
+    if "CARREFOUR" not in texte:
+        return False
+    # Formats specifiques de l'enseigne Carrefour (Carrefour Market, Carrefour Express, Carrefour City...)
+    if re.search(
+        r"\bCARREFOUR\s+(?:MARKET|EXPRESS|CITY|CONTACT|PROXIMITE|DRIVE|HYPER|SUPER|BANQUE|VOYAGES|LOCATION|FRANCE|PARTENARIAT|SUPERMARCHE)\b",
+        texte,
+    ):
+        return True
+    # 'du carrefour', 'au carrefour'... (lieu geographique : café ou boulangerie au carrefour)
+    if re.search(r"\b(?:DU|AU|LE)\s+CARREFOUR\b", texte):
+        return False
+    # Nom commencant par Carrefour ou enseigne Carrefour
+    if re.search(r"^(?:SAS|SARL|SA|EURL|SOCIETE)?\s*CARREFOUR\b", nom.upper()) or (
+        enseigne and re.search(r"^CARREFOUR\b", enseigne.upper())
+    ):
+        return True
+    # Grande distribution alimentaire avec Carrefour dans le libelle
+    return bool(str(naf).startswith("47.11"))
+
+
+def est_grande_entreprise(c: dict) -> bool:
+    """Identifie une grande entreprise (GE, ETI, reseaux, grandes enseignes, ONG).
+
+    Balise prospecte les TPE / PME / artisans sans site : les grands groupes,
+    enseignes nationales (Carrefour...), organisations (Croix-Rouge...)
+    et administrations sont hors cible.
+    """
+    # 1. Classification officielle INSEE (GE et ETI)
+    cat = (c.get("categorie") or "").upper()
+    if cat in {"GE", "ETI"}:
+        return True
+
+    # 2. Effectifs massifs (100 salaries et plus)
+    eff = str(c.get("effectif_code") or "")
+    if eff in {"22", "31", "32", "41", "42", "51", "52", "53"}:
+        return True
+
+    # 3. Nature juridique publique ou securite sociale (7xxx, 8xxx)
+    nature = str(c.get("nature_code") or "")
+    if nature.startswith(("7", "8")):
+        return True
+
+    # 4. Multi-etablissements importants (reseaux, chaines de 10+ etablissements)
+    nb_etab = c.get("nb_etablissements")
+    if nb_etab and isinstance(nb_etab, int) and nb_etab >= 10:
+        return True
+
+    # 5. Services publics et collectivites
+    comp = c.get("complements") or {}
+    if comp.get("est_service_public") or comp.get("est_collectivite_territoriale"):
+        return True
+
+    # 6. Activites de tres grandes surfaces (hypermarches 47.11F)
+    naf = str(c.get("naf_code") or "")
+    if naf.startswith("47.11F"):
+        return True
+
+    # 7. Marques nationales, franchises et grandes ONG / associations
+    nom = c.get("nom") or ""
+    enseigne = c.get("enseigne") or ""
+    texte = slug_ascii(f"{nom} {enseigne}").upper()
+
+    # Croix-Rouge et organisations humanitaires majeures
+    if re.search(r"\bCROIX[\s\-]+ROUGE\b", texte):
+        return True
+    if re.search(
+        r"\b(?:SECOURS\s+POPULAIRE|SECOURS\s+CATHOLIQUE|RESTOS?\s+DU\s+COEUR|"
+        r"RESTAURANTS?\s+DU\s+COEUR|EMMAUS|ARMEE\s+DU\s+SALUT|APF\s+FRANCE\s+HANDICAP|"
+        r"LIGUE\s+CONTRE\s+LE\s+CANCER|AFM\s+TELETHON|MEDECINS\s+DU\s+MONDE|"
+        r"MEDECINS\s+SANS\s+FRONTIERES|ACTION\s+CONTRE\s+LA\s+FAIM|"
+        r"AMNESTY\s+INTERNATIONAL|SNSM|FONDATION\s+DE\s+FRANCE|APPRENTIS\s+D\s*AUTEUIL|"
+        r"UNICEF|HANDICAP\s+INTERNATIONAL|GREENPEACE|WWF)\b",
+        texte,
+    ):
+        return True
+
+    # Carrefour (enseignes et filiales, sans toucher aux bistrots/boulangeries 'du carrefour')
+    if _est_marque_carrefour(nom, enseigne, naf):
+        return True
+
+    # Autres grandes enseignes de distribution, restauration rapide et reseaux
+    if re.search(
+        r"\b(?:AUCHAN|LECLERC|E\s*LECLERC|INTERMARCHE|NETTO|LIDL|ALDI|MONOPRIX|"
+        r"FRANPRIX|SYSTEME\s+U|SUPER\s+U|HYPER\s+U|PICARD\s+SURGELES|GRAND\s+FRAIS|"
+        r"CASINO\s+SUPERMARCHES?|CASINO\s+SHOP|PETIT\s+CASINO|GEANT\s+CASINO|"
+        r"LEADER\s+PRICE|CORA)\b",
+        texte,
+    ):
+        return True
+    if re.search(
+        r"\b(?:MCDONALDS?|BURGER\s+KING|KFC|SUBWAY|DOMINO\s*S\s*PIZZA|PIZZA\s+HUT|"
+        r"BRIOCHE\s+DOREE|MARIE\s+BLACHERE|LA\s+MIE\s+CALINE|STARBUCKS|QUICK)\b",
+        texte,
+    ):
+        return True
+    if re.search(
+        r"\b(?:LEROY\s+MERLIN|CASTORAMA|BRICO\s+DEPOT|BRICORAMA|DECATHLON|"
+        r"IKEA|CONFORAMA|DARTY|FNAC)\b",
+        texte,
+    ):
+        return True
+    if re.search(
+        r"\b(?:TOTALENERGIES|NORAUTO|FEU\s+VERT|MIDAS|SPEEDY|POINT\s+S|CARGLASS|"
+        r"EUROPCAR|SIXT|HERTZ|AVIS)\b",
+        texte,
+    ):
+        return True
+    if re.search(
+        r"\b(?:BNP\s+PARIBAS|SOCIETE\s+GENERALE|CREDIT\s+AGRICOLE|CREDIT\s+MUTUEL|"
+        r"CAISSE\s+D\s*EPARGNE|BANQUE\s+POPULAIRE|LCL|LA\s+BANQUE\s+POSTALE|CIC|"
+        r"AXA|ALLIANZ|GROUPAMA|MACIF|MAIF|MATMUT|MMA|GMF)\b",
+        texte,
+    ):
+        return True
+    if re.search(r"\b(?:ADECCO|MANPOWER|RANDSTAD|CRIT|PROMAN|SYNERGIE)\b", texte):
+        return True
+    return bool(
+        re.search(
+            r"\b(?:LA\s+POSTE|CHRONOPOST|DPD|COLISSIMO|ORANGE|SFR|"
+            r"BOUYGUES\s+TELECOM|FREE\s+MOBILE|SNCF|RATP|KEOLIS|TRANSDEV)\b",
+            texte,
+        )
+    )
+
+
+def normalize_result(r: dict, filter_departement: str = "", filter_code_postal: str = "") -> dict:
     """Transforme une entree API brute en dictionnaire homogene pour les vues."""
     siege = r.get("siege") or {}
+    etab_choisi = siege
+
+    # Si un departement ou un code postal est precise et que le siege ne correspond
+    # pas, on verifie si un etablissement correspondant existe dans matching_etablissements.
+    matching = r.get("matching_etablissements") or []
+    if filter_code_postal and _clean(siege.get("code_postal")) != filter_code_postal:
+        for etab in matching:
+            if _clean(etab.get("code_postal")) == filter_code_postal:
+                etab_choisi = etab
+                break
+    elif filter_departement and _clean(siege.get("departement")) != filter_departement:
+        for etab in matching:
+            if _clean(etab.get("departement")) == filter_departement:
+                etab_choisi = etab
+                break
+
     finances = r.get("finances") or {}
 
     dernier_annee, dernier_fin = None, None
@@ -205,23 +382,37 @@ def normalize_result(r: dict) -> dict:
         dernier_annee, dernier_fin = annee, data
         break
 
-    type_voie = _clean(siege.get("type_voie"))
-    numero = _clean(siege.get("numero_voie"))
-    voie = _clean(siege.get("libelle_voie"))
-    complement = _clean(siege.get("complement_adresse"))
+    type_voie = _clean(etab_choisi.get("type_voie"))
+    numero = _clean(etab_choisi.get("numero_voie"))
+    voie = _clean(etab_choisi.get("libelle_voie"))
+    complement = _clean(etab_choisi.get("complement_adresse"))
     rue = " ".join(x for x in [numero, type_voie, voie] if x) or None
     if complement:
         rue = f"{rue}, {complement}" if rue else complement
 
-    commune = _clean(siege.get("libelle_commune"))
-    dept = _clean(siege.get("departement"))
-    region_code = _clean(siege.get("region"))
+    commune = _clean(etab_choisi.get("libelle_commune"))
+    dept = _clean(etab_choisi.get("departement"))
+    region_code = _clean(etab_choisi.get("region"))
+
+    # Secours departement si non fourni directement dans l'etablissement mais deduisible du code postal
+    if not dept and etab_choisi.get("code_postal"):
+        cp_val = _clean(etab_choisi.get("code_postal"))
+        if cp_val and len(cp_val) == 5 and cp_val[:2].isdigit():
+            if cp_val.startswith("20"):
+                dept = "2A" if cp_val < "20200" else "2B"
+            elif cp_val.startswith(("97", "98")):
+                dept = cp_val[:3]
+            else:
+                dept = cp_val[:2]
 
     # Enseigne : denomination usuelle de l'etablissement (source SIRENE). Utile a la
     # detection de site : "SARL DUPONT" peut exercer sous "Le Fournil d'Alice".
     nom_principal = r.get("nom_complet") or r.get("nom_raison_sociale") or "Sans nom"
-    enseignes = [_clean(e) for e in (siege.get("liste_enseignes") or [])]
-    enseigne = _clean(siege.get("nom_commercial")) or next((e for e in enseignes if e), None)
+    raw_enseignes = etab_choisi.get("liste_enseignes") or siege.get("liste_enseignes") or []
+    enseignes = [_clean(e) for e in raw_enseignes]
+    enseigne = (_clean(etab_choisi.get("nom_commercial"))
+                or _clean(siege.get("nom_commercial"))
+                or next((e for e in enseignes if e), None))
     if enseigne and _sans_espaces(enseigne) == _sans_espaces(nom_principal):
         enseigne = None
 
@@ -261,17 +452,20 @@ def normalize_result(r: dict) -> dict:
         "effectif_code": r.get("tranche_effectif_salarie"),
         "effectif": EFFECTIFS.get(r.get("tranche_effectif_salarie") or "NN", "Non renseigné"),
         "nb_etablissements": r.get("nombre_etablissements"),
-        "adresse": _clean(siege.get("adresse")) or rue,
+        "adresse": _clean(etab_choisi.get("adresse")) or rue,
         "rue": rue,
-        "code_postal": _clean(siege.get("code_postal")),
+        "code_postal": _clean(etab_choisi.get("code_postal")),
         "commune": commune,
         "departement": dept,
         "region": REGIONS.get(region_code or "", region_code),
         "siret_siege": _clean(siege.get("siret")),
-        "date_debut_activite": _clean(siege.get("date_debut_activite")),
+        "siret_etab": _clean(etab_choisi.get("siret")),
+        "date_debut_activite": _clean(
+            etab_choisi.get("date_debut_activite") or siege.get("date_debut_activite")
+        ),
         "enseigne": enseigne,
-        "lat": siege.get("latitude"),
-        "lng": siege.get("longitude"),
+        "lat": etab_choisi.get("latitude") or siege.get("latitude"),
+        "lng": etab_choisi.get("longitude") or siege.get("longitude"),
         "dirigeants": dirigeants,
         "finances": {
             "annee": dernier_annee,
@@ -289,12 +483,47 @@ def normalize_result(r: dict) -> dict:
             "association": comp.get("est_association"),
             "avocat": comp.get("est_avocat"),
             "societe_mission": comp.get("est_societe_mission"),
+            "est_service_public": comp.get("est_service_public"),
+            "est_collectivite_territoriale": comp.get("est_collectivite_territoriale"),
         },
     }
 
 
 _session = requests.Session()
 _session.headers.update({"User-Agent": "MBDV-Prospection/1.0 (outil interne associes)"})
+_adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
+_session.mount("https://", _adapter)
+_session.mount("http://", _adapter)
+
+_CACHE_LOCK = threading.Lock()
+_API_CACHE = {}
+_API_CACHE_TTL = 300  # 5 minutes
+_API_CACHE_MAX = 500
+
+
+def clear_cache() -> None:
+    """Vide le cache memoire des requetes de l'API officielle."""
+    with _CACHE_LOCK:
+        _API_CACHE.clear()
+
+
+def _get_cache(key):
+    with _CACHE_LOCK:
+        if key in _API_CACHE:
+            ts, data = _API_CACHE[key]
+            if time.time() - ts < _API_CACHE_TTL:
+                return data
+            del _API_CACHE[key]
+    return None
+
+
+def _set_cache(key, data):
+    with _CACHE_LOCK:
+        if len(_API_CACHE) >= _API_CACHE_MAX:
+            oldest = sorted(_API_CACHE.keys(), key=lambda k: _API_CACHE[k][0])[:100]
+            for k in oldest:
+                _API_CACHE.pop(k, None)
+        _API_CACHE[key] = (time.time(), data)
 
 
 def _retry_after(resp, defaut: float) -> float:
@@ -306,14 +535,23 @@ def _retry_after(resp, defaut: float) -> float:
 
 
 def _get(params: dict, tries: int = 3) -> dict:
+    key = tuple(sorted((str(k), str(v)) for k, v in params.items()))
+    cached = _get_cache(key)
+    if cached is not None:
+        return cached
+
     last_err = None
     for attempt in range(tries):
         try:
             resp = _session.get(BASE_URL, params=params, timeout=TIMEOUT)
         except requests.RequestException as exc:
-            raise ApiError(
+            last_err = ApiError(
                 f"Connexion a la base officielle impossible ({exc.__class__.__name__})."
-            ) from exc  # erreur reseau : inutile de retenter immediatement
+            )
+            if attempt < tries - 1:
+                time.sleep(0.4 * (attempt + 1))
+                continue
+            raise last_err from exc
         if resp.status_code == 429:
             last_err = ApiError("Limite de requetes atteinte (7/seconde). Reessayez dans quelques secondes.")
             time.sleep(_retry_after(resp, 1.2 * (attempt + 1)))
@@ -325,7 +563,9 @@ def _get(params: dict, tries: int = 3) -> dict:
         if resp.status_code != 200:
             raise ApiError(f"Erreur de l'API officielle (HTTP {resp.status_code}).")
         try:
-            return resp.json()
+            data = resp.json()
+            _set_cache(key, data)
+            return data
         except ValueError as exc:
             raise ApiError("Reponse illisible de l'API officielle.") from exc
     raise last_err or ApiError("Echec de l'appel a l'API officielle.")
@@ -357,7 +597,10 @@ def search(q="", page=1, departement="", code_postal="", naf="",
     payload = _get(build_params(q, page, departement, code_postal, naf, section, effectif, actives))
     results = payload.get("results") or []
     return {
-        "items": [normalize_result(r) for r in results],
+        "items": [
+            normalize_result(r, filter_departement=departement, filter_code_postal=code_postal)
+            for r in results
+        ],
         "total_results": int(payload.get("total_results") or 0),
         "page": int(payload.get("page") or page),
         "total_pages": max(1, int(payload.get("total_pages") or 1)),

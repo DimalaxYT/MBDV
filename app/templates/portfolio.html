@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block titre_page %}Portefeuille - {{ site_name }} Prospection{% endblock %}
-{% block titre %}Portefeuille commercial{% endblock %}
-{% block sous_titre %}{{ sous_titre }}{% endblock %}
+{% block titre %}Portefeuille{% endblock %}
+{% block sous_titre %}{{ sous_titre or "Suivez vos affaires, vos encaissements et votre activité commerciale." }}{% endblock %}
 
 {% block content %}
 

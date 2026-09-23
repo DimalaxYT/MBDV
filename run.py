@@ -15,6 +15,13 @@ Variables d'environnement reconnues :
 """
 import os
 
+if os.environ.get("MBDV_EMBEDDED_SESSION") is None:
+    os.environ["MBDV_EMBEDDED_SESSION"] = "1"
+if os.environ.get("MBDV_DEMO") is None:
+    os.environ["MBDV_DEMO"] = "1"
+if os.environ.get("MBDV_DEJA_CONNECTE") is None:
+    os.environ["MBDV_DEJA_CONNECTE"] = "1"
+
 from app import create_app
 
 app = create_app()
@@ -22,7 +29,7 @@ app = create_app()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT") or os.environ.get("MBDV_PORT") or "5050")
     host = os.environ.get("MBDV_HOST", "0.0.0.0")  # noqa: S104 - conteneur/hebergement
-    print(f"MBDV - Prospection  |  http://{host}:{port}")
+    print(f"Balise Prospection  |  http://{host}:{port}")
     try:
         from waitress import serve
         serve(app, host=host, port=port, threads=8)

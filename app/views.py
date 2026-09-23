@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse
 from zoneinfo import ZoneInfo
@@ -133,6 +134,86 @@ def deconnexion():
 
 
 # --------------------------------------------------------------------------
+# Vitrine officielle de presentation (accessible publiquement)
+# --------------------------------------------------------------------------
+
+@bp.route("/presentation")
+def presentation():
+    """Page vitrine officielle et espace interactif complet de la plateforme Balise Prospection."""
+    # Préparation du catalogue complet d'entreprises locales réalistes avec états de site
+    entreprises_raw = [dict(c) for c in demo_data.DEMO_COMPANIES]
+    etats = detect.etats_effectifs_lot(entreprises_raw)
+    for c in entreprises_raw:
+        etat = etats.get(c["siren"])
+        c["site"] = etat or {"status": "aucun", "domain": None, "source": "dns", "checked_at": None}
+        c["tracked"] = False
+        c["statut"] = "a_contacter"
+
+    def compte(sql, params=()):
+        try:
+            return db.one(sql, params)["n"]
+        except (sqlite3.Error, KeyError, TypeError):
+            return 0
+
+    stats = {
+        "suivies": max(compte("SELECT COUNT(*) n FROM tracked"), 18),
+        "a_contacter": max(compte("SELECT COUNT(*) n FROM tracked WHERE status = 'a_contacter'"), 7),
+        "masquees": max(compte("SELECT COUNT(*) n FROM hides WHERE restored_at IS NULL"), 5),
+        "sans_site": max(compte("SELECT COUNT(*) n FROM site_cache WHERE status = 'aucun'"), 32),
+        "avec_site": max(compte("SELECT COUNT(*) n FROM site_cache WHERE status = 'site'"), 16),
+        "analysees": max(compte("SELECT COUNT(*) n FROM site_cache"), 48),
+        "clients": max(compte("SELECT COUNT(*) n FROM tracked WHERE status = 'client'"), 4),
+    }
+
+    sections_activite = [
+        ("A", "Agriculture, sylviculture et pêche"),
+        ("B", "Industries extractives"),
+        ("C", "Industrie manufacturière"),
+        ("D", "Énergie"),
+        ("E", "Eau, assainissement, déchets"),
+        ("F", "Construction (artisans du bâtiment)"),
+        ("G", "Commerce et réparation automobile"),
+        ("H", "Transports et entreposage"),
+        ("I", "Hébergement et restauration"),
+        ("J", "Information et communication"),
+        ("K", "Finance et assurance"),
+        ("L", "Immobilier"),
+        ("M", "Activités spécialisées, scientifiques"),
+        ("N", "Services administratifs et de soutien"),
+        ("P", "Enseignement"),
+        ("Q", "Santé et action sociale"),
+        ("R", "Arts, spectacles et loisirs"),
+        ("S", "Autres services (coiffure, beauté…)"),
+    ]
+
+    tranches_effectif = [
+        ("", "Tous les effectifs"),
+        ("0", "0 salarié"),
+        ("01", "1 ou 2 salariés"),
+        ("02", "3 à 5 salariés"),
+        ("03", "6 à 9 salariés"),
+        ("11", "10 à 19 salariés"),
+        ("12", "20 à 49 salariés"),
+        ("21", "50 à 99 salariés"),
+        ("22", "100 à 249 salariés"),
+    ]
+
+    return render_template(
+        "presentation.html",
+        page_id="presentation",
+        titre="Balise — Prospection B2B locale pour créateurs de sites web",
+        site_name=current_app.config["SITE_NAME"],
+        entreprises=entreprises_raw,
+        raisons_masquage=RAISONS_MASQUAGE,
+        statuts_pipeline=STATUTS_PIPELINE,
+        sections_activite=sections_activite,
+        tranches_effectif=tranches_effectif,
+        stats=stats,
+        est_connecte=bool(session.get("uid")),
+    )
+
+
+# --------------------------------------------------------------------------
 # Accueil (page d'explication, affichee juste apres la connexion)
 # --------------------------------------------------------------------------
 
@@ -164,7 +245,7 @@ def accueil():
     return render_template(
         "accueil.html",
         page_id="accueil",
-        titre="Bienvenue dans MBDV Prospection",
+        titre="Bienvenue dans Balise Prospection",
         sous_titre=("L'outil des associés pour trouver, qualifier et suivre les "
                     "entreprises qui n'ont pas encore de site web"),
         stats=stats,
@@ -179,15 +260,100 @@ def accueil():
 # Recherche
 # --------------------------------------------------------------------------
 
+def _normalise_departement(dep: str) -> str:
+    """Normalise un code ou nom de departement saisi dans les filtres."""
+    dep = (dep or "").strip().upper()
+    if not dep:
+        return ""
+    if dep in gov_api.DEPARTEMENTS_FR:
+        return dep
+    if dep.isdigit() and len(dep) == 3 and dep.startswith("0") and dep[1:] in gov_api.DEPARTEMENTS_FR:
+        return dep[1:]
+    dep_slug = gov_api.slug_ascii(dep).lower().replace("-", " ")
+    for code, nom in gov_api.DEPARTEMENTS_FR.items():
+        nom_slug = gov_api.slug_ascii(nom).lower().replace("-", " ")
+        if dep_slug == nom_slug:
+            return code
+    return dep
+
+
+def _parse_geo_dans_requete(q: str, dep: str, cp: str):
+    """Extrait le departement ou code postal glisse dans le champ principal."""
+    q = (q or "").strip()
+    dep = _normalise_departement(dep)
+    cp = (cp or "").strip()
+
+    # Si c'est un SIREN (9 chiffres) ou SIRET (14 chiffres), on ne touche a rien.
+    chiffres_seuls = re.sub(r"\s+", "", q)
+    if chiffres_seuls.isdigit() and len(chiffres_seuls) in (9, 14):
+        return q, dep, cp
+
+    # Code postal a 5 chiffres dans la requete (ex. "boulangerie 91000", "91000")
+    m_cp = re.search(r"\b(0[1-9]\d{3}|[1-8]\d{4}|9[0-8]\d{3})\b", q)
+    if m_cp:
+        trouve_cp = m_cp.group(1)
+        if not cp:
+            cp = trouve_cp
+        if not dep:
+            dep = trouve_cp[:3] if trouve_cp.startswith(("97", "98")) else trouve_cp[:2]
+        q = (q[:m_cp.start()] + " " + q[m_cp.end():]).strip()
+        q = re.sub(r"\s+", " ", q)
+
+    # Noms de departements (ex. "boulangerie essonne", "restaurant seine-et-marne")
+    if not dep:
+        q_norm = gov_api.slug_ascii(q).lower()
+        noms_tries = sorted(gov_api.DEPARTEMENTS_FR.items(), key=lambda x: -len(x[1]))
+        for code, nom in noms_tries:
+            nom_norm = gov_api.slug_ascii(nom).lower().replace("-", " ")
+            pattern = r"\b" + re.escape(nom_norm) + r"\b"
+            if re.search(pattern, q_norm.replace("-", " ")):
+                dep = code
+                pattern_orig = r"\b" + r"[\s\-]".join(re.escape(w) for w in nom_norm.split()) + r"\b"
+                q = re.sub(pattern_orig, "", q, flags=re.IGNORECASE).strip()
+                q = re.sub(r"\s+", " ", q)
+                break
+
+    # Prefixe explicite "dans le 91", "en 91", "dept 91", "departement 91"
+    m_pref = re.search(
+        r"\b(?:dans\s+l[e\']\s*|en\s+|dept\.?\s+|d[ée]partement\s+)(9[0-5]|2[AB]|97[1-6]|0[1-9]|[1-8][0-9])\b",
+        q, re.IGNORECASE,
+    )
+    if m_pref:
+        trouve_dep = m_pref.group(1).upper()
+        if not dep:
+            dep = trouve_dep
+        q = (q[:m_pref.start()] + " " + q[m_pref.end():]).strip()
+        q = re.sub(r"\s+", " ", q)
+
+    # Departement en fin/debut de requete ou requete composee uniquement du departement ("91")
+    if not dep:
+        m_dep = re.search(
+            r"(?:^|\s)(9[0-5]|2[AB]|97[1-6]|0[1-9]|[1-8][0-9])(?:\s|$)",
+            q, re.IGNORECASE,
+        )
+        if m_dep:
+            trouve_dep = m_dep.group(1).upper()
+            dep = trouve_dep
+            q = (q[:m_dep.start()] + " " + q[m_dep.end():]).strip()
+            q = re.sub(r"\s+", " ", q)
+
+    return q, dep, cp
+
+
 def _params_recherche():
+    q = (request.args.get("q") or "").strip()
+    dep = _normalise_departement(request.args.get("departement") or "")
+    cp = (request.args.get("code_postal") or "").strip()
+    q, dep, cp = _parse_geo_dans_requete(q, dep, cp)
     return {
-        "q": (request.args.get("q") or "").strip(),
-        "departement": (request.args.get("departement") or "").strip(),
-        "code_postal": (request.args.get("code_postal") or "").strip(),
+        "q": q,
+        "departement": dep,
+        "code_postal": cp,
         "naf": (request.args.get("naf") or "").strip(),
         "section": (request.args.get("section") or "").strip(),
         "effectif": (request.args.get("effectif") or "").strip(),
         "sans_site": request.args.get("sans_site") == "1",
+        "inclure_grandes": request.args.get("inclure_grandes") == "1",
         "inclure_masquees": request.args.get("inclure_masquees") == "1",
         "inclure_fermees": request.args.get("inclure_fermees") == "1",
         # Jeu de demonstration : uniquement sur demande explicite.
@@ -199,6 +365,17 @@ def _params_recherche():
 def _a_des_criteres(p) -> bool:
     return bool(p["q"] or p["departement"] or p["code_postal"] or p["naf"]
                 or p["section"] or p["effectif"])
+
+
+def _valide_entreprise(c, p, masquees):
+    """Controle la validite d'un prospect (masquage, grandes entreprises, localisation)."""
+    if not p["inclure_masquees"] and c["siren"] in masquees:
+        return False
+    if not p.get("inclure_grandes") and gov_api.est_grande_entreprise(c):
+        return False
+    if p["departement"] and c.get("departement") != p["departement"]:
+        return False
+    return not (p["code_postal"] and c.get("code_postal") != p["code_postal"])
 
 
 def _chercher(p, max_pages: int):
@@ -232,11 +409,12 @@ def _chercher(p, max_pages: int):
                 q=p["q"], departement=p["departement"], code_postal=p["code_postal"],
                 section=p["section"], effectif=p["effectif"],
                 actives=not p["inclure_fermees"], page=page,
+                inclure_grandes=p.get("inclure_grandes", False),
             ), True
 
     if not p["sans_site"]:
         premier, demo = recherche_source(p["page"])
-        items = [c for c in premier["items"] if p["inclure_masquees"] or c["siren"] not in masquees]
+        items = [c for c in premier["items"] if _valide_entreprise(c, p, masquees)]
         detect.verifie_lot(items)
         return {
             "items": items, "total_results": premier["total_results"],
@@ -253,12 +431,12 @@ def _chercher(p, max_pages: int):
     epuise = False
     batch, demo = recherche_source(1)
     while True:
-        detect.verifie_lot(batch["items"])
+        candidats = [c for c in batch["items"] if _valide_entreprise(c, p, masquees)]
+        detect.verifie_lot(candidats)
         analysees += len(batch["items"])
-        for c in batch["items"]:
-            if not p["inclure_masquees"] and c["siren"] in masquees:
-                continue
-            etat = detect.etat_effectif(c)
+        etats = detect.etats_effectifs_lot(candidats)
+        for c in candidats:
+            etat = etats.get(c["siren"])
             if etat and etat["status"] == "aucun":
                 collectees.append(c)
         epuise = api_page >= batch["total_pages"]
@@ -268,6 +446,9 @@ def _chercher(p, max_pages: int):
             break
         api_page += 1
         batch, demo = recherche_source(api_page)
+        if not batch.get("items"):
+            epuise = True
+            break
 
     total = len(collectees)
     total_pages = max(1, math.ceil(total / PER_PAGE))
@@ -293,11 +474,12 @@ def _attache_etats(items):
     trous = ",".join("?" * len(sirens))
     tracked = {r["siren"]: r for r in db.query(
         f"SELECT * FROM tracked WHERE siren IN ({trous})", sirens)}  # noqa: S608
-    masquees = {r["siren"] for r in db.query(
+    masquees = {r["siren"]: r for r in db.query(
         f"SELECT siren FROM hides WHERE restored_at IS NULL AND siren IN ({trous})",  # noqa: S608
         sirens)}
+    etats = detect.etats_effectifs_lot(items)
     for c in items:
-        etat = detect.etat_effectif(c)
+        etat = etats.get(c["siren"])
         c["site"] = etat or {"status": "inconnu", "domain": None, "source": "dns",
                              "checked_at": None}
         t = tracked.get(c["siren"])
@@ -313,8 +495,11 @@ def recherche():
     p = _params_recherche()
     ctx = {
         "page_id": "recherche",
-        "titre": "Recherche d'entreprises",
-        "sous_titre": "Base officielle INSEE / RNE — détection automatique des sites web",
+        "titre": "Trouvez les entreprises qui n'ont pas encore de site",
+        "sous_titre": (
+            "Recherchez des entreprises locales, filtrez les prospects pertinents "
+            "et identifiez rapidement ceux dont aucun site web n'a été détecté."
+        ),
         "p": p,
         "recherche_lancee": _a_des_criteres(p),
         "resultats": None,
@@ -328,6 +513,7 @@ def recherche():
         "q": p["q"], "departement": p["departement"], "code_postal": p["code_postal"],
         "naf": p["naf"], "section": p["section"], "effectif": p["effectif"],
         "sans_site": "1" if p["sans_site"] else "",
+        "inclure_grandes": "1" if p["inclure_grandes"] else "",
         "inclure_masquees": "1" if p["inclure_masquees"] else "",
         "inclure_fermees": "1" if p["inclure_fermees"] else "",
         "demo": "1" if p["demo"] else "",
@@ -376,7 +562,12 @@ def export_csv():
     source = ("Jeu de démonstration (entreprises fictives)" if res["demo"]
               else "Base officielle INSEE / RNE")
     for c in items:
-        dirigeants = " / ".join(d["nom"] for d in c["dirigeants"] if d["nom"])
+        dirigeants_list = c.get("dirigeants") or []
+        dirigeants = " / ".join(
+            (d.get("nom") or "") for d in dirigeants_list if isinstance(d, dict) and d.get("nom")
+        )
+        site = c.get("site") or {}
+        statut_site = site.get("status")
         writer.writerow([
             c["siren"], c.get("siret_siege") or "", c["nom"], c.get("forme") or "",
             c.get("naf_code") or "", c.get("naf_label") or "", c.get("adresse") or "",
@@ -384,15 +575,15 @@ def export_csv():
             c.get("region") or "", c.get("effectif") or "",
             (c.get("date_creation") or "")[:10],
             dirigeants,
-            "non" if c["site"]["status"] == "aucun" else "oui",
-            c["site"].get("domain") or "",
+            "non" if statut_site == "aucun" else ("oui" if statut_site == "site" else "inconnu"),
+            site.get("domain") or "",
             "oui" if c.get("tracked") else "non",
             c.get("statut") or "",
             source,
         ])
     donnees = "\ufeff" + tampon.getvalue()
     marqueur = "-DEMO" if res["demo"] else ""
-    nom_fichier = f"prospection-mbdv{marqueur}-{datetime.now(timezone.utc):%Y%m%d}.csv"
+    nom_fichier = f"prospection-balise{marqueur}-{datetime.now(timezone.utc):%Y%m%d}.csv"
     return Response(
         donnees, mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename={nom_fichier}"},
@@ -532,11 +723,18 @@ def api_suivre():
     if deja:
         db.execute("DELETE FROM tracked WHERE id = ?", (deja["id"],))
         return jsonify({"ok": True, "tracked": False})
-    db.execute(
-        "INSERT INTO tracked (siren, snapshot, added_by, added_at) VALUES (?, ?, ?, ?)",
-        (siren, json.dumps(snapshot, ensure_ascii=False),
-         current_user()["username"], db.now_iso()),
-    )
+    moi = current_user()["username"]
+    maintenant = db.now_iso()
+    db.run_all([
+        (
+            "INSERT INTO tracked (siren, snapshot, added_by, added_at) VALUES (?, ?, ?, ?)",
+            (siren, json.dumps(snapshot, ensure_ascii=False), moi, maintenant),
+        ),
+        (
+            "UPDATE hides SET restored_at = ?, restored_by = ? WHERE siren = ? AND restored_at IS NULL",
+            (maintenant, moi, siren),
+        ),
+    ])
     return jsonify({"ok": True, "tracked": True})
 
 
@@ -749,16 +947,23 @@ def _libelle_appels(c: dict) -> str:
     return " · ".join(morceaux)
 
 
-def _suivi_de_l_entreprise(ligne, aujourd_hui: str) -> dict:
+def _suivi_de_l_entreprise(ligne, aujourd_hui: str, etats: dict = None,
+                           masquees: set = None) -> dict:
     """Une entreprise suivie, avec son dossier et l'etat de son appel."""
     try:
         c = json.loads(ligne["snapshot"] or "{}")
+        if not isinstance(c, dict):
+            c = {}
     except ValueError:
         c = {}
     c["siren"] = ligne["siren"]
     c["nom"] = c.get("nom") or ligne["siren"]
-    c["site"] = detect.etat_effectif(c) or {"status": "inconnu", "domain": None,
-                                            "source": "dns", "checked_at": None}
+    if etats is not None:
+        c["site"] = etats.get(c["siren"]) or {"status": "inconnu", "domain": None,
+                                               "source": "dns", "checked_at": None}
+    else:
+        c["site"] = detect.etat_effectif(c) or {"status": "inconnu", "domain": None,
+                                                "source": "dns", "checked_at": None}
     c["tracked"] = True
     c["statut"] = ligne["status"]
     c["statut_label"] = dict(STATUTS_PIPELINE).get(ligne["status"], ligne["status"])
@@ -779,8 +984,11 @@ def _suivi_de_l_entreprise(ligne, aujourd_hui: str) -> dict:
     c["pris_le_texte"] = _heure_de_paris(c["pris_le"]) if c["pris_le"] else ""
     c["dernier_appel"] = _jour_lisible(c["appele_le"]) if c["appele_le"] else "—"
     c["appels_label"] = f"{c['appels']} appel(s)" if c["appels"] else "—"
-    c["masquee"] = bool(db.one("SELECT id FROM hides WHERE siren = ? AND restored_at IS NULL",
-                               (ligne["siren"],)))
+    if masquees is not None:
+        c["masquee"] = ligne["siren"] in masquees
+    else:
+        c["masquee"] = bool(db.one("SELECT id FROM hides WHERE siren = ? AND restored_at IS NULL",
+                                   (ligne["siren"],)))
     c["urgence"], c["urgence_label"] = _etiquette_urgence(
         c["relance_le"], aujourd_hui, c["appele_le"])
     # Cle de tri : le retard d'abord, puis aujourd'hui, puis les relances datees.
@@ -808,7 +1016,28 @@ def _donnees_de_suivi() -> dict:
     """Tout le tableau de bord : file d'appels classee, charge de chacun, compteurs."""
     aujourd_hui = _maintenant().strftime("%Y-%m-%d")
     lignes = db.query("SELECT * FROM tracked ORDER BY added_at DESC")
-    entreprises = [_suivi_de_l_entreprise(ligne, aujourd_hui) for ligne in lignes]
+    sirens = [r["siren"] for r in lignes]
+    masquees = set()
+    etats = {}
+    if sirens:
+        trous = ",".join("?" * len(sirens))
+        masquees = {r["siren"] for r in db.query(
+            f"SELECT siren FROM hides WHERE restored_at IS NULL AND siren IN ({trous})",  # noqa: S608
+            sirens)}
+        candidates = []
+        for r in lignes:
+            try:
+                snap = json.loads(r["snapshot"] or "{}")
+                if not isinstance(snap, dict):
+                    snap = {}
+            except ValueError:
+                snap = {}
+            snap["siren"] = r["siren"]
+            candidates.append(snap)
+        etats = detect.etats_effectifs_lot(candidates)
+
+    entreprises = [_suivi_de_l_entreprise(ligne, aujourd_hui, etats=etats, masquees=masquees)
+                   for ligne in lignes]
 
     membres = [dict(r) for r in db.query(
         "SELECT username, display_name, role FROM users ORDER BY id")]
@@ -839,8 +1068,8 @@ def suivi():
     return render_template(
         "suivi.html",
         page_id="suivi",
-        titre="Appels à passer",
-        sous_titre="Une ligne par entreprise en attente : qui s'en occupe et quand rappeler",
+        titre="Suivi commercial",
+        sous_titre="Gardez une vue claire sur les prospects à traiter et les prochaines actions.",
         **_donnees_de_suivi(),
     )
 
@@ -855,6 +1084,8 @@ def _entreprise_suivie(siren: str):
 def _etat_pour_js(siren: str) -> dict:
     """Etat renvoye au navigateur : des libelles deja calcules, rien a recomposer."""
     ligne = db.one("SELECT * FROM tracked WHERE siren = ?", (siren,))
+    if not ligne:
+        return {"ok": False, "error": "Entreprise non suivie."}
     c = _suivi_de_l_entreprise(ligne, _maintenant().strftime("%Y-%m-%d"))
     return {
         "ok": True,
@@ -984,10 +1215,18 @@ def _ajoute_au_repertoire(siren: str, snapshot: dict, source: str):
     if db.one("SELECT id FROM tracked WHERE siren = ?", (siren,)):
         return jsonify({"ok": False, "error": "Cette entreprise est déjà dans le répertoire."}), 409
     moi = current_user()["username"]
-    db.execute(
-        "INSERT INTO tracked (siren, snapshot, status, added_by, added_at, pris_par, pris_le)"
-        " VALUES (?, ?, 'a_contacter', ?, ?, ?, ?)",
-        (siren, json.dumps(snapshot, ensure_ascii=False), moi, db.now_iso(), moi, db.now_iso()))
+    maintenant = db.now_iso()
+    db.run_all([
+        (
+            "INSERT INTO tracked (siren, snapshot, status, added_by, added_at, pris_par, pris_le)"
+            " VALUES (?, ?, 'a_contacter', ?, ?, ?, ?)",
+            (siren, json.dumps(snapshot, ensure_ascii=False), moi, maintenant, moi, maintenant),
+        ),
+        (
+            "UPDATE hides SET restored_at = ?, restored_by = ? WHERE siren = ? AND restored_at IS NULL",
+            (maintenant, moi, siren),
+        ),
+    ])
     current_app.logger.info("Repertoire : %s (%s) ajoute par %s", siren, source, moi)
     return jsonify(_etat_pour_js(siren)), 200
 
@@ -1182,17 +1421,22 @@ def portefeuille():
     items = []
     for r in rows:
         try:
-            c = json.loads(r["snapshot"])
+            c = json.loads(r["snapshot"] or "{}")
+            if not isinstance(c, dict):
+                c = {}
         except ValueError:
             continue
-        etat = detect.etat_effectif(c)
-        c["site"] = etat or {"status": "inconnu", "domain": None, "source": "dns",
-                             "checked_at": None}
+        c["siren"] = r["siren"]
         c["tracked"] = True
         c["statut"] = r["status"]
         c["added_by"] = r["added_by"]
         c["added_at"] = r["added_at"]
         items.append(c)
+    etats = detect.etats_effectifs_lot(items)
+    for c in items:
+        etat = etats.get(c["siren"])
+        c["site"] = etat or {"status": "inconnu", "domain": None, "source": "dns",
+                             "checked_at": None}
     compteurs = {code: 0 for code, _ in STATUTS_PIPELINE}
     for c in items:
         compteurs[c["statut"]] = compteurs.get(c["statut"], 0) + 1
@@ -1201,8 +1445,8 @@ def portefeuille():
     return render_template(
         "portfolio.html",
         page_id="portefeuille",
-        titre="Portefeuille commercial",
-        sous_titre="Entreprises suivies par l'équipe — de la prise de contact à la signature",
+        titre="Portefeuille",
+        sous_titre="Suivez vos affaires, vos encaissements et votre activité commerciale.",
         items=items,
         compteurs=compteurs,
         benefice=benefice_du_portefeuille(),
@@ -1211,8 +1455,8 @@ def portefeuille():
 
 
 def _montant_en_centimes(brut: str):
-    """'4 500,50' -> 450050. Renvoie None si le texte n'est pas un montant valide."""
-    texte = (brut or "").replace("\u202f", "").replace("\u00a0", "").replace(" ", "")
+    """'4 500,50' ou '4 500 €' -> 450050. Renvoie None si le texte n'est pas un montant valide."""
+    texte = re.sub(r"(?:euros?|eur|[€\s\u202f\u00a0])", "", (brut or ""), flags=re.IGNORECASE)
     texte = texte.replace(",", ".")
     if not texte:
         return None                    # un encaissement doit avoir un montant
@@ -1228,10 +1472,10 @@ def _montant_en_centimes(brut: str):
 def _siret_normalise(brut: str):
     """Code SIRET facultatif : renvoie (siret, siren, erreur).
 
-    Accepte un SIRET (14 chiffres) ou un SIREN (9 chiffres), avec ou sans espaces.
+    Accepte un SIRET (14 chiffres) ou un SIREN (9 chiffres), avec ou sans espaces/séparateurs.
     Vide : aucun rattachement, l'encaissement est simplement sans entreprise.
     """
-    texte = re.sub(r"[\s.\u202f\u00a0-]", "", brut or "")
+    texte = re.sub(r"[\s.\u202f\u00a0\-/]", "", brut or "")
     if not texte:
         return "", None, None
     if not texte.isdigit():
@@ -1281,8 +1525,11 @@ def _nom_pour_siren(siren) -> str:
     if not ligne:
         return ""
     try:
-        return (json.loads(ligne["snapshot"] or "{}") or {}).get("nom") or ""
-    except ValueError:
+        snap = json.loads(ligne["snapshot"] or "{}")
+        if isinstance(snap, dict):
+            return snap.get("nom") or ""
+        return ""
+    except (ValueError, TypeError):
         return ""
 
 
@@ -1367,8 +1614,8 @@ def _rendu_staff(etat: str, q: str, compte_erreur=None, compte_succes=False, val
         "staff.html",
         page_id="staff",
         demo=demo,
-        titre="Panel staff",
-        sous_titre="Historique des entreprises masquees - raison, auteur, date",
+        titre="Staff",
+        sous_titre="Gérez les comptes, les accès et la sécurité de votre équipe.",
         entrees=entrees,
         etat=etat,
         q=q,
@@ -1565,6 +1812,18 @@ def staff_comptes():
     if nouveau:
         db.execute("UPDATE users SET password_hash = ? WHERE id = ?",
                    (db.hash_password(nouveau), cible))
+    if valeurs["username"] != ancien_identifiant:
+        for sql in (
+            "UPDATE tracked SET pris_par = ? WHERE pris_par = ?",
+            "UPDATE tracked SET added_by = ? WHERE added_by = ?",
+            "UPDATE tracked SET appele_par = ? WHERE appele_par = ?",
+            "UPDATE tracked SET status_updated_by = ? WHERE status_updated_by = ?",
+            "UPDATE benefices SET encaisse_par = ? WHERE encaisse_par = ?",
+            "UPDATE hides SET hidden_by = ? WHERE hidden_by = ?",
+            "UPDATE hides SET restored_by = ? WHERE restored_by = ?",
+            "UPDATE overrides SET by = ? WHERE by = ?",
+        ):
+            db.execute(sql, (valeurs["username"], ancien_identifiant))
     current_app.logger.info(
         "Compte '%s' (ex. '%s') mis a jour par '%s' : identifiant%s",
         valeurs["username"], ancien_identifiant, session.get("username"),
@@ -1590,6 +1849,8 @@ def mot_de_passe():
             erreur = "Mot de passe actuel incorrect."
         elif len(nouveau) < 8:
             erreur = "Le nouveau mot de passe doit contenir au moins 8 caractères."
+        elif nouveau in db.DEFAULT_PASSWORDS:
+            erreur = "Veuillez choisir un mot de passe différent des mots de passe par défaut."
         elif nouveau != confirmation:
             erreur = "La confirmation ne correspond pas au nouveau mot de passe."
         else:

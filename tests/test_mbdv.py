@@ -1551,6 +1551,272 @@ def test_export_csv_officiel(client, monkeypatch):
 
 
 # --------------------------------------------------------------------------
+# Améliorations de recherche : grandes entreprises, géolocalisation et vitesse
+# --------------------------------------------------------------------------
+
+def test_grandes_entreprises_exclues_par_defaut(client, monkeypatch):
+    """Les grandes entreprises (GE, effectifs massifs) sont exclues par defaut."""
+    e_pme = entreprise("111111111", "BOULANGERIE DUPONT", categorie="PME", effectif_code="01")
+    e_ge = entreprise("222222222", "HYPERMARCHE GE", categorie="GE", effectif_code="52")
+    e_gros = entreprise("333333333", "GROS GROUPE", categorie="PME", effectif_code="42")
+
+    monkeypatch.setattr(gov_api, "search", faux_search(
+        lambda page: [e_pme, e_ge, e_gros]))
+    connexion(client)
+
+    # Par defaut : seule la PME est retenue
+    html_defaut = client.get("/?q=boulangerie").get_data(as_text=True)
+    snaps_defaut = snapshots(html_defaut)
+    sirens_defaut = [s["siren"] for s in snaps_defaut]
+    assert "111111111" in sirens_defaut
+    assert "222222222" not in sirens_defaut
+    assert "333333333" not in sirens_defaut
+
+    # Avec l'option explicite inclure_grandes=1 : toutes apparaissent
+    html_avec = client.get("/?q=boulangerie&inclure_grandes=1").get_data(as_text=True)
+    snaps_avec = snapshots(html_avec)
+    sirens_avec = [s["siren"] for s in snaps_avec]
+    assert "111111111" in sirens_avec
+    assert "222222222" in sirens_avec
+    assert "333333333" in sirens_avec
+
+
+def test_recherche_geo_extraction_et_filtrage_91_vs_77(client, monkeypatch):
+    """Une recherche dans le 91 ne doit jamais renvoyer d'entreprises dans le 77."""
+    recherche_params = {}
+
+    def espion_search(q="", page=1, departement="", code_postal="", **kwargs):
+        recherche_params["q"] = q
+        recherche_params["departement"] = departement
+        recherche_params["code_postal"] = code_postal
+        # L'API externe renvoie un melange d'entreprises 91 et 77
+        e_91 = entreprise("910000001", "BOULANGERIE EVRY", departement="91", code_postal="91000")
+        e_77 = entreprise("770000001", "BOULANGERIE MELUN", departement="77", code_postal="77000")
+        return {"items": [e_91, e_77], "total_results": 2, "page": page, "total_pages": 1}
+
+    monkeypatch.setattr(gov_api, "search", espion_search)
+    connexion(client)
+
+    # 1. Recherche avec "boulangerie 91" dans le champ q : 91 est extrait
+    html = client.get("/?q=boulangerie+91").get_data(as_text=True)
+    assert recherche_params["departement"] == "91"
+    assert recherche_params["q"] == "boulangerie"
+    # L'entreprise du 77 est strictement filtree des resultats
+    snaps = snapshots(html)
+    assert len(snaps) == 1
+    assert snaps[0]["siren"] == "910000001"
+    assert snaps[0]["departement"] == "91"
+
+    # 2. Recherche avec "91" seul dans le champ q
+    client.get("/?q=91")
+    assert recherche_params["departement"] == "91"
+    assert recherche_params["q"] == ""
+
+    # 3. Recherche avec nom de departement "essonne"
+    client.get("/?q=restaurant+essonne")
+    assert recherche_params["departement"] == "91"
+    assert recherche_params["q"] == "restaurant"
+
+    # 4. Recherche avec "dans le 91"
+    client.get("/?q=coiffure+dans+le+91")
+    assert recherche_params["departement"] == "91"
+    assert recherche_params["q"] == "coiffure"
+
+
+def test_normalisation_champ_departement(client, monkeypatch):
+    """Le champ departement accepte le nom (Essonne) ou un code avec 0 (091)."""
+    recherche_params = {}
+
+    def espion_search(q="", page=1, departement="", **kwargs):
+        recherche_params["departement"] = departement
+        return {"items": [], "total_results": 0, "page": page, "total_pages": 1}
+
+    monkeypatch.setattr(gov_api, "search", espion_search)
+    connexion(client)
+
+    client.get("/?departement=Essonne")
+    assert recherche_params["departement"] == "91"
+
+    client.get("/?departement=091")
+    assert recherche_params["departement"] == "91"
+
+    client.get("/?departement=seine-et-marne")
+    assert recherche_params["departement"] == "77"
+
+    client.get("/?departement=2a")
+    assert recherche_params["departement"] == "2A"
+
+
+def test_detection_grandes_entreprises_eti_et_publiques():
+    """Identifie ETI, administrations publiques (7xxx/8xxx), chaines, Carrefour et Croix-Rouge."""
+    # ETI
+    assert gov_api.est_grande_entreprise({"categorie": "ETI"})
+    # Grande Entreprise
+    assert gov_api.est_grande_entreprise({"categorie": "GE"})
+    # Mairie ou collectivite publique (nature juridique 7210)
+    assert gov_api.est_grande_entreprise({"nature_code": "7210"})
+    # Organisme de securite sociale (nature juridique 8110)
+    assert gov_api.est_grande_entreprise({"nature_code": "8110"})
+    # Reseau / chaine de plus de 10 etablissements
+    assert gov_api.est_grande_entreprise({"nb_etablissements": 15})
+    # Carrefour et ses filiales / magasins
+    assert gov_api.est_grande_entreprise({"nom": "CARREFOUR MARKET", "naf_code": "47.11D"})
+    assert gov_api.est_grande_entreprise({"nom": "SARL PROXIDIS", "enseigne": "CARREFOUR EXPRESS",
+                                          "naf_code": "47.11C"})
+    assert gov_api.est_grande_entreprise({"nom": "CARREFOUR PROXIMITE FRANCE", "naf_code": "47.11D"})
+    assert gov_api.est_grande_entreprise({"nom": "CARREFOUR HYPERMARCHES", "naf_code": "47.11F"})
+    # Croix-Rouge et grandes associations caritatives
+    assert gov_api.est_grande_entreprise({"nom": "CROIX ROUGE FRANCAISE"})
+    assert gov_api.est_grande_entreprise({"nom": "UNITE LOCALE CROIX-ROUGE 91"})
+    assert gov_api.est_grande_entreprise({"nom": "SECOURS POPULAIRE FRANCAIS"})
+    # Autres enseignes de distribution
+    assert gov_api.est_grande_entreprise({"nom": "AUCHAN HYPERMARCHE", "naf_code": "47.11F"})
+    assert gov_api.est_grande_entreprise({"nom": "LECLERC DRIVE"})
+    assert gov_api.est_grande_entreprise({"nom": "LIDL"})
+    # Les commerces locaux au carrefour routier (boulangerie, café, etc.) ne sont PAS exclus
+    assert not gov_api.est_grande_entreprise({"nom": "CAFE DU CARREFOUR", "naf_code": "56.30Z"})
+    assert not gov_api.est_grande_entreprise({"nom": "BOULANGERIE DU CARREFOUR", "naf_code": "10.71C"})
+    assert not gov_api.est_grande_entreprise({"nom": "AU CARREFOUR DES SAVEURS", "naf_code": "56.10A"})
+    # Artisan ou PME normale : non grande entreprise
+    assert not gov_api.est_grande_entreprise({"categorie": "PME", "effectif_code": "01",
+                                             "nature_code": "5442", "nb_etablissements": 1})
+
+
+def test_verifie_domaines_arret_rapide(monkeypatch):
+    """Trouver un .fr termine immediatement la resolution des domaines restants."""
+    appels = []
+
+    def mock_resout(host):
+        appels.append(host)
+        return host.endswith(".fr")
+
+    monkeypatch.setattr(detect, "_resout", mock_resout)
+    domaine = detect._verifie_domaines("BOULANGERIE DUPONT")
+    assert domaine and domaine.endswith(".fr")
+
+
+def test_etablissement_matching_selectionne_selon_departement():
+    """Quand le siege est dans le 77 mais un etablissement est dans le 91, on retient le 91."""
+    brut = {
+        "siren": "123456789",
+        "nom_complet": "SOCIETE MULTISITE",
+        "categorie_entreprise": "PME",
+        "siege": {
+            "adresse": "1 RUE DE PARIS 77000 MELUN",
+            "code_postal": "77000",
+            "libelle_commune": "MELUN",
+            "departement": "77",
+            "siret": "12345678900010",
+        },
+        "matching_etablissements": [
+            {
+                "adresse": "10 AVENUE DE LA GARE 91000 EVRY",
+                "code_postal": "91000",
+                "libelle_commune": "EVRY-COURCOURONNES",
+                "departement": "91",
+                "siret": "12345678900028",
+            }
+        ],
+    }
+    # Sans filtre : retourne le siege (77)
+    norm_defaut = gov_api.normalize_result(brut)
+    assert norm_defaut["departement"] == "77"
+    assert norm_defaut["code_postal"] == "77000"
+
+    # Avec filtre departement 91 : bascule sur l'etablissement du 91
+    norm_91 = gov_api.normalize_result(brut, filter_departement="91")
+    assert norm_91["departement"] == "91"
+    assert norm_91["code_postal"] == "91000"
+    assert norm_91["commune"] == "EVRY-COURCOURONNES"
+    assert norm_91["siret_etab"] == "12345678900028"
+
+    # Etablissement ayant un code postal mais champ departement absent
+    brut_sans_dep = {
+        "siren": "987654321",
+        "nom_complet": "ETABLISSEMENT SANS DEPT EXPLICITE",
+        "siege": {"code_postal": "91300", "libelle_commune": "MASSY"},
+    }
+    norm_sans_dep = gov_api.normalize_result(brut_sans_dep)
+    assert norm_sans_dep["departement"] == "91"
+
+
+def test_api_cache_et_performance():
+    """Le cache memoire de gov_api evite les requetes redondantes et repond instantanement."""
+    gov_api.clear_cache()
+    cle = (("departement", "91"), ("q", "boulangerie"))
+    donnees = {"results": [], "total_results": 0}
+    assert gov_api._get_cache(cle) is None
+
+    gov_api._set_cache(cle, donnees)
+    assert gov_api._get_cache(cle) == donnees
+
+    gov_api.clear_cache()
+    assert gov_api._get_cache(cle) is None
+
+
+def test_etats_effectifs_lot_en_base(app):
+    """etats_effectifs_lot groupe les requetes en base sans boucle n+1."""
+    with app.app_context():
+        # Override manuel pour l'une
+        db.execute("INSERT INTO overrides (siren, value, by, at) VALUES (?, ?, ?, ?)",
+                   ("111111111", "sans", "admin", db.now_iso()))
+        # Cache pour l'autre
+        db.execute(
+            "INSERT INTO site_cache (siren, status, domain, source, checked_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            ("222222222", "site", "exemple.fr", "dns", db.now_iso()),
+        )
+        entreprises = [
+            {"siren": "111111111"},
+            {"siren": "222222222"},
+            {"siren": "333333333"},
+        ]
+        etats = detect.etats_effectifs_lot(entreprises)
+        assert etats["111111111"]["status"] == "aucun"
+        assert etats["111111111"]["source"] == "manuel_sans"
+        assert etats["222222222"]["status"] == "site"
+        assert etats["222222222"]["domain"] == "exemple.fr"
+        assert etats["333333333"] is None
+
+
+def test_jeu_de_demonstration_91_77_et_grandes_entreprises():
+    """Le jeu de demonstration couvre le 91 et le 77 et exclut la GE, Carrefour et Croix-Rouge par defaut."""
+    from app import demo_data
+    res_91 = demo_data.cherche(departement="91")
+    # 4 TPE cibles dans le 91 (dont Café du Carrefour), Carrefour Express et Croix-Rouge sont exclus
+    assert len(res_91["items"]) == 4
+    assert all(e["departement"] == "91" for e in res_91["items"])
+    assert any(e["nom"] == "CAFE DU CARREFOUR" for e in res_91["items"])
+    assert not any("CARREFOUR EXPRESS" in e["nom"] for e in res_91["items"])
+    assert not any("CROIX-ROUGE" in e["nom"] for e in res_91["items"])
+
+    res_77 = demo_data.cherche(departement="77")
+    assert len(res_77["items"]) == 2
+    assert all(e["departement"] == "77" for e in res_77["items"])
+
+    # La grande entreprise n'apparait pas par defaut
+    res_ge = demo_data.cherche(q="HYPERMARCHÉ")
+    assert len(res_ge["items"]) == 0
+    # Mais apparait si on demande explicitement les grandes entreprises
+    res_ge_incl = demo_data.cherche(q="HYPERMARCHÉ", inclure_grandes=True)
+    assert len(res_ge_incl["items"]) == 1
+    assert res_ge_incl["items"][0]["categorie"] == "GE"
+
+    # Croix-Rouge et Carrefour Express exclus par defaut mais disponibles avec inclure_grandes
+    res_cr = demo_data.cherche(q="CROIX-ROUGE")
+    assert len(res_cr["items"]) == 0
+    res_cr_incl = demo_data.cherche(q="CROIX-ROUGE", inclure_grandes=True)
+    assert len(res_cr_incl["items"]) == 1
+
+    res_carrefour = demo_data.cherche(q="CARREFOUR")
+    # Seul le Café du Carrefour est present par defaut (le magasin Carrefour Express est exclu)
+    assert len(res_carrefour["items"]) == 1
+    assert res_carrefour["items"][0]["nom"] == "CAFE DU CARREFOUR"
+    res_carrefour_incl = demo_data.cherche(q="CARREFOUR", inclure_grandes=True)
+    assert len(res_carrefour_incl["items"]) == 2
+
+
+# --------------------------------------------------------------------------
 # Interface : interrupteurs et theme clair / sombre
 # --------------------------------------------------------------------------
 
@@ -2134,3 +2400,104 @@ def test_l_archive_d_un_autre_collegue_est_accessible(client):
     page = associe.get("/suivi").get_data(as_text=True)
     assert "vitrine.zip" in page
     assert associe.get("/suivi/livrables/zip/111111111").data == b"PK\x03\x04archive de l'equipe"
+
+
+def test_normalisation_montants_et_siret():
+    """Les montants avec symboles (€, EUR) et les SIRET avec barres ou espaces sont bien pris en charge."""
+    # Montants
+    assert views._montant_en_centimes("250") == 25000
+    assert views._montant_en_centimes("250 €") == 25000
+    assert views._montant_en_centimes("250€") == 25000
+    assert views._montant_en_centimes("1 250,50 €") == 125050
+    assert views._montant_en_centimes("300 euros") == 30000
+    assert views._montant_en_centimes("45.00 EUR") == 4500
+    assert views._montant_en_centimes("invalide") is None
+
+    # SIRET / SIREN
+    siret, siren, err = views._siret_normalise("91012345600015")
+    assert siret == "91012345600015" and siren == "910123456" and err is None
+
+    siret, siren, err = views._siret_normalise("910 123 456 / 00015")
+    assert siret == "91012345600015" and siren == "910123456" and err is None
+
+    siret, siren, err = views._siret_normalise("910123456")
+    assert siret == "910123456" and siren == "910123456" and err is None
+
+    siret, siren, err = views._siret_normalise("")
+    assert siret == "" and siren is None and err is None
+
+
+def test_renommage_associe_cascade_suivi(client):
+    """Le renommage de l'identifiant d'un associé met à jour ses attributions d'appels et de suivi."""
+    connexion(client)
+    # Creer une entreprise suivie par 'associe'
+    with client.application.app_context():
+        db.execute(
+            "INSERT INTO tracked (siren, snapshot, status, added_by, added_at, pris_par, pris_le)"
+            " VALUES ('111222333', '{\"siren\": \"111222333\", \"nom\": \"Test\"}', 'contacte',"
+            " 'associe', '2026-01-01T00:00:00Z', 'associe', '2026-01-01T00:00:00Z')",
+        )
+        associe = db.one("SELECT id FROM users WHERE username = 'associe'")
+
+    # L'admin renomme 'associe' en 'julien'
+    reponse = client.post("/staff/comptes", data={
+        "_csrf": jeton(client, "/staff"),
+        "cible": associe["id"],
+        "username": "julien",
+        "display_name": "Julien Associé",
+    })
+    assert reponse.status_code == 302
+
+    # Verification de la cascade
+    with client.application.app_context():
+        ligne = db.one("SELECT * FROM tracked WHERE siren = '111222333'")
+        assert ligne["pris_par"] == "julien"
+        assert ligne["added_by"] == "julien"
+
+
+def test_ajout_repertoire_deverrouille_masquage(client):
+    """Ajouter une entreprise au répertoire la restaure automatiquement si elle était masquée."""
+    connexion(client)
+    # Masquer l'entreprise 444555666
+    rep = client.post("/api/masquer", json={
+        "siren": "444555666",
+        "nom": "Boulangerie Masquee",
+        "raison": "Hors secteur cible",
+        "details": "",
+    }, headers={"X-CSRF-Token": jeton(client, "/")})
+    assert rep.status_code == 200
+
+    with client.application.app_context():
+        assert db.one("SELECT id FROM hides WHERE siren = '444555666' AND restored_at IS NULL")
+
+    # Ajouter au répertoire
+    client.post("/api/suivi/ajouter", json={
+        "siren": "444555666",
+        "nom": "Boulangerie Masquee",
+    }, headers={"X-CSRF-Token": jeton(client, "/suivi")})
+
+    with client.application.app_context():
+        # L'entreprise doit être dans tracked et le masquage doit être restauré
+        assert db.one("SELECT id FROM tracked WHERE siren = '444555666'")
+        assert not db.one("SELECT id FROM hides WHERE siren = '444555666' AND restored_at IS NULL")
+
+
+def test_en_tetes_de_securite(client):
+    """Les en-têtes HTTP de sécurité sont présents sur les réponses."""
+    reponse = client.get("/connexion")
+    assert reponse.status_code == 200
+    assert reponse.headers.get("X-Content-Type-Options") == "nosniff"
+    assert reponse.headers.get("X-XSS-Protection") == "1; mode=block"
+    assert reponse.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+
+
+def test_page_presentation_vitrine(client):
+    """La vitrine officielle de présentation est accessible sans connexion et expose le signal beacon."""
+    reponse = client.get("/presentation")
+    assert reponse.status_code == 200
+    page = reponse.get_data(as_text=True)
+    assert "Trouvez les entreprises locales qui ont" in page
+    assert "signalBeaconCanvas" in page
+    assert "Aucun site détecté" in page
+    assert "Workflow" in page or "WORKFLOW" in page
+

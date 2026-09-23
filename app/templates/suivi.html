@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block titre_page %}Appels à passer - {{ site_name }} Prospection{% endblock %}
-{% block titre %}Appels à passer{% endblock %}
-{% block sous_titre %}{{ sous_titre }}{% endblock %}
+{% block titre_page %}Suivi commercial - {{ site_name }} Prospection{% endblock %}
+{% block titre %}Suivi commercial{% endblock %}
+{% block sous_titre %}{{ sous_titre or "Gardez une vue claire sur les prospects à traiter et les prochaines actions." }}{% endblock %}
 
 {% block content %}
 
@@ -15,17 +15,18 @@
     <div>
       <h2 class="panel-title">{{ icon('phone', 17) }} En attente d'appel ({{ appels|length }})</h2>
       <p class="panel-lede">
-        Du plus urgent au moins urgent. Une entreprise n'a qu'<strong>un référent à la
+        Appels à passer &mdash; Du plus urgent au moins urgent. Une entreprise n'a qu'<strong>un référent à la
         fois</strong> : cliquez sur « Je m'en occupe » pour la prendre, sur le nom pour
         ouvrir le dossier complet.
       </p>
     </div>
     <p class="repertoire-compteurs">
       <button class="btn btn-ink btn-sm" data-ajouter>{{ icon('plus', 13) }} Ajouter une entreprise</button>
-      {% if compteurs.en_retard %}<span class="compteur is-alerte">{{ compteurs.en_retard }} en retard</span>{% endif %}
-      {% if compteurs.aujourd_hui %}<span class="compteur">{{ compteurs.aujourd_hui }} aujourd'hui</span>{% endif %}
-      <span class="compteur">{{ compteurs.reste }} à venir</span>
-      {% if compteurs.personne %}<span class="compteur">{{ compteurs.personne }} sans référent</span>{% endif %}
+      <button type="button" class="compteur active" data-filtre-suivi="tous">Tous ({{ appels|length }})</button>
+      {% if compteurs.en_retard %}<button type="button" class="compteur is-alerte" data-filtre-suivi="en_retard">{{ compteurs.en_retard }} en retard</button>{% endif %}
+      {% if compteurs.aujourd_hui %}<button type="button" class="compteur" data-filtre-suivi="aujourd_hui">{{ compteurs.aujourd_hui }} aujourd'hui</button>{% endif %}
+      <button type="button" class="compteur" data-filtre-suivi="moi">Mes dossiers</button>
+      {% if compteurs.personne %}<button type="button" class="compteur" data-filtre-suivi="personne">{{ compteurs.personne }} sans référent</button>{% endif %}
     </p>
   </header>
 
@@ -47,7 +48,8 @@
       <tbody>
         {% for c in appels %}
         {# guillemets simples : tojson n'echappe pas le " (cf. app/static/js/app.js) #}
-        <tr class="result-row" data-siren="{{ c.siren }}" data-snapshot='{{ c|tojson }}'>
+        <tr class="result-row" data-siren="{{ c.siren }}" data-snapshot='{{ c|tojson }}'
+            data-urgence="{{ c.urgence }}" data-pris-par="{{ c.pris_par }}" data-moi="{{ 1 if c.prise_par_moi else 0 }}">
           <td class="col-name">
             <button class="row-link" data-detail="{{ c.siren }}"
                     title="Ouvrir le dossier complet de cette entreprise">

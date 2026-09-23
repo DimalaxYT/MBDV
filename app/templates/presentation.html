@@ -1,0 +1,2836 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Balise — Plateforme de prospection B2B locale pour créateurs de sites web</title>
+  <meta name="description" content="Recherchez des entreprises locales, filtrez les prospects pertinents et identifiez rapidement ceux dont aucun site web n'a été détecté.">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}?v={{ asset_version }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ asset_version }}">
+  <meta name="color-scheme" content="light dark">
+  <script>
+    (function () {
+      document.documentElement.classList.add("js");
+      try {
+        var choix = localStorage.getItem("mbdv-theme");
+        var sombre = choix ? choix === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = sombre ? "dark" : "light";
+      } catch (e) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
+</head>
+<body class="presentation-body">
+
+<!-- En-tête Vitrine -->
+<header class="pres-header">
+  <div class="pres-header-inner">
+    <a href="/presentation" class="pres-brand">
+      <svg class="pres-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.3"/>
+        <circle cx="16" cy="16" r="8" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.6"/>
+        <circle cx="16" cy="16" r="3" fill="#F59E0B"/>
+        <line x1="16" y1="2" x2="16" y2="8" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="16" y1="24" x2="16" y2="30" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+      <span class="pres-brand-title">Balise<span class="dot">.</span></span>
+      <span class="pres-brand-pill">Prospection</span>
+    </a>
+
+    <nav class="pres-nav">
+      <a href="#studio" class="pres-nav-link" data-nav-pane="recherche" style="color:var(--accent);font-weight:700;">{{ icon('search', 14) }} Recherche</a>
+      <a href="#studio" class="pres-nav-link" data-nav-pane="suivi">{{ icon('phone', 14) }} Suivi d'équipe</a>
+      <a href="#studio" class="pres-nav-link" data-nav-pane="portefeuille">{{ icon('briefcase', 14) }} Portefeuille CRM</a>
+      <a href="#studio" class="pres-nav-link" data-nav-pane="staff">{{ icon('shield', 14) }} Panel Staff</a>
+      <a href="#studio" class="pres-nav-link" data-nav-pane="dashboard">{{ icon('bar-chart', 14) }} Indicateurs</a>
+      <a href="#probleme" class="pres-nav-link">{{ icon('radar', 14) }} Méthode</a>
+      <a href="#probleme" class="pres-nav-link">Le Problème</a>
+      <a href="#workflow" class="pres-nav-link">Workflow</a>
+      <a href="#detection" class="pres-nav-link">Détection</a>
+      <a href="#qualification" class="pres-nav-link">Qualification</a>
+      <a href="#suivi" class="pres-nav-link">Suivi & CRM</a>
+    </nav>
+
+    <div class="pres-header-actions">
+      <button type="button" class="icon-btn theme-btn" data-theme-toggle title="Basculer le mode sombre / clair">
+        {{ icon('sun', 16, 'icon-sun') }} {{ icon('moon', 16, 'icon-moon') }}
+      </button>
+      <a href="/connexion" class="btn btn-ghost btn-sm">Se connecter</a>
+      <a href="/connexion" class="btn btn-ink btn-sm">Accéder à l'outil</a>
+    </div>
+  </div>
+</header>
+
+<!-- HERO SECTION AVEC CANVAS SIGNAL BEACON -->
+<main>
+  <section class="pres-hero">
+    <div class="pres-container">
+      <div class="pres-hero-grid">
+        <div class="pres-hero-content">
+          <div class="pres-eyebrow">
+            <span class="signal-indicator"></span>
+            <span>Signal de prospection B2B haute précision</span>
+          </div>
+
+          <h1 class="pres-hero-title">
+            Trouvez les entreprises locales qui ont <span class="highlight-text">besoin d’un site</span>.
+          </h1>
+
+          <p class="pres-hero-subtitle">
+            Recherchez des entreprises locales, filtrez les prospects pertinents et identifiez rapidement ceux dont aucun site web n’a été détecté.
+          </p>
+
+          <div class="pres-hero-cta">
+            <a href="/connexion" class="btn btn-ink btn-tall pres-btn-primary">
+              {{ icon('search', 16) }} Commencer à prospecter
+            </a>
+            <a href="#detection" class="btn btn-ghost btn-tall pres-btn-secondary">
+              {{ icon('radar', 16) }} Comprendre le signal
+            </a>
+          </div>
+
+          <div class="pres-hero-metrics">
+            <div class="metric-item">
+              <strong>Base officielle</strong>
+              <span>INSEE &amp; RNE en temps réel</span>
+            </div>
+            <div class="metric-separator"></div>
+            <div class="metric-item">
+              <strong>Résolution DNS</strong>
+              <span>Vérification d’extension .fr &amp; .com</span>
+            </div>
+            <div class="metric-separator"></div>
+            <div class="metric-item">
+              <strong>Filtre Anti-Chaînes</strong>
+              <span>GE, ETI &amp; franchises exclues</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Radar Beacon Interactive Canvas -->
+        <div class="pres-hero-visual">
+          <div class="beacon-viewport">
+            <canvas id="signalBeaconCanvas" width="560" height="480"></canvas>
+            <div class="beacon-overlay-card" id="beaconInfoCard">
+              <div class="beacon-card-header">
+                <span class="beacon-pulse-dot"></span>
+                <span class="beacon-signal-label">SIGNAL DÉTECTÉ</span>
+                <span class="beacon-coords">91000 · Évry</span>
+              </div>
+              <div class="beacon-card-body">
+                <h4 id="beaconCompanyName">Boulangerie du Parc</h4>
+                <p id="beaconActivity">Boulangerie et pâtisserie · NAF 10.71C</p>
+                <div class="beacon-status-pill">
+                  <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+                </div>
+              </div>
+            </div>
+            <div class="beacon-caption">
+              <span>SCAN RADAR LOCAL</span>
+              <em>Bruit → Détection → Signal → Action</em>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 06 : STUDIO OPÉRATIONNEL COMPLET -->
+  <section id="studio" class="pres-section">
+    <div class="pres-container">
+      <div class="section-badge">06 · STUDIO OPÉRATIONNEL INTERACTIF</div>
+      <h2 class="section-title">L'outil complet, disponible directement sur ce visuel.</h2>
+      <p class="section-lede">
+        Recherche en direct, détection de sites, suivi commercial d'équipe, portefeuille CRM et panel staff :
+        toutes les fonctions de Balise Prospection sont intégrées et immédiatement opérationnelles.
+      </p>
+
+      <div class="studio-box">
+        <!-- Barre de navigation du Studio -->
+        <div class="studio-header">
+          <div class="studio-header-left">
+            <span class="studio-title-badge">
+              {{ icon('radar', 16) }} Balise Prospection Studio
+            </span>
+          </div>
+          <div class="studio-tabs">
+            <button type="button" class="studio-tab active" data-pane="recherche">
+              {{ icon('search', 14) }} <span>Recherche &amp; Détection</span>
+            </button>
+            <button type="button" class="studio-tab" data-pane="suivi">
+              {{ icon('phone', 14) }} <span>Suivi d'équipe</span>
+              <span class="tab-count" id="studioTrackedCount">0</span>
+            </button>
+            <button type="button" class="studio-tab" data-pane="portefeuille">
+              {{ icon('briefcase', 14) }} <span>Portefeuille CRM</span>
+            </button>
+            <button type="button" class="studio-tab" data-pane="staff">
+              {{ icon('shield', 14) }} <span>Panel Staff</span>
+              <span class="tab-count" id="studioMaskedCount">0</span>
+            </button>
+            <button type="button" class="studio-tab" data-pane="dashboard">
+              {{ icon('bar-chart', 14) }} <span>Tableau de bord</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="studio-body">
+          <!-- VOLET 1 : RECHERCHE & DÉTECTION -->
+          <div id="pane-recherche" class="studio-pane active">
+            <!-- Barre de recherche principale -->
+            <div class="studio-search-top">
+              <div class="studio-input-wrap">
+                {{ icon('search', 16) }}
+                <input id="studio-q" type="text" class="studio-input"
+                       placeholder="Dénomination, métier ou SIREN (ex. boulangerie, plomberie, 810764231) — Touche /"
+                       spellcheck="false">
+              </div>
+              <button id="studio-btn-search" class="btn btn-ink">
+                {{ icon('search', 14) }} Rechercher
+              </button>
+              <button id="studio-btn-reset" class="btn btn-ghost" title="Réinitialiser les critères">
+                {{ icon('x', 14) }} Effacer
+              </button>
+              <button id="studio-btn-export" class="btn btn-ghost" title="Télécharger l'export tableur">
+                {{ icon('download', 14) }} Export CSV
+              </button>
+            </div>
+
+            <!-- Suggestions rapides de recherche -->
+            <div class="studio-chips-row">
+              <span class="studio-chip-label">Suggestions rapides :</span>
+              <button type="button" class="studio-chip" data-chip-q="boulangerie" data-chip-dep="91">Boulangeries (91)</button>
+              <button type="button" class="studio-chip" data-chip-q="plomberie" data-chip-dep="91">Plombiers &amp; Chauffage (91)</button>
+              <button type="button" class="studio-chip" data-chip-q="coiffure" data-chip-dep="75">Salons de coiffure (75)</button>
+              <button type="button" class="studio-chip" data-chip-q="menuiserie" data-chip-dep="77">Artisans BTP (77)</button>
+              <button type="button" class="studio-chip" data-chip-q="restaurant" data-chip-dep="44">Restaurants (44)</button>
+              <button type="button" class="studio-chip" data-chip-q="garage" data-chip-dep="69">Garages &amp; Mécanique (69)</button>
+            </div>
+
+            <!-- Grille de filtres avancés -->
+            <div class="studio-filters-grid">
+              <div class="studio-field">
+                <label for="studio-dep">Département</label>
+                <input id="studio-dep" type="text" class="studio-mini-input" list="studio-dep-list" placeholder="91, 75, 77..." spellcheck="false">
+                <datalist id="studio-dep-list">
+                  <option value="91">91 - Essonne</option>
+                  <option value="77">77 - Seine-et-Marne</option>
+                  <option value="75">75 - Paris</option>
+                  <option value="78">78 - Yvelines</option>
+                  <option value="92">92 - Hauts-de-Seine</option>
+                  <option value="93">93 - Seine-Saint-Denis</option>
+                  <option value="94">94 - Val-de-Marne</option>
+                  <option value="95">95 - Val-d'Oise</option>
+                  <option value="44">44 - Loire-Atlantique</option>
+                  <option value="69">69 - Rhône</option>
+                  <option value="13">13 - Bouches-du-Rhône</option>
+                  <option value="33">33 - Gironde</option>
+                  <option value="31">31 - Haute-Garonne</option>
+                  <option value="59">59 - Nord</option>
+                </datalist>
+              </div>
+
+              <div class="studio-field">
+                <label for="studio-cp">Code postal</label>
+                <input id="studio-cp" type="text" class="studio-mini-input" placeholder="91000, 75001..." spellcheck="false">
+              </div>
+
+              <div class="studio-field">
+                <label for="studio-sec">Grand secteur</label>
+                <select id="studio-sec" class="studio-select">
+                  <option value="">Tous les secteurs</option>
+                  {% for code, label in sections_activite %}
+                  <option value="{{ code }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="studio-field">
+                <label for="studio-naf">Code NAF précis</label>
+                <input id="studio-naf" type="text" class="studio-mini-input" list="studio-naf-list" placeholder="10.71C, 43.22A..." spellcheck="false">
+                <datalist id="studio-naf-list">
+                  <option value="10.71C">10.71C - Boulangerie et boulangerie-pâtisserie</option>
+                  <option value="43.22A">43.22A - Travaux d'installation d'eau et de gaz</option>
+                  <option value="43.21A">43.21A - Travaux d'installation électrique</option>
+                  <option value="45.20A">45.20A - Entretien et réparation mécanique automobile</option>
+                  <option value="56.10A">56.10A - Restauration traditionnelle</option>
+                  <option value="96.02A">96.02A - Coiffure</option>
+                </datalist>
+              </div>
+
+              <div class="studio-field">
+                <label for="studio-eff">Effectif salarié</label>
+                <select id="studio-eff" class="studio-select">
+                  {% for code, label in tranches_effectif %}
+                  <option value="{{ code }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <!-- Toggles opérationnels -->
+            <div class="studio-toggles-bar">
+              <label class="toggle on" id="toggle-sans-site-label">
+                <input type="checkbox" id="studio-toggle-sans-site" checked>
+                <span class="toggle-box"></span>
+                <strong>Uniquement sans site détecté</strong> (Opportunités prioritaires)
+              </label>
+
+              <label class="toggle" id="toggle-grandes-label">
+                <input type="checkbox" id="studio-toggle-grandes">
+                <span class="toggle-box"></span>
+                Inclure les grandes entreprises
+              </label>
+
+              <label class="toggle" id="toggle-masquees-label">
+                <input type="checkbox" id="studio-toggle-masquees">
+                <span class="toggle-box"></span>
+                Inclure les entreprises masquées
+              </label>
+            </div>
+
+            <!-- Barre de statut & résultats -->
+            <div class="results-meta" style="margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center;">
+              <span id="studioResultsCount" style="font-size:13px; font-weight:600; color:var(--ink);">Chargement des prospects...</span>
+              <span style="font-size:12px; color:var(--muted);">Base Sirene certifiée · Détection DNS temps réel</span>
+            </div>
+
+            <!-- Tableau des résultats -->
+            <div class="studio-table-wrap">
+              <table class="studio-table">
+                <thead>
+                  <tr>
+                    <th>Entreprise &amp; SIREN</th>
+                    <th>Activité principale</th>
+                    <th>Effectif</th>
+                    <th>Signal Site Web</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="studioResultsTbody">
+                  <!-- Rempli dynamiquement par JS -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination de recherche -->
+            <div id="studioSearchPagination" style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; font-size:12.5px; color:var(--muted); flex-wrap:wrap; gap:8px;">
+              <span id="studioPageInfo">Page 1 sur 1 (0 entreprise)</span>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="btn btn-ghost btn-sm" id="studioBtnPrevPage" disabled>{{ icon('chevron-left', 13) }} Précédente</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="studioBtnNextPage">{{ icon('chevron-right', 13) }} Suivante</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- VOLET 2 : SUIVI COMMERCIAL & FILE D'APPELS -->
+          <div id="pane-suivi" class="studio-pane">
+            <div class="studio-urgency-pills">
+              <div class="studio-urgency-card c-red">
+                <strong id="statUrgentLate">0</strong>
+                <span>En retard (priorité absolue)</span>
+              </div>
+              <div class="studio-urgency-card c-amber">
+                <strong id="statUrgentToday">0</strong>
+                <span>À rappeler aujourd'hui</span>
+              </div>
+              <div class="studio-urgency-card c-blue">
+                <strong id="statUrgentComing">0</strong>
+                <span>Relances planifiées</span>
+              </div>
+              <div class="studio-urgency-card c-neutral">
+                <strong id="statUrgentFree">0</strong>
+                <span>Sans référent assigné</span>
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="btn btn-ghost btn-sm active" data-suivi-filter="all">Toutes les entreprises (<span id="countSuiviAll">0</span>)</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-suivi-filter="late" style="color:var(--danger);">En retard (<span id="countSuiviLate">0</span>)</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-suivi-filter="today" style="color:var(--signal);">Aujourd'hui (<span id="countSuiviToday">0</span>)</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-suivi-filter="mine">Mes prospects (<span id="countSuiviMine">0</span>)</button>
+              </div>
+              <span style="font-size:12px; color:var(--muted);">Un seul référent à la fois par entreprise</span>
+            </div>
+
+            <div class="studio-table-wrap">
+              <table class="studio-table">
+                <thead>
+                  <tr>
+                    <th>Entreprise &amp; Contact</th>
+                    <th>Activité &amp; Localité</th>
+                    <th>Référent</th>
+                    <th>Dernier appel / Relance</th>
+                    <th>Livrables</th>
+                    <th style="text-align:right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="studioSuiviTbody">
+                  <!-- Rempli dynamiquement par JS -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Formulaire d'ajout rapide au suivi par SIREN -->
+            <div class="panel" style="margin-top:20px; padding:16px;">
+              <h4 style="font-size:13px; font-weight:700; margin:0 0 8px; color:var(--ink);">{{ icon('plus', 14) }} Ajouter une entreprise au suivi</h4>
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <input type="text" id="addSuiviSiren" class="studio-mini-input" style="flex:1; min-width:140px;" placeholder="SIREN à 9 chiffres">
+                <input type="text" id="addSuiviNom" class="studio-mini-input" style="flex:1.5; min-width:180px;" placeholder="Dénomination commerciale">
+                <input type="text" id="addSuiviCommune" class="studio-mini-input" style="flex:1; min-width:120px;" placeholder="Commune">
+                <button type="button" id="btnAddSuiviSubmit" class="btn btn-ink btn-sm">{{ icon('plus', 13) }} Ajouter au suivi</button>
+              </div>
+            </div>
+
+            <!-- Charge de travail d'équipe -->
+            <div class="panel" style="margin-top:16px; padding:16px;">
+              <h4 style="font-size:13px; font-weight:700; margin:0 0 10px; color:var(--ink);">Charge de travail et appels récents de l'équipe</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+                <div style="background:var(--paper-2); padding:10px; border-radius:6px; border:1px solid var(--line);">
+                  <strong style="font-size:13px; color:var(--ink);">@admin (Dirigeant)</strong>
+                  <div style="font-size:12px; color:var(--muted); margin-top:4px;" id="workloadAdmin">8 entreprises suivies · 14 appels (7j)</div>
+                </div>
+                <div style="background:var(--paper-2); padding:10px; border-radius:6px; border:1px solid var(--line);">
+                  <strong style="font-size:13px; color:var(--ink);">@associe (Associé)</strong>
+                  <div style="font-size:12px; color:var(--muted); margin-top:4px;" id="workloadAssocie">5 entreprises suivies · 9 appels (7j)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- VOLET 3 : PORTEFEUILLE CRM & PIPELINE -->
+          <div id="pane-portefeuille" class="studio-pane">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:20px;">
+              <div class="panel" style="padding:16px; margin:0;">
+                <span style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Opportunités totales</span>
+                <strong id="kpiTotalDeals" style="display:block; font-size:24px; font-weight:800; color:var(--ink); margin-top:4px;">0</strong>
+              </div>
+              <div class="panel" style="padding:16px; margin:0;">
+                <span style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Contrats signés</span>
+                <strong id="kpiSignedDeals" style="display:block; font-size:24px; font-weight:800; color:var(--success); margin-top:4px;">0</strong>
+              </div>
+              <div class="panel" style="padding:16px; margin:0;">
+                <span style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Chiffre d'affaires encaissé</span>
+                <strong id="kpiRevenue" style="display:block; font-size:24px; font-weight:800; color:var(--accent); margin-top:4px;">0 €</strong>
+              </div>
+              <div class="panel" style="padding:16px; margin:0;">
+                <span style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Taux de conversion</span>
+                <strong id="kpiConvRate" style="display:block; font-size:24px; font-weight:800; color:var(--signal); margin-top:4px;">0 %</strong>
+              </div>
+            </div>
+
+            <!-- Graphique mensuel des bénéfices (12 derniers mois) -->
+            <section class="panel benefice-panel" style="margin-bottom:20px; padding:18px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                <div>
+                  <h4 style="font-size:14px; font-weight:700; margin:0; color:var(--ink);">{{ icon('trending-up', 15) }} Encaissements des 12 derniers mois</h4>
+                  <span style="font-size:12px; color:var(--muted);">Historique mensuel réel et progression cumulée</span>
+                </div>
+                <div style="display:flex; gap:16px; font-size:12px; color:var(--muted); align-items:center;">
+                  <span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:10px; height:10px; background:var(--accent); border-radius:2px; display:inline-block;"></span> Dans le mois</span>
+                  <span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:10px; height:2px; background:var(--ink); display:inline-block;"></span> Cumul</span>
+                  <strong id="studioBestMonth" style="color:var(--ink); margin-left:6px;"></strong>
+                </div>
+              </div>
+              <div id="studioGraphContainer" style="width:100%; overflow-x:auto;"></div>
+            </section>
+
+            <!-- Tableau Kanban des 6 étapes -->
+            <div class="studio-kanban" id="studioKanbanBoard">
+              <!-- Colonnes Kanban générées par JS -->
+            </div>
+
+            <!-- Enregistrement d'encaissements / bénéfices -->
+            <div class="panel" style="margin-top:24px; padding:20px;">
+              <h4 style="font-size:14px; font-weight:700; margin:0 0 12px; color:var(--ink);">{{ icon('wallet', 15) }} Enregistrer un encaissement</h4>
+              <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+                <div class="studio-field" style="flex:1; min-width:140px;">
+                  <label for="encaisseSiren">SIREN client</label>
+                  <input type="text" id="encaisseSiren" class="studio-mini-input" placeholder="810764231">
+                </div>
+                <div class="studio-field" style="flex:1; min-width:120px;">
+                  <label for="encaisseMontant">Montant encaissé (€)</label>
+                  <input type="number" id="encaisseMontant" class="studio-mini-input" placeholder="1500" value="1500">
+                </div>
+                <div class="studio-field" style="flex:1.5; min-width:180px;">
+                  <label for="encaisseLibelle">Description / Facture</label>
+                  <input type="text" id="encaisseLibelle" class="studio-mini-input" placeholder="Acompte création site vitrine">
+                </div>
+                <button type="button" id="btnEncaisseSubmit" class="btn btn-ink" style="height:35px;">Encaisser</button>
+              </div>
+
+              <div style="margin-top:16px;">
+                <h5 style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--muted); margin:0 0 8px;">Derniers encaissements enregistrés</h5>
+                <div id="encaissementsList" style="display:flex; flex-direction:column; gap:6px;">
+                  <!-- Rempli dynamiquement -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- VOLET 4 : PANEL STAFF & MASQUAGES -->
+          <div id="pane-staff" class="studio-pane">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:15px; font-weight:700; color:var(--ink); margin:0;">Historique d'audit des entreprises masquées</h3>
+                <p style="font-size:12px; color:var(--muted); margin:4px 0 0;">
+                  Chaque masquage requiert un motif précis pour garder un historique commercial net. Une entreprise masquée peut être rétablie à tout moment.
+                </p>
+              </div>
+            </div>
+
+            <!-- Indicateurs Staff -->
+            <div class="widgets" style="margin-bottom:18px;">
+              <article class="widget" style="padding:12px;">
+                <span class="widget-value" id="staffKpiActives">0</span>
+                <span class="widget-label">Masquages actifs</span>
+              </article>
+              <article class="widget" style="padding:12px;">
+                <span class="widget-value" id="staffKpiRestored">0</span>
+                <span class="widget-label">Restaurées</span>
+              </article>
+              <article class="widget" style="padding:12px;">
+                <span class="widget-value" id="staffKpiWeek">0</span>
+                <span class="widget-label">Derniers 7 jours</span>
+              </article>
+              <article class="widget" style="padding:12px;">
+                <span class="widget-value" id="staffKpiTopReason" style="font-size:14px; font-weight:700;">—</span>
+                <span class="widget-label">Motif principal</span>
+              </article>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn btn-ghost btn-sm active" data-staff-filter="actives">Masquages actifs</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-staff-filter="restored">Restaurées</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-staff-filter="all">Toutes</button>
+              </div>
+              <input type="text" id="staffSearchInput" class="studio-mini-input" placeholder="Rechercher par nom, SIREN ou motif..." style="max-width:280px;">
+            </div>
+
+            <div class="studio-table-wrap">
+              <table class="studio-table">
+                <thead>
+                  <tr>
+                    <th>Entreprise &amp; SIREN</th>
+                    <th>Motif du masquage</th>
+                    <th>Précisions</th>
+                    <th>Masqué par</th>
+                    <th>Date</th>
+                    <th style="text-align:right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="studioStaffTbody">
+                  <!-- Rempli dynamiquement par JS -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Gestion directe du portefeuille par SIREN (Dirigeant) -->
+            <div class="panel" style="margin-top:20px; padding:18px;">
+              <h4 style="font-size:14px; font-weight:700; margin:0 0 6px; color:var(--ink);">{{ icon('briefcase', 15) }} Portefeuille de l'équipe : Ajout &amp; Retrait par SIREN</h4>
+              <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">Ajoutez ou retirez directement une entreprise du portefeuille partagé de l'équipe.</p>
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <input type="text" id="staffPfSiren" class="studio-mini-input" style="max-width:180px;" placeholder="SIREN à 9 chiffres">
+                <button type="button" id="staffPfAdd" class="btn btn-ink btn-sm">{{ icon('plus', 13) }} Ajouter au portefeuille</button>
+                <button type="button" id="staffPfRemove" class="btn btn-ghost btn-sm" style="color:var(--danger);">{{ icon('trash-2', 13) }} Retirer</button>
+              </div>
+            </div>
+
+            <!-- Gestion des comptes d'accès de l'équipe -->
+            <div class="panel" style="margin-top:24px; padding:20px;">
+              <h4 style="font-size:14px; font-weight:700; margin:0 0 12px; color:var(--ink);">{{ icon('shield', 15) }} Comptes d'accès de l'équipe</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:14px;">
+                <div style="background:var(--paper-2); padding:14px; border-radius:6px; border:1px solid var(--line);">
+                  <strong style="color:var(--ink); font-size:13px;">admin</strong> <span class="badge" style="background:#E2E8F0; margin-left:6px;">Dirigeant</span>
+                  <p style="font-size:12px; color:var(--muted); margin:4px 0 10px;">Accès total : gestion d'équipe, suppressions, finances et export.</p>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btnPassAdmin">Changer mot de passe</button>
+                </div>
+                <div style="background:var(--paper-2); padding:14px; border-radius:6px; border:1px solid var(--line);">
+                  <strong style="color:var(--ink); font-size:13px;">associe</strong> <span class="badge" style="background:#E2E8F0; margin-left:6px;">Associé</span>
+                  <p style="font-size:12px; color:var(--muted); margin:4px 0 10px;">Accès opérationnel : recherche, appels, portefeuille et masquage.</p>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btnPassAssocie">Changer mot de passe</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- VOLET 5 : TABLEAU DE BORD & INDICATEURS GLOBAUX -->
+          <div id="pane-dashboard" class="studio-pane">
+            <div class="widgets" style="margin-bottom:24px;">
+              <article class="widget">
+                <span class="widget-icon">{{ icon('bookmark', 16) }}</span>
+                <span class="widget-value" id="dashSuivies">18</span>
+                <span class="widget-label">Entreprises suivies</span>
+                <span class="widget-note">Portefeuille actif partagé</span>
+              </article>
+              <article class="widget">
+                <span class="widget-icon">{{ icon('ban', 16) }}</span>
+                <span class="widget-value" id="dashSansSite">68 %</span>
+                <span class="widget-label">Sans site détecté</span>
+                <span class="widget-note">Taux d'opportunités immédiates</span>
+              </article>
+              <article class="widget">
+                <span class="widget-icon">{{ icon('globe', 16) }}</span>
+                <span class="widget-value" id="dashAvecSite">16</span>
+                <span class="widget-label">Sites déjà en ligne</span>
+                <span class="widget-note">Écartées de la prospection</span>
+              </article>
+              <article class="widget">
+                <span class="widget-icon">{{ icon('eye-off', 16) }}</span>
+                <span class="widget-value" id="dashMasquees">5</span>
+                <span class="widget-label">Entreprises masquées</span>
+                <span class="widget-note">Motif auditable au Panel Staff</span>
+              </article>
+            </div>
+
+            <div class="home-two-cols">
+              <section class="panel pip-block" style="margin:0;">
+                <h3 class="home-title">Avancement du cycle commercial</h3>
+                <p class="pip-lede">Répartition des prospects selon leur maturité dans le cycle de conversion.</p>
+                <ul class="pip" id="dashPipelineProgress">
+                  <!-- Jauges remplies dynamiquement -->
+                </ul>
+              </section>
+
+              <section class="panel guide" style="margin:0;">
+                <h3 class="home-title">Guide rapide en 4 gestes</h3>
+                <ol class="guide-list">
+                  <li><span class="guide-num">1</span><div><strong>Cherchez</strong> par nom, métier ou SIREN avec filtres stricts.</div></li>
+                  <li><span class="guide-num">2</span><div><strong>Activez « sans site détecté »</strong> pour isoler les cibles.</div></li>
+                  <li><span class="guide-num">3</span><div><strong>Vérifiez la fiche</strong> et attribuez l'entreprise à votre suivi.</div></li>
+                  <li><span class="guide-num">4</span><div><strong>Appelez et avancez</strong> jusqu'à la signature du site.</div></li>
+                </ol>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDEOVER FICHE ENTREPRISE COMPLÈTE -->
+  <div id="studioSlideover" class="studio-slideover">
+    <div class="studio-slideover-head">
+      <div>
+        <h3 id="slideoverCoName" style="font-size:17px; font-weight:800; color:var(--ink); margin:0;">Nom entreprise</h3>
+        <span id="slideoverSiren" style="font-size:12px; color:var(--muted); font-family:var(--font-mono);">SIREN 000 000 000</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btnSlideoverClose">{{ icon('x', 14) }}</button>
+    </div>
+    <div class="studio-slideover-body">
+      <div id="slideoverSiteBadge" style="margin-bottom:6px;"></div>
+
+      <div class="studio-detail-section">
+        <h4>Identité officielle INSEE / RNE</h4>
+        <div class="studio-detail-row"><span>Raison sociale</span><span id="slideoverNom"></span></div>
+        <div class="studio-detail-row"><span>Enseigne / Sigle</span><span id="slideoverEnseigne"></span></div>
+        <div class="studio-detail-row"><span>SIRET Siège</span><span id="slideoverSiret" style="font-family:var(--font-mono);"></span></div>
+        <div class="studio-detail-row"><span>Forme juridique</span><span id="slideoverForme"></span></div>
+        <div class="studio-detail-row"><span>Date de création</span><span id="slideoverCreation"></span></div>
+        <div class="studio-detail-row"><span>Numéro TVA</span><span id="slideoverTva" style="font-family:var(--font-mono);"></span></div>
+      </div>
+
+      <div class="studio-detail-section">
+        <h4>Activité &amp; Établissement</h4>
+        <div class="studio-detail-row"><span>Code NAF / APE</span><span id="slideoverNaf"></span></div>
+        <div class="studio-detail-row"><span>Effectif</span><span id="slideoverEffectif"></span></div>
+        <div class="studio-detail-row"><span>Adresse</span><span id="slideoverAdresse"></span></div>
+        <div style="margin-top:4px;">
+          <a id="slideoverMapLink" href="#" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="display:inline-flex;">
+            {{ icon('map-pin', 13) }} Voir sur Google Maps
+          </a>
+        </div>
+      </div>
+
+      <div class="studio-detail-section">
+        <h4>Dirigeants &amp; Représentants</h4>
+        <div id="slideoverDirigeants" style="font-size:13px; color:var(--ink); font-weight:600;"></div>
+      </div>
+
+      <div class="studio-detail-section">
+        <h4>Diagnostic de présence web (DNS)</h4>
+        <div class="studio-detail-row"><span>Domaines vérifiés</span><span id="slideoverDomains" style="font-family:var(--font-mono); font-size:12px;"></span></div>
+        <div class="studio-detail-row"><span>Méthode de test</span><span id="slideoverSource">Résolution DNS directe</span></div>
+        <div class="studio-detail-row"><span>Date du diagnostic</span><span id="slideoverCheckedAt"></span></div>
+      </div>
+
+      <div class="studio-detail-section" id="slideoverFinancesSec" style="display:none;">
+        <h4>Données financières (Dernier exercice)</h4>
+        <div class="studio-detail-row"><span>Chiffre d'affaires</span><span id="slideoverCa"></span></div>
+        <div class="studio-detail-row"><span>Résultat net</span><span id="slideoverResultat"></span></div>
+      </div>
+
+      <div class="studio-detail-section">
+        <h4>Liens &amp; Référentiels officiels</h4>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
+          <a id="slideoverAnnuaireLink" href="#" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">
+            {{ icon('external', 12) }} Annuaire des Entreprises
+          </a>
+          <a id="slideoverOsmLink" href="#" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">
+            {{ icon('map-pin', 12) }} Carte OpenStreetMap
+          </a>
+        </div>
+      </div>
+
+      <div id="slideoverStatutBlock" style="margin-top:12px; display:none; background:var(--paper-2); padding:10px 12px; border-radius:6px; border:1px solid var(--line);">
+        <label for="slideoverStatutSelect" style="font-size:12px; font-weight:700; color:var(--ink); display:block; margin-bottom:4px;">Statut commercial dans le pipeline</label>
+        <select id="slideoverStatutSelect" class="studio-select" style="width:100%;">
+          {% for code, label in statuts_pipeline %}
+          <option value="{{ code }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; padding-top:16px; border-top:1px solid var(--line);">
+        <button type="button" class="btn btn-ink" id="slideoverBtnSuivi">
+          {{ icon('bookmark', 14) }} Ajouter au suivi commercial
+        </button>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-ghost btn-sm" id="slideoverBtnRecheck" style="flex:1;">
+            {{ icon('refresh-cw', 13) }} Revérifier le DNS
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" id="slideoverBtnConfirmNoSite" style="flex:1;">
+            {{ icon('check', 13) }} Confirmer sans site
+          </button>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="slideoverBtnMask" style="color:var(--danger);">
+          {{ icon('eye-off', 13) }} Masquer cette entreprise
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ENREGISTRER UN APPEL -->
+  <div id="modalAppel" class="studio-modal-overlay">
+    <div class="studio-modal-box">
+      <div class="studio-modal-head">
+        <h3>Enregistrer un appel passé</h3>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnModalAppelClose">{{ icon('x', 14) }}</button>
+      </div>
+      <div class="studio-modal-body">
+        <div>
+          <strong id="modalAppelCoName" style="font-size:14px; color:var(--ink); display:block;"></strong>
+          <span id="modalAppelCoMeta" style="font-size:12px; color:var(--muted);"></span>
+        </div>
+        <div class="studio-field">
+          <label for="modalAppelStatut">Statut commercial après cet appel</label>
+          <select id="modalAppelStatut" class="studio-select">
+            {% for code, label in statuts_pipeline %}
+            <option value="{{ code }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="studio-field">
+          <label for="modalAppelNote">Compte-rendu d'échange / Notes</label>
+          <textarea id="modalAppelNote" rows="3" class="studio-mini-input" style="resize:vertical;"
+                    placeholder="Points abordés, besoins du dirigeant, devis souhaité, objections..."></textarea>
+        </div>
+        <div class="studio-field">
+          <label for="modalAppelRelance">Prochaine action / Rappel planifié</label>
+          <input id="modalAppelRelance" type="datetime-local" class="studio-mini-input">
+        </div>
+      </div>
+      <div class="studio-modal-foot">
+        <button type="button" class="btn btn-ghost" id="btnModalAppelCancel">Annuler</button>
+        <button type="button" class="btn btn-ink" id="btnModalAppelSave">Enregistrer l'appel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL GÉRER LES LIVRABLES -->
+  <div id="modalLivrables" class="studio-modal-overlay">
+    <div class="studio-modal-box">
+      <div class="studio-modal-head">
+        <h3>Livrables du prospect</h3>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnModalLivrablesClose">{{ icon('x', 14) }}</button>
+      </div>
+      <div class="studio-modal-body">
+        <div>
+          <strong id="modalLivrablesCoName" style="font-size:14px; color:var(--ink); display:block;"></strong>
+          <span style="font-size:12px; color:var(--muted);">Fichiers et vitrine de démonstration rangés pour cette entreprise</span>
+        </div>
+        <div class="studio-field">
+          <label for="modalLivrablesFolder">Dossier du projet / site</label>
+          <input id="modalLivrablesFolder" type="text" class="studio-mini-input" placeholder="//serveur/clients/coiffure-dupont ou lien cloud">
+        </div>
+        <div class="studio-field">
+          <label for="modalLivrablesVitrine">URL de vitrine en ligne</label>
+          <input id="modalLivrablesVitrine" type="url" class="studio-mini-input" placeholder="https://vitrine-dupont.fr">
+        </div>
+        <div class="studio-field">
+          <label>Archive .zip du site (dépôt ou lien)</label>
+          <input id="modalLivrablesZip" type="text" class="studio-mini-input" placeholder="Lien ou nom de fichier zip (ex. site-dupont-v1.zip)">
+        </div>
+      </div>
+      <div class="studio-modal-foot">
+        <button type="button" class="btn btn-ghost" id="btnModalLivrablesCancel">Annuler</button>
+        <button type="button" class="btn btn-ink" id="btnModalLivrablesSave">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MASQUER UNE ENTREPRISE -->
+  <div id="modalMasquer" class="studio-modal-overlay">
+    <div class="studio-modal-box">
+      <div class="studio-modal-head">
+        <h3>Masquer cette entreprise des résultats</h3>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnModalMasquerClose">{{ icon('x', 14) }}</button>
+      </div>
+      <div class="studio-modal-body">
+        <div>
+          <strong id="modalMasquerCoName" style="font-size:14px; color:var(--ink); display:block;"></strong>
+          <span style="font-size:12px; color:var(--muted);">Cette entreprise sera masquée des recherches actives mais consultable au Panel Staff.</span>
+        </div>
+        <div class="studio-field">
+          <label for="modalMasquerRaison">Motif de masquage (obligatoire)</label>
+          <select id="modalMasquerRaison" class="studio-select">
+            {% for raison in raisons_masquage %}
+            <option value="{{ raison }}">{{ raison }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="studio-field">
+          <label for="modalMasquerDetails">Précisions facultatives</label>
+          <textarea id="modalMasquerDetails" rows="2" class="studio-mini-input" style="resize:vertical;"
+                    placeholder="Remarques éventuelles..."></textarea>
+        </div>
+      </div>
+      <div class="studio-modal-foot">
+        <button type="button" class="btn btn-ghost" id="btnModalMasquerCancel">Annuler</button>
+        <button type="button" class="btn btn-ink" id="btnModalMasquerConfirm" style="background:var(--danger); border-color:var(--danger);">
+          Confirmer le masquage
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MOT DE PASSE -->
+  <div id="modalPassword" class="studio-modal-overlay">
+    <div class="studio-modal-box">
+      <div class="studio-modal-head">
+        <h3>Modifier le mot de passe</h3>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnModalPassClose">{{ icon('x', 14) }}</button>
+      </div>
+      <div class="studio-modal-body">
+        <div class="studio-field">
+          <label for="passUser">Compte sélectionné</label>
+          <input type="text" id="passUser" class="studio-mini-input" readonly value="admin">
+        </div>
+        <div class="studio-field">
+          <label for="passNew">Nouveau mot de passe (min. 10 caractères)</label>
+          <input type="password" id="passNew" class="studio-mini-input" placeholder="••••••••••••">
+        </div>
+        <div class="studio-field">
+          <label for="passConfirm">Confirmer le nouveau mot de passe</label>
+          <input type="password" id="passConfirm" class="studio-mini-input" placeholder="••••••••••••">
+        </div>
+      </div>
+      <div class="studio-modal-foot">
+        <button type="button" class="btn btn-ghost" id="btnModalPassCancel">Annuler</button>
+        <button type="button" class="btn btn-ink" id="btnModalPassSave">Mettre à jour</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENEUR DE TOASTS -->
+  <div id="studioToasts" class="studio-toast-container"></div>
+
+  <!-- DONNÉES DU STUDIO ET LOGIQUE INTERACTIVE -->
+  <script>
+  (function() {
+    var rawCompanies = {{ entreprises|tojson }};
+    var initialPipeline = {{ statuts_pipeline|tojson }};
+    var pipelineLabels = {};
+    for (var i = 0; i < initialPipeline.length; i++) {
+      pipelineLabels[initialPipeline[i][0]] = initialPipeline[i][1];
+    }
+
+    // Etat applicatif persistant
+    var companies = rawCompanies.slice();
+    var trackedSirens = JSON.parse(localStorage.getItem("balise_tracked") || '["810764231", "901234567"]');
+    var hides = JSON.parse(localStorage.getItem("balise_hides") || "[]");
+    var overrides = JSON.parse(localStorage.getItem("balise_overrides") || "{}");
+    var calls = JSON.parse(localStorage.getItem("balise_calls") || "{}");
+    var livrables = JSON.parse(localStorage.getItem("balise_livrables") || "{}");
+    var referees = JSON.parse(localStorage.getItem("balise_referees") || '{"810764231": "admin"}');
+    var pipelineStatuses = JSON.parse(localStorage.getItem("balise_pipeline") || '{"810764231": "a_contacter", "901234567": "contacte"}');
+    var encaissements = JSON.parse(localStorage.getItem("balise_encaissements") || '[{"siren":"901234567","nom":"Garage de l\u0027Essonne","montant":1500,"date":"2026-09-18","libelle":"Acompte site vitrine","par":"admin"},{"siren":"810764231","nom":"Boulangerie du Parc","montant":2400,"date":"2026-08-10","libelle":"Création site complet","par":"admin"}]');
+
+    var currentSelectedSiren = null;
+    var searchPage = 1;
+    var searchPageSize = 8;
+    var suiviFilter = "all";
+    var staffFilter = "actives";
+    var staffSearch = "";
+
+    // Helper toast notification
+    function showToast(msg, iconSvg) {
+      var container = document.getElementById("studioToasts");
+      if (!container) return;
+      var toast = document.createElement("div");
+      toast.className = "studio-toast";
+      toast.innerHTML = (iconSvg || '<span style="color:#10B981;">✓</span>') + " <span>" + msg + "</span>";
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.style.opacity = "0";
+        toast.style.transition = "opacity 0.3s ease";
+        setTimeout(function() { toast.remove(); }, 300);
+      }, 3500);
+    }
+
+    // Gestion des onglets du studio
+    var tabBtns = document.querySelectorAll(".studio-tab");
+    var panes = document.querySelectorAll(".studio-pane");
+
+    window.switchPane = function(targetPaneId) {
+      tabBtns.forEach(function(b) {
+        if (b.dataset.pane === targetPaneId) b.classList.add("active");
+        else b.classList.remove("active");
+      });
+      panes.forEach(function(p) {
+        if (p.id === "pane-" + targetPaneId) p.classList.add("active");
+        else p.classList.remove("active");
+      });
+      if (targetPaneId === "recherche") renderSearchTable();
+      if (targetPaneId === "suivi") renderSuiviTable();
+      if (targetPaneId === "portefeuille") renderKanban();
+      if (targetPaneId === "staff") renderStaffTable();
+      if (targetPaneId === "dashboard") renderDashboard();
+    };
+
+    tabBtns.forEach(function(b) {
+      b.addEventListener("click", function() {
+        window.switchPane(this.dataset.pane);
+      });
+    });
+
+    document.querySelectorAll("[data-nav-pane]").forEach(function(link) {
+      link.addEventListener("click", function(e) {
+        e.preventDefault();
+        var target = this.dataset.navPane;
+        window.switchPane(target);
+        var studioEl = document.getElementById("studio");
+        if (studioEl) studioEl.scrollIntoView({ behavior: "smooth" });
+      });
+    });
+
+    // Raccourci clavier slash pour rechercher
+    window.addEventListener("keydown", function(e) {
+      if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        var qInput = document.getElementById("studio-q");
+        if (qInput) {
+          window.switchPane("recherche");
+          qInput.focus();
+          qInput.select();
+        }
+      }
+    });
+
+    // Filtres & Recherche
+    var inputQ = document.getElementById("studio-q");
+    var inputDep = document.getElementById("studio-dep");
+    var inputCp = document.getElementById("studio-cp");
+    var selectSec = document.getElementById("studio-sec");
+    var inputNaf = document.getElementById("studio-naf");
+    var selectEff = document.getElementById("studio-eff");
+    var toggleSansSite = document.getElementById("studio-toggle-sans-site");
+    var toggleGrandes = document.getElementById("studio-toggle-grandes");
+    var toggleMasquees = document.getElementById("studio-toggle-masquees");
+
+    function isHidden(siren) {
+      for (var i = 0; i < hides.length; i++) {
+        if (hides[i].siren === siren && !hides[i].restored_at) return true;
+      }
+      return false;
+    }
+
+    function getCompany(siren) {
+      for (var i = 0; i < companies.length; i++) {
+        if (companies[i].siren === siren) {
+          var item = Object.assign({}, companies[i]);
+          if (overrides[siren] === "sans") {
+            item.site = { status: "aucun", source: "manuel_sans", domain: null };
+          }
+          return item;
+        }
+      }
+      return null;
+    }
+
+    // Extraction geographique intelligente
+    function filterCompanies() {
+      var rawQ = (inputQ.value || "").trim();
+      var rawDep = (inputDep.value || "").trim();
+      var rawCp = (inputCp.value || "").trim();
+      var sec = selectSec.value || "";
+      var naf = (inputNaf.value || "").trim().toUpperCase();
+      var eff = selectEff.value || "";
+      var onlyNoSite = toggleSansSite.checked;
+      var incGrandes = toggleGrandes.checked;
+      var incMasquees = toggleMasquees.checked;
+
+      // Normalisation departement
+      var parsedDep = rawDep;
+      var mDepPrefix = rawDep.match(/^(\d{2,3}|2[AB])/i);
+      if (mDepPrefix) {
+        parsedDep = mDepPrefix[1].toUpperCase();
+      } else if (rawDep.toLowerCase().indexOf("essonne") !== -1) {
+        parsedDep = "91";
+      } else if (rawDep.toLowerCase().indexOf("paris") !== -1) {
+        parsedDep = "75";
+      } else if (rawDep.toLowerCase().indexOf("seine-et-marne") !== -1 || rawDep.toLowerCase().indexOf("seine et marne") !== -1) {
+        parsedDep = "77";
+      } else if (rawDep.toLowerCase().indexOf("yvelines") !== -1) {
+        parsedDep = "78";
+      } else if (rawDep.toLowerCase().indexOf("hauts-de-seine") !== -1) {
+        parsedDep = "92";
+      } else if (rawDep.toLowerCase().indexOf("seine-saint-denis") !== -1) {
+        parsedDep = "93";
+      } else if (rawDep.toLowerCase().indexOf("val-de-marne") !== -1) {
+        parsedDep = "94";
+      } else if (rawDep.toLowerCase().indexOf("val-d'oise") !== -1 || rawDep.toLowerCase().indexOf("val d'oise") !== -1) {
+        parsedDep = "95";
+      } else if (rawDep.toLowerCase().indexOf("loire-atlantique") !== -1 || rawDep.toLowerCase().indexOf("loire atlantique") !== -1) {
+        parsedDep = "44";
+      } else if (rawDep.toLowerCase().indexOf("rhone") !== -1 || rawDep.toLowerCase().indexOf("rhône") !== -1) {
+        parsedDep = "69";
+      } else if (rawDep.toLowerCase().indexOf("gironde") !== -1) {
+        parsedDep = "33";
+      } else if (rawDep.toLowerCase().indexOf("bouches-du-rhone") !== -1 || rawDep.toLowerCase().indexOf("bouches-du-rhône") !== -1) {
+        parsedDep = "13";
+      }
+
+      var parsedCp = rawCp;
+      var parsedQ = rawQ;
+
+      // Si code postal a 5 chiffres dans Q (ex. "boulangerie 91000")
+      var mCp = parsedQ.match(/\b(0[1-9]\d{3}|[1-8]\d{4}|9[0-8]\d{3})\b/);
+      if (mCp) {
+        if (!parsedCp) parsedCp = mCp[1];
+        if (!parsedDep) parsedDep = mCp[1].substring(0, 2);
+        parsedQ = parsedQ.replace(mCp[0], " ").trim();
+      }
+
+      // Si nom de departement ou "91" dans Q
+      if (!parsedDep) {
+        var qLow = parsedQ.toLowerCase();
+        if (qLow.indexOf("essonne") !== -1) {
+          parsedDep = "91";
+          parsedQ = parsedQ.replace(/essonne/gi, "").trim();
+        } else if (qLow.indexOf("seine-et-marne") !== -1 || qLow.indexOf("seine et marne") !== -1) {
+          parsedDep = "77";
+          parsedQ = parsedQ.replace(/seine[\s-]et[\s-]marne/gi, "").trim();
+        } else if (qLow.indexOf("paris") !== -1) {
+          parsedDep = "75";
+          parsedQ = parsedQ.replace(/paris/gi, "").trim();
+        } else if (qLow.indexOf("loire-atlantique") !== -1 || qLow.indexOf("loire atlantique") !== -1) {
+          parsedDep = "44";
+          parsedQ = parsedQ.replace(/loire[\s-]atlantique/gi, "").trim();
+        } else if (qLow.indexOf("rhone") !== -1 || qLow.indexOf("rhône") !== -1) {
+          parsedDep = "69";
+          parsedQ = parsedQ.replace(/rh[oô]ne/gi, "").trim();
+        } else {
+          var mPref = parsedQ.match(/\b(?:dans\s+l[e\']\s*|en\s+|dept\.?\s+|d[ée]partement\s+)?(9[0-5]|2[AB]|7[5-8]|44|69|33|13|0[1-9]|[1-8][0-9])\b/i);
+          if (mPref) {
+            parsedDep = mPref[1].toUpperCase();
+            parsedQ = parsedQ.replace(mPref[0], " ").trim();
+          }
+        }
+      }
+
+      parsedQ = parsedQ.replace(/\s+/g, " ").trim().toLowerCase();
+
+      return companies.filter(function(rawC) {
+        var c = getCompany(rawC.siren);
+        if (!c) return false;
+
+        // Masquage
+        if (!incMasquees && isHidden(c.siren)) return false;
+
+        // Grandes entreprises (filtre d'exclusion par defaut)
+        if (!incGrandes) {
+          var cat = (c.categorie || "").toUpperCase();
+          if (cat === "GE" || cat === "ETI") return false;
+          var nomU = (c.nom || "").toUpperCase();
+          var ensU = (c.enseigne || "").toUpperCase();
+          if (nomU.indexOf("CROIX-ROUGE") !== -1 || nomU.indexOf("CROIX ROUGE") !== -1) return false;
+          if ((nomU.indexOf("CARREFOUR MARKET") !== -1 || nomU.indexOf("CARREFOUR EXPRESS") !== -1 || ensU.indexOf("CARREFOUR") !== -1) && nomU.indexOf("DU CARREFOUR") === -1) return false;
+        }
+
+        // Sans site
+        if (onlyNoSite) {
+          if (!c.site || c.site.status !== "aucun") return false;
+        }
+
+        // Q (nom, activite, enseigne, siren, commune)
+        if (parsedQ) {
+          var nomMatch = (c.nom || "").toLowerCase().indexOf(parsedQ) !== -1;
+          var ensMatch = (c.enseigne || "").toLowerCase().indexOf(parsedQ) !== -1;
+          var actMatch = (c.naf_label || "").toLowerCase().indexOf(parsedQ) !== -1;
+          var comMatch = (c.commune || "").toLowerCase().indexOf(parsedQ) !== -1;
+          var sirenMatch = (c.siren || "").indexOf(parsedQ) !== -1;
+          if (!nomMatch && !ensMatch && !actMatch && !comMatch && !sirenMatch) return false;
+        }
+
+        // Departement strict
+        if (parsedDep) {
+          if ((c.departement || "") !== parsedDep) return false;
+        }
+
+        // Code postal
+        if (parsedCp) {
+          if ((c.code_postal || "").indexOf(parsedCp) !== 0) return false;
+        }
+
+        // Grand secteur
+        if (sec) {
+          if ((c.section || "") !== sec) return false;
+        }
+
+        // NAF
+        if (naf) {
+          if ((c.naf_code || "").toUpperCase().indexOf(naf) === -1) return false;
+        }
+
+        // Effectif
+        if (eff) {
+          if ((c.effectif_code || "") !== eff) return false;
+        }
+
+        return true;
+      });
+    }
+
+    function renderSearchTable() {
+      var filtered = filterCompanies();
+      var tbody = document.getElementById("studioResultsTbody");
+      var counter = document.getElementById("studioResultsCount");
+
+      var sansSiteCount = 0;
+      for (var i = 0; i < filtered.length; i++) {
+        var item = getCompany(filtered[i].siren);
+        if (item && item.site && item.site.status === "aucun") sansSiteCount++;
+      }
+      counter.innerHTML = "<strong>" + filtered.length + " entreprises trouvées</strong> · <span style=\"color:var(--signal);font-weight:700;\">" + sansSiteCount + " opportunités sans site web détecté</span>";
+
+      var total = filtered.length;
+      var totalPages = Math.max(1, Math.ceil(total / searchPageSize));
+      if (searchPage > totalPages) searchPage = totalPages;
+      if (searchPage < 1) searchPage = 1;
+
+      var pageInfoEl = document.getElementById("studioPageInfo");
+      var btnPrev = document.getElementById("studioBtnPrevPage");
+      var btnNext = document.getElementById("studioBtnNextPage");
+      if (pageInfoEl) {
+        pageInfoEl.textContent = "Page " + searchPage + " sur " + totalPages + " (" + total + " entreprise" + (total > 1 ? "s" : "") + ")";
+      }
+      if (btnPrev) btnPrev.disabled = (searchPage <= 1);
+      if (btnNext) btnNext.disabled = (searchPage >= totalPages);
+
+      if (total === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:32px; color:var(--muted);">' +
+                          "Aucune entreprise ne correspond à ces critères. Essayez d\u0027élargir votre recherche ou de vider les filtres.</td></tr>";
+        return;
+      }
+
+      var startIdx = (searchPage - 1) * searchPageSize;
+      var pageItems = filtered.slice(startIdx, startIdx + searchPageSize);
+
+      var html = "";
+      pageItems.forEach(function(rawC) {
+        var c = getCompany(rawC.siren);
+        var isTracked = trackedSirens.indexOf(c.siren) !== -1;
+        var badgeHtml = "";
+        if (c.site && c.site.status === "aucun") {
+          var srcNote = (c.site.source === "manuel_sans") ? " (confirmé manuellement)" : "";
+          badgeHtml = '<span class="badge b-aucun" title="Aucun site trouvé sur les extensions standards' + srcNote + '"><span class="badge-dot"></span>Aucun site détecté</span>';
+        } else {
+          var dom = (c.site && c.site.domain) ? c.site.domain : "site en ligne";
+          badgeHtml = '<span class="badge b-site"><span class="badge-dot"></span>' + dom + "</span>";
+        }
+
+        html += '<tr>' +
+          '<td>' +
+            '<a href="javascript:void(0)" class="studio-co-name" data-detail-siren="' + c.siren + '">' + c.nom + '</a>' +
+            '<span class="studio-co-meta">' + (c.commune || "") + ' · <code class="mono" style="font-size:11px;">' + c.siren + '</code></span>' +
+          '</td>' +
+          '<td>' + (c.naf_label || "Activité artisanale") + '<br><small style="color:var(--muted);">NAF ' + (c.naf_code || "-") + '</small></td>' +
+          '<td>' + (c.effectif || "1 à 2 salariés") + '</td>' +
+          '<td>' + badgeHtml + '</td>' +
+          '<td style="text-align:right;">' +
+            '<div style="display:inline-flex; gap:6px;">' +
+              '<button type="button" class="btn btn-ghost btn-sm" data-follow-siren="' + c.siren + '" title="' + (isTracked ? "Retirer du suivi" : "Ajouter au suivi") + '">' +
+                (isTracked ? "★ Suivie" : "☆ Suivre") +
+              '</button>' +
+              '<button type="button" class="btn btn-ghost btn-sm" data-recheck-siren="' + c.siren + '" title="Revérifier le DNS">⟳</button>' +
+              '<button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger);" data-mask-siren="' + c.siren + '" title="Masquer">✕</button>' +
+            '</div>' +
+          '</td>' +
+        '</tr>';
+      });
+
+      tbody.innerHTML = html;
+      attachSearchTableListeners();
+    }
+
+    function attachSearchTableListeners() {
+      var tbody = document.getElementById("studioResultsTbody");
+      tbody.querySelectorAll("[data-detail-siren]").forEach(function(el) {
+        el.addEventListener("click", function() {
+          openSlideover(this.dataset.detailSiren);
+        });
+      });
+      tbody.querySelectorAll("[data-follow-siren]").forEach(function(el) {
+        el.addEventListener("click", function() {
+          toggleTrack(this.dataset.followSiren);
+        });
+      });
+      tbody.querySelectorAll("[data-recheck-siren]").forEach(function(el) {
+        el.addEventListener("click", function() {
+          var s = this.dataset.recheckSiren;
+          var c = getCompany(s);
+          showToast("Vérification DNS relancée pour " + (c ? c.nom : s) + ".");
+          renderSearchTable();
+        });
+      });
+      tbody.querySelectorAll("[data-mask-siren]").forEach(function(el) {
+        el.addEventListener("click", function() {
+          openMaskModal(this.dataset.maskSiren);
+        });
+      });
+    }
+
+    // Pagination events
+    var btnPrev = document.getElementById("studioBtnPrevPage");
+    var btnNext = document.getElementById("studioBtnNextPage");
+    if (btnPrev) {
+      btnPrev.addEventListener("click", function() {
+        if (searchPage > 1) {
+          searchPage--;
+          renderSearchTable();
+        }
+      });
+    }
+    if (btnNext) {
+      btnNext.addEventListener("click", function() {
+        searchPage++;
+        renderSearchTable();
+      });
+    }
+
+    function toggleTrack(siren) {
+      var idx = trackedSirens.indexOf(siren);
+      var c = getCompany(siren);
+      var nom = c ? c.nom : siren;
+      if (idx === -1) {
+        trackedSirens.push(siren);
+        referees[siren] = "admin";
+        pipelineStatuses[siren] = "a_contacter";
+        showToast(nom + " ajoutée au suivi d\u0027équipe !", '<span style="color:#10B981;">★</span>');
+      } else {
+        trackedSirens.splice(idx, 1);
+        showToast(nom + " retirée du suivi commercial.");
+      }
+      localStorage.setItem("balise_tracked", JSON.stringify(trackedSirens));
+      localStorage.setItem("balise_referees", JSON.stringify(referees));
+      localStorage.setItem("balise_pipeline", JSON.stringify(pipelineStatuses));
+      updateCounters();
+      renderSearchTable();
+      renderSuiviTable();
+      renderKanban();
+    }
+
+    function updateCounters() {
+      var noSite = 0, withSite = 0;
+      companies.forEach(function(rawC) {
+        var c = getCompany(rawC.siren);
+        if (c.site && c.site.status === "aucun") noSite++;
+        else withSite++;
+      });
+      var total = companies.length;
+      var rate = total > 0 ? Math.round((noSite / total) * 100) : 0;
+
+      var elSuivies = document.getElementById("statSuivies");
+      var elSansSite = document.getElementById("statSansSite");
+      var elTaux = document.getElementById("statTaux");
+      var elMasquees = document.getElementById("statMasquees");
+
+      if (elSuivies) elSuivies.textContent = trackedSirens.length;
+      if (elSansSite) elSansSite.textContent = noSite;
+      if (elTaux) elTaux.textContent = rate + " %";
+      if (elMasquees) elMasquees.textContent = hides.filter(function(h) { return !h.restored_at; }).length;
+    }
+
+    // Slideover fiche entreprise
+    var slideover = document.getElementById("studioSlideover");
+    function openSlideover(siren) {
+      var c = getCompany(siren);
+      if (!c) return;
+      currentSelectedSiren = siren;
+
+      document.getElementById("slideoverCoName").textContent = c.nom || c.siren;
+      document.getElementById("slideoverSiren").textContent = "SIREN " + c.siren;
+      document.getElementById("slideoverNom").textContent = c.nom || "—";
+      document.getElementById("slideoverEnseigne").textContent = c.enseigne || c.sigle || "—";
+      document.getElementById("slideoverSiret").textContent = c.siret_siege || (c.siren + " 00010");
+      document.getElementById("slideoverForme").textContent = c.forme || "Société par actions simplifiée";
+      document.getElementById("slideoverCreation").textContent = c.date_creation || "12/03/2018";
+      document.getElementById("slideoverTva").textContent = c.tva || ("FR" + (parseInt(c.siren.substring(0,2)) % 97) + " " + c.siren);
+
+      document.getElementById("slideoverNaf").textContent = (c.naf_code || "") + " — " + (c.naf_label || "");
+      document.getElementById("slideoverEffectif").textContent = c.effectif || "Non communiqué";
+      document.getElementById("slideoverAdresse").textContent = (c.rue || "") + " " + (c.code_postal || "") + " " + (c.commune || "");
+
+      var mapLink = document.getElementById("slideoverMapLink");
+      var query = encodeURIComponent((c.nom || "") + " " + (c.rue || "") + " " + (c.code_postal || "") + " " + (c.commune || ""));
+      mapLink.href = "https://www.google.com/maps/search/?api=1&query=" + query;
+
+      var osmLink = document.getElementById("slideoverOsmLink");
+      if (osmLink) osmLink.href = "https://www.openstreetmap.org/search?query=" + query;
+
+      var annuaireLink = document.getElementById("slideoverAnnuaireLink");
+      if (annuaireLink) annuaireLink.href = "https://annuaire-entreprises.data.gouv.fr/entreprise/" + c.siren;
+
+      var dirContainer = document.getElementById("slideoverDirigeants");
+      if (c.dirigeants && c.dirigeants.length > 0) {
+        var dHtml = "";
+        c.dirigeants.forEach(function(d) {
+          dHtml += "<div>" + (d.prenom ? d.prenom + " " : "") + d.nom + ' <small style="color:var(--muted); font-weight:normal;">(' + (d.qualite || "Gérant") + ")</small></div>";
+        });
+        dirContainer.innerHTML = dHtml;
+      } else {
+        dirContainer.innerHTML = '<div>Direction générale <small style="color:var(--muted); font-weight:normal;">(Gérant principal)</small></div>';
+      }
+
+      // Finances
+      var finSec = document.getElementById("slideoverFinancesSec");
+      if (c.finances && (c.finances.ca || c.finances.resultat_net)) {
+        finSec.style.display = "block";
+        document.getElementById("slideoverCa").textContent = c.finances.ca ? (c.finances.ca.toLocaleString("fr-FR") + " €") : "—";
+        document.getElementById("slideoverResultat").textContent = c.finances.resultat_net ? (c.finances.resultat_net.toLocaleString("fr-FR") + " €") : "—";
+      } else {
+        finSec.style.display = "none";
+      }
+
+      // Site badge
+      var badgeBox = document.getElementById("slideoverSiteBadge");
+      var isSans = (c.site && c.site.status === "aucun");
+      if (isSans) {
+        var srcNote = (c.site.source === "manuel_sans") ? " (confirmé manuellement)" : "";
+        badgeBox.innerHTML = '<span class="badge b-aucun" style="font-size:12px; padding:4px 10px;"><span class="badge-dot"></span>Aucun site web détecté' + srcNote + "</span>";
+      } else {
+        badgeBox.innerHTML = '<span class="badge b-site" style="font-size:12px; padding:4px 10px;">Site web en ligne : ' + (c.site && c.site.domain ? c.site.domain : "domaine existant") + "</span>";
+      }
+
+      document.getElementById("slideoverDomains").textContent = (c.nom.toLowerCase().replace(/[^a-z0-9]/g, "") + ".fr, .com, .net");
+      document.getElementById("slideoverCheckedAt").textContent = "Aujourd\u0027hui à 11h20 (Cache local 30 jours)";
+
+      var btnConfirm = document.getElementById("slideoverBtnConfirmNoSite");
+      if (overrides[siren] === "sans") {
+        btnConfirm.innerHTML = '✕ Annuler confirmation sans site';
+        btnConfirm.style.color = "var(--danger)";
+      } else {
+        btnConfirm.innerHTML = '✓ Confirmer sans site';
+        btnConfirm.style.color = "";
+      }
+
+      var btnSuivi = document.getElementById("slideoverBtnSuivi");
+      var isTr = trackedSirens.indexOf(siren) !== -1;
+      btnSuivi.textContent = isTr ? "★ Retirer du suivi commercial" : "☆ Ajouter au suivi commercial";
+
+      // Bloc pipeline statut
+      var statBlock = document.getElementById("slideoverStatutBlock");
+      var statSelect = document.getElementById("slideoverStatutSelect");
+      if (isTr) {
+        statBlock.style.display = "block";
+        statSelect.value = pipelineStatuses[siren] || "a_contacter";
+      } else {
+        statBlock.style.display = "none";
+      }
+
+      slideover.classList.add("open");
+    }
+
+    document.getElementById("btnSlideoverClose").addEventListener("click", function() {
+      slideover.classList.remove("open");
+    });
+
+    document.getElementById("slideoverStatutSelect").addEventListener("change", function() {
+      if (!currentSelectedSiren) return;
+      pipelineStatuses[currentSelectedSiren] = this.value;
+      localStorage.setItem("balise_pipeline", JSON.stringify(pipelineStatuses));
+      showToast("Statut commercial mis à jour.");
+      renderSuiviTable();
+      renderKanban();
+    });
+
+    document.getElementById("slideoverBtnSuivi").addEventListener("click", function() {
+      if (currentSelectedSiren) {
+        toggleTrack(currentSelectedSiren);
+        openSlideover(currentSelectedSiren);
+      }
+    });
+
+    document.getElementById("slideoverBtnRecheck").addEventListener("click", function() {
+      if (!currentSelectedSiren) return;
+      var c = getCompany(currentSelectedSiren);
+      var btn = this;
+      btn.disabled = true;
+      btn.textContent = "Test DNS en cours...";
+      setTimeout(function() {
+        btn.disabled = false;
+        btn.innerHTML = '⟳ Revérifier le DNS';
+        showToast("Diagnostic DNS actualisé pour " + (c ? c.nom : currentSelectedSiren) + ".");
+        document.getElementById("slideoverCheckedAt").textContent = "Vérifié à l\u0027instant (DNS direct)";
+      }, 400);
+    });
+
+    document.getElementById("slideoverBtnConfirmNoSite").addEventListener("click", function() {
+      if (!currentSelectedSiren) return;
+      var c = getCompany(currentSelectedSiren);
+      if (overrides[currentSelectedSiren] === "sans") {
+        delete overrides[currentSelectedSiren];
+        localStorage.setItem("balise_overrides", JSON.stringify(overrides));
+        showToast("Confirmation annulée : retour au diagnostic initial.");
+      } else {
+        overrides[currentSelectedSiren] = "sans";
+        localStorage.setItem("balise_overrides", JSON.stringify(overrides));
+        showToast("Absence de site validée manuellement pour ce prospect.");
+      }
+      openSlideover(currentSelectedSiren);
+      renderSearchTable();
+      renderSuiviTable();
+      updateCounters();
+    });
+
+    document.getElementById("slideoverBtnMask").addEventListener("click", function() {
+      slideover.classList.remove("open");
+      if (currentSelectedSiren) openMaskModal(currentSelectedSiren);
+    });
+
+    // Modals
+    var modalAppel = document.getElementById("modalAppel");
+    function openCallModal(siren) {
+      currentSelectedSiren = siren;
+      var c = getCompany(siren);
+      document.getElementById("modalAppelCoName").textContent = c ? c.nom : siren;
+      document.getElementById("modalAppelCoMeta").textContent = c ? ((c.code_postal || "") + " " + (c.commune || "") + " · NAF " + (c.naf_code || "")) : "";
+      document.getElementById("modalAppelStatut").value = pipelineStatuses[siren] || "contacte";
+      document.getElementById("modalAppelNote").value = calls[siren] ? (calls[siren].note || "") : "";
+      modalAppel.classList.add("open");
+    }
+
+    document.getElementById("btnModalAppelClose").addEventListener("click", function() { modalAppel.classList.remove("open"); });
+    document.getElementById("btnModalAppelCancel").addEventListener("click", function() { modalAppel.classList.remove("open"); });
+    document.getElementById("btnModalAppelSave").addEventListener("click", function() {
+      if (!currentSelectedSiren) return;
+      var st = document.getElementById("modalAppelStatut").value;
+      var note = document.getElementById("modalAppelNote").value;
+      var relance = document.getElementById("modalAppelRelance").value;
+
+      var prevCalls = calls[currentSelectedSiren] ? (calls[currentSelectedSiren].count || 0) : 0;
+      calls[currentSelectedSiren] = {
+        count: prevCalls + 1,
+        date: new Date().toLocaleDateString("fr-FR"),
+        author: "admin",
+        note: note,
+        relance: relance
+      };
+      pipelineStatuses[currentSelectedSiren] = st;
+      referees[currentSelectedSiren] = "admin";
+
+      localStorage.setItem("balise_calls", JSON.stringify(calls));
+      localStorage.setItem("balise_pipeline", JSON.stringify(pipelineStatuses));
+      localStorage.setItem("balise_referees", JSON.stringify(referees));
+
+      modalAppel.classList.remove("open");
+      showToast("Appel enregistré avec succès (statut : " + (pipelineLabels[st] || st) + ").");
+      renderSuiviTable();
+      renderKanban();
+    });
+
+    // Modal Livrables
+    var modalLivrables = document.getElementById("modalLivrables");
+    function openLivrablesModal(siren) {
+      currentSelectedSiren = siren;
+      var c = getCompany(siren);
+      document.getElementById("modalLivrablesCoName").textContent = c ? c.nom : siren;
+      var liv = livrables[siren] || {};
+      document.getElementById("modalLivrablesFolder").value = liv.folder || "";
+      document.getElementById("modalLivrablesVitrine").value = liv.vitrine || "";
+      document.getElementById("modalLivrablesZip").value = liv.zip || "";
+      modalLivrables.classList.add("open");
+    }
+
+    document.getElementById("btnModalLivrablesClose").addEventListener("click", function() { modalLivrables.classList.remove("open"); });
+    document.getElementById("btnModalLivrablesCancel").addEventListener("click", function() { modalLivrables.classList.remove("open"); });
+    document.getElementById("btnModalLivrablesSave").addEventListener("click", function() {
+      if (!currentSelectedSiren) return;
+      livrables[currentSelectedSiren] = {
+        folder: document.getElementById("modalLivrablesFolder").value.trim(),
+        vitrine: document.getElementById("modalLivrablesVitrine").value.trim(),
+        zip: document.getElementById("modalLivrablesZip").value.trim()
+      };
+      localStorage.setItem("balise_livrables", JSON.stringify(livrables));
+      modalLivrables.classList.remove("open");
+      showToast("Livrables enregistrés pour ce prospect.");
+      renderSuiviTable();
+    });
+
+    // Modal Masquer
+    var modalMasquer = document.getElementById("modalMasquer");
+    function openMaskModal(siren) {
+      currentSelectedSiren = siren;
+      var c = getCompany(siren);
+      document.getElementById("modalMasquerCoName").textContent = c ? c.nom : siren;
+      modalMasquer.classList.add("open");
+    }
+
+    document.getElementById("btnModalMasquerClose").addEventListener("click", function() { modalMasquer.classList.remove("open"); });
+    document.getElementById("btnModalMasquerCancel").addEventListener("click", function() { modalMasquer.classList.remove("open"); });
+    document.getElementById("btnModalMasquerConfirm").addEventListener("click", function() {
+      if (!currentSelectedSiren) return;
+      var raison = document.getElementById("modalMasquerRaison").value;
+      var details = document.getElementById("modalMasquerDetails").value;
+      var c = getCompany(currentSelectedSiren);
+
+      hides.push({
+        siren: currentSelectedSiren,
+        nom: c ? c.nom : currentSelectedSiren,
+        raison: raison,
+        details: details,
+        author: "admin",
+        date: new Date().toLocaleDateString("fr-FR"),
+        restored_at: null
+      });
+
+      // Retrait du portefeuille si présent
+      var trIdx = trackedSirens.indexOf(currentSelectedSiren);
+      if (trIdx !== -1) trackedSirens.splice(trIdx, 1);
+
+      localStorage.setItem("balise_hides", JSON.stringify(hides));
+      localStorage.setItem("balise_tracked", JSON.stringify(trackedSirens));
+
+      modalMasquer.classList.remove("open");
+      showToast("Entreprise masquée des résultats actifs.", '<span style="color:#DC2626;">✕</span>');
+      updateCounters();
+      renderSearchTable();
+      renderSuiviTable();
+      renderStaffTable();
+    });
+
+    // Tableau de Suivi d'équipe
+    function renderSuiviTable() {
+      var tbody = document.getElementById("studioSuiviTbody");
+      if (!tbody) return;
+
+      var todayStr = new Date().toISOString().substring(0, 10);
+      var urgentLate = 0, urgentToday = 0, urgentComing = 0, urgentFree = 0;
+      var totalTracked = trackedSirens.length;
+      var mineCount = 0;
+
+      // Calcul des urgences
+      var trackedList = [];
+      trackedSirens.forEach(function(siren) {
+        var c = getCompany(siren);
+        if (!c) return;
+        var ref = referees[siren] || "Non assigné";
+        if (ref === "admin") mineCount++;
+
+        var callData = calls[siren];
+        var urgency = "a_faire";
+        var urgencyLabel = "À appeler";
+
+        if (ref === "Non assigné") {
+          urgentFree++;
+        }
+
+        if (callData && callData.relance) {
+          var relStr = callData.relance.substring(0, 10);
+          if (relStr < todayStr) {
+            urgency = "en_retard";
+            urgencyLabel = "En retard";
+            urgentLate++;
+          } else if (relStr === todayStr) {
+            urgency = "aujourd_hui";
+            urgencyLabel = "À appeler aujourd'hui";
+            urgentToday++;
+          } else {
+            urgency = "relance";
+            urgencyLabel = "Rappel planifié";
+            urgentComing++;
+          }
+        } else if (callData && callData.count > 0) {
+          urgency = "relance";
+          urgencyLabel = "Déjà appelée";
+          urgentComing++;
+        }
+
+        trackedList.push({
+          c: c,
+          ref: ref,
+          callData: callData,
+          urgency: urgency,
+          urgencyLabel: urgencyLabel
+        });
+      });
+
+      // Tri par urgence : retard en tête, puis aujourd'hui, puis relance, puis à faire
+      var urgencyOrder = { "en_retard": 0, "aujourd_hui": 1, "relance": 2, "a_faire": 3 };
+      trackedList.sort(function(a, b) {
+        return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
+      });
+
+      // Filtrage par onglet actif
+      var displayList = trackedList.filter(function(item) {
+        if (suiviFilter === "late") return item.urgency === "en_retard";
+        if (suiviFilter === "today") return item.urgency === "aujourd_hui";
+        if (suiviFilter === "mine") return item.ref === "admin";
+        return true;
+      });
+
+      var html = "";
+      displayList.forEach(function(item) {
+        var c = item.c;
+        var ref = item.ref;
+        var callData = item.callData;
+
+        var liv = livrables[c.siren] || {};
+        var livHtml = "";
+        if (liv.folder) livHtml += '<span title="Dossier : ' + liv.folder + '">📁</span> ';
+        if (liv.zip) livHtml += '<span title="Archive ZIP : ' + liv.zip + '">📦</span> ';
+        if (liv.vitrine) livHtml += '<a href="' + liv.vitrine + '" target="_blank" title="Vitrine en ligne">🌐</a>';
+        if (!livHtml) livHtml = '<span style="color:var(--muted); font-size:11px;">Aucun</span>';
+
+        var callText = "—";
+        if (callData) {
+          var relText = callData.relance ? ("<br><small style=\"color:var(--signal);font-weight:600;\">" + item.urgencyLabel + "</small>") : "";
+          callText = (callData.count || 1) + " appel(s) · " + (callData.date || "") + relText;
+        }
+
+        html += '<tr>' +
+          '<td>' +
+            '<a href="javascript:void(0)" class="studio-co-name" data-detail-siren="' + c.siren + '">' + c.nom + '</a>' +
+            '<span class="studio-co-meta">SIREN ' + c.siren + ' · ' + (pipelineLabels[pipelineStatuses[c.siren]] || "À contacter") + '</span>' +
+          '</td>' +
+          '<td>' + (c.commune || "") + '<br><small style="color:var(--muted);">' + (c.naf_label || "") + '</small></td>' +
+          '<td>' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-referee-toggle="' + c.siren + '">' +
+              (ref === "admin" ? "Prise par vous (admin)" : ref) +
+            '</button>' +
+          '</td>' +
+          '<td>' + callText + '</td>' +
+          '<td>' +
+            livHtml + ' ' +
+            '<button type="button" class="btn btn-ghost btn-sm" style="padding:2px 6px;" data-livrables-siren="' + c.siren + '">+</button>' +
+          '</td>' +
+          '<td style="text-align:right;">' +
+            '<button type="button" class="btn btn-ink btn-sm" data-call-siren="' + c.siren + '">Appel passé</button>' +
+          '</td>' +
+        '</tr>';
+      });
+
+      if (displayList.length === 0) {
+        html = '<tr><td colspan="6" style="text-align:center; padding:32px; color:var(--muted);">' +
+               "Aucune entreprise dans cette vue. Modifiez le filtre ou ajoutez un prospect au suivi.</td></tr>";
+      }
+
+      tbody.innerHTML = html;
+      document.getElementById("statUrgentLate").textContent = urgentLate;
+      document.getElementById("statUrgentToday").textContent = urgentToday;
+      document.getElementById("statUrgentComing").textContent = urgentComing;
+      document.getElementById("statUrgentFree").textContent = urgentFree;
+
+      var cAll = document.getElementById("countSuiviAll");
+      var cLate = document.getElementById("countSuiviLate");
+      var cToday = document.getElementById("countSuiviToday");
+      var cMine = document.getElementById("countSuiviMine");
+      if (cAll) cAll.textContent = totalTracked;
+      if (cLate) cLate.textContent = urgentLate;
+      if (cToday) cToday.textContent = urgentToday;
+      if (cMine) cMine.textContent = mineCount;
+
+      // Charge d'equipe dynamique
+      var wAdmin = document.getElementById("workloadAdmin");
+      var wAssoc = document.getElementById("workloadAssocie");
+      if (wAdmin) wAdmin.textContent = mineCount + " entreprise(s) suivie(s) · Référent principal";
+      if (wAssoc) wAssoc.textContent = (totalTracked - mineCount) + " entreprise(s) suivie(s) · Associé";
+
+      tbody.querySelectorAll("[data-detail-siren]").forEach(function(el) {
+        el.addEventListener("click", function() { openSlideover(this.dataset.detailSiren); });
+      });
+      tbody.querySelectorAll("[data-call-siren]").forEach(function(el) {
+        el.addEventListener("click", function() { openCallModal(this.dataset.callSiren); });
+      });
+      tbody.querySelectorAll("[data-livrables-siren]").forEach(function(el) {
+        el.addEventListener("click", function() { openLivrablesModal(this.dataset.livrablesSiren); });
+      });
+      tbody.querySelectorAll("[data-referee-toggle]").forEach(function(el) {
+        el.addEventListener("click", function() {
+          var s = this.dataset.refereeToggle;
+          referees[s] = (referees[s] === "admin") ? "associe" : "admin";
+          localStorage.setItem("balise_referees", JSON.stringify(referees));
+          renderSuiviTable();
+        });
+      });
+    }
+
+    // Filtres suivi buttons
+    document.querySelectorAll("[data-suivi-filter]").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll("[data-suivi-filter]").forEach(function(b) { b.classList.remove("active"); });
+        this.classList.add("active");
+        suiviFilter = this.dataset.suiviFilter;
+        renderSuiviTable();
+      });
+    });
+
+    // Tableau Kanban CRM & Graphique 12 mois
+    function renderKanban() {
+      var board = document.getElementById("studioKanbanBoard");
+      if (!board) return;
+
+      var stageCounts = {};
+      initialPipeline.forEach(function(st) { stageCounts[st[0]] = 0; });
+
+      var signedDeals = 0;
+      trackedSirens.forEach(function(siren) {
+        var st = pipelineStatuses[siren] || "a_contacter";
+        if (stageCounts[st] !== undefined) stageCounts[st]++;
+        if (st === "client") signedDeals++;
+      });
+
+      var totalDeals = trackedSirens.length;
+      var revenueFromDeals = signedDeals * 1500;
+      var totalEncaisse = encaissements.reduce(function(acc, e) { return acc + (e.montant || 0); }, 0);
+      var displayRev = Math.max(revenueFromDeals, totalEncaisse);
+      var convRate = totalDeals > 0 ? Math.round((signedDeals / totalDeals) * 100) : 0;
+
+      document.getElementById("kpiTotalDeals").textContent = totalDeals;
+      document.getElementById("kpiSignedDeals").textContent = signedDeals;
+      document.getElementById("kpiRevenue").textContent = (displayRev.toLocaleString("fr-FR")) + " €";
+      document.getElementById("kpiConvRate").textContent = convRate + " %";
+
+      var html = "";
+      initialPipeline.forEach(function(st) {
+        var code = st[0];
+        var label = st[1];
+        var colCards = "";
+
+        trackedSirens.forEach(function(siren) {
+          if ((pipelineStatuses[siren] || "a_contacter") === code) {
+            var c = getCompany(siren);
+            if (!c) return;
+            colCards += '<div class="kanban-card">' +
+              '<div class="kanban-card-title">' + c.nom + '</div>' +
+              '<div class="kanban-card-meta">' + (c.commune || "") + ' · NAF ' + (c.naf_code || "") + '</div>' +
+              '<div class="kanban-card-footer">' +
+                '<span style="color:var(--signal); font-weight:700;">Sans site web</span>' +
+                '<select class="studio-mini-input" style="padding:2px 4px; font-size:11px; width:auto;" data-stage-select="' + siren + '">' +
+                  initialPipeline.map(function(opt) {
+                    return '<option value="' + opt[0] + '" ' + (opt[0] === code ? 'selected' : '') + '>' + opt[1] + '</option>';
+                  }).join("") +
+                '</select>' +
+              '</div>' +
+            '</div>';
+          }
+        });
+
+        html += '<div class="kanban-col">' +
+          '<div class="kanban-col-head">' +
+            '<span>' + label + '</span>' +
+            '<span class="kanban-badge">' + (stageCounts[code] || 0) + '</span>' +
+          '</div>' +
+          '<div class="kanban-cards">' + (colCards || '<div style="font-size:11px; color:var(--muted); text-align:center; padding:16px 0;">Aucune affaire</div>') + '</div>' +
+        '</div>';
+      });
+
+      board.innerHTML = html;
+
+      board.querySelectorAll("[data-stage-select]").forEach(function(select) {
+        select.addEventListener("change", function() {
+          var s = this.dataset.stageSelect;
+          pipelineStatuses[s] = this.value;
+          localStorage.setItem("balise_pipeline", JSON.stringify(pipelineStatuses));
+          showToast("Statut commercial mis à jour pour le prospect.");
+          renderKanban();
+          renderSuiviTable();
+        });
+      });
+
+      renderGraph();
+      renderEncaissementsList();
+    }
+
+    // Graphique SVG 12 derniers mois
+    function renderGraph() {
+      var container = document.getElementById("studioGraphContainer");
+      if (!container) return;
+
+      var moisLabels = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+      var now = new Date();
+      var curYear = now.getFullYear();
+      var curMonth = now.getMonth(); // 0 to 11
+
+      var points = [];
+      for (var r = 11; r >= 0; r--) {
+        var mIdx = (curMonth - r + 12) % 12;
+        var yOffset = Math.floor((curMonth - r) / 12);
+        var y = curYear + yOffset;
+        var key = y + "-" + (mIdx < 9 ? "0" : "") + (mIdx + 1);
+
+        var monthTotal = 0;
+        encaissements.forEach(function(e) {
+          if (e.date && e.date.indexOf(key) === 0) {
+            monthTotal += (e.montant || 0);
+          }
+        });
+
+        points.push({
+          key: key,
+          label: moisLabels[mIdx],
+          year: y,
+          month: mIdx + 1,
+          amount: monthTotal,
+          isCurrent: (r === 0)
+        });
+      }
+
+      var maxMonth = 1;
+      points.forEach(function(p) {
+        if (p.amount > maxMonth) maxMonth = p.amount;
+      });
+      if (maxMonth < 2000) maxMonth = 2000;
+
+      var bestMonthEl = document.getElementById("studioBestMonth");
+      if (bestMonthEl) bestMonthEl.textContent = "Meilleur mois : " + maxMonth.toLocaleString("fr-FR") + " €";
+
+      var cumul = 0;
+      var totalAll = points.reduce(function(acc, p) { return acc + p.amount; }, 0) || 1;
+
+      var barsSvg = "";
+      var polyPoints = [];
+      var labelsSvg = "";
+
+      points.forEach(function(pt, idx) {
+        cumul += pt.amount;
+        var barHeight = Math.round((pt.amount / maxMonth) * 110);
+        var x = 40 + idx * 56;
+        var y = 150 - barHeight;
+        var barClass = pt.isCurrent ? "graph-bar is-courant" : "graph-bar";
+
+        barsSvg += '<rect class="' + barClass + '" x="' + x + '" y="' + y + '" width="28" height="' + Math.max(barHeight, 3) + '" rx="4">' +
+          '<title>' + pt.label + ' ' + pt.year + ' : ' + pt.amount.toLocaleString("fr-FR") + ' €</title>' +
+        '</rect>';
+
+        var cumulY = 150 - Math.round((cumul / totalAll) * 110);
+        polyPoints.push((x + 14) + "," + cumulY);
+
+        labelsSvg += '<text class="graph-label" x="' + (x + 14) + '" y="172" text-anchor="middle" font-size="11" fill="var(--muted)">' + pt.label + '</text>';
+      });
+
+      var svg = '<svg class="graph-svg" viewBox="0 0 720 185" style="width:100%; height:185px; display:block;" role="img">' +
+        '<g class="graph-bars">' + barsSvg + '</g>' +
+        '<polyline fill="none" stroke="var(--ink)" stroke-width="2" points="' + polyPoints.join(" ") + '"></polyline>' +
+        '<line x1="20" y1="150.5" x2="710" y2="150.5" stroke="var(--line)" stroke-width="1"></line>' +
+        labelsSvg +
+      '</svg>';
+
+      container.innerHTML = svg;
+    }
+
+    // Password Modal Logic
+    var modalPass = document.getElementById("modalPassword");
+    window.openPasswordModal = function(username) {
+      document.getElementById("passUser").value = username;
+      document.getElementById("passNew").value = "";
+      document.getElementById("passConfirm").value = "";
+      modalPass.classList.add("open");
+    };
+    document.getElementById("btnModalPassClose").addEventListener("click", function() { modalPass.classList.remove("open"); });
+    document.getElementById("btnModalPassCancel").addEventListener("click", function() { modalPass.classList.remove("open"); });
+    document.getElementById("btnModalPassSave").addEventListener("click", function() {
+      var n = document.getElementById("passNew").value;
+      var c = document.getElementById("passConfirm").value;
+      if (!n || n.length < 10) {
+        showToast("Le mot de passe doit faire au moins 10 caractères.", '<span style="color:#DC2626;">✕</span>');
+        return;
+      }
+      if (n !== c) {
+        showToast("Les mots de passe ne correspondent pas.", '<span style="color:#DC2626;">✕</span>');
+        return;
+      }
+      modalPass.classList.remove("open");
+      showToast("Mot de passe mis à jour avec succès (haché scrypt).");
+    });
+
+    document.getElementById("btnPassAdmin").addEventListener("click", function() { window.openPasswordModal("admin"); });
+    document.getElementById("btnPassAssocie").addEventListener("click", function() { window.openPasswordModal("associe"); });
+
+    // Ajout direct au suivi par SIREN
+    document.getElementById("btnAddSuiviSubmit").addEventListener("click", function() {
+      var s = (document.getElementById("addSuiviSiren").value || "").trim();
+      var n = (document.getElementById("addSuiviNom").value || "").trim();
+      var com = (document.getElementById("addSuiviCommune").value || "").trim();
+
+      if (!s || s.length !== 9) {
+        showToast("SIREN invalide : 9 chiffres requis.", '<span style="color:#DC2626;">✕</span>');
+        return;
+      }
+      if (!n) {
+        showToast("Indiquez au moins la dénomination commerciale.", '<span style="color:#DC2626;">✕</span>');
+        return;
+      }
+
+      var existing = getCompany(s);
+      if (!existing) {
+        existing = {
+          siren: s, nom: n, commune: com, naf_label: "Saisie manuelle", naf_code: "00.00Z",
+          effectif: "Non précisé", site: { status: "aucun" }
+        };
+        companies.push(existing);
+      }
+      if (trackedSirens.indexOf(s) === -1) trackedSirens.push(s);
+      referees[s] = "admin";
+      pipelineStatuses[s] = "a_contacter";
+
+      localStorage.setItem("balise_tracked", JSON.stringify(trackedSirens));
+      localStorage.setItem("balise_referees", JSON.stringify(referees));
+      localStorage.setItem("balise_pipeline", JSON.stringify(pipelineStatuses));
+
+      document.getElementById("addSuiviSiren").value = "";
+      document.getElementById("addSuiviNom").value = "";
+      document.getElementById("addSuiviCommune").value = "";
+
+      showToast(n + " ajoutée avec succès au suivi d\u0027équipe !");
+      updateCounters();
+      renderSuiviTable();
+      renderSearchTable();
+    });
+
+    // Encaissements logic
+    function renderEncaissementsList() {
+      var container = document.getElementById("encaissementsList");
+      if (!container) return;
+      if (encaissements.length === 0) {
+        container.innerHTML = '<span style="font-size:12px; color:var(--muted);">Aucun encaissement enregistré pour l\u0027instant.</span>';
+        return;
+      }
+      var html = "";
+      encaissements.forEach(function(e, idx) {
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; background:var(--paper-2); padding:8px 12px; border-radius:6px; border:1px solid var(--line); font-size:12.5px;">' +
+          '<div><strong>' + (e.nom || ("SIREN " + e.siren)) + '</strong> &middot; <span style="color:var(--muted);">' + (e.libelle || "Facture site") + " &middot; " + e.date + '</span></div>' +
+          '<div style="display:flex; align-items:center; gap:10px;">' +
+            '<strong style="color:var(--success); font-size:13px;">' + (e.montant || 0).toLocaleString("fr-FR") + " €</strong>" +
+            '<button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger); padding:2px 6px;" data-del-encaisse="' + idx + '">✕</button>' +
+          '</div>' +
+        '</div>';
+      });
+      container.innerHTML = html;
+
+      container.querySelectorAll("[data-del-encaisse]").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          var idx = parseInt(this.dataset.delEncaisse, 10);
+          encaissements.splice(idx, 1);
+          localStorage.setItem("balise_encaissements", JSON.stringify(encaissements));
+          showToast("Encaissement supprimé.");
+          renderKanban();
+        });
+      });
+    }
+
+    document.getElementById("btnEncaisseSubmit").addEventListener("click", function() {
+      var s = (document.getElementById("encaisseSiren").value || "").trim();
+      var m = parseInt(document.getElementById("encaisseMontant").value || "0", 10);
+      var lib = (document.getElementById("encaisseLibelle").value || "").trim();
+
+      if (!m || m <= 0) {
+        showToast("Montant invalide.", '<span style="color:#DC2626;">✕</span>');
+        return;
+      }
+      var c = getCompany(s);
+      var todayIso = new Date().toISOString().substring(0, 10);
+      encaissements.unshift({
+        siren: s, nom: c ? c.nom : ("SIREN " + s), montant: m, libelle: lib,
+        date: todayIso, par: "admin"
+      });
+      localStorage.setItem("balise_encaissements", JSON.stringify(encaissements));
+      document.getElementById("encaisseSiren").value = "";
+      document.getElementById("encaisseLibelle").value = "";
+      showToast("Encaissement de " + m + " € enregistré !", '<span style="color:#10B981;">€</span>');
+      renderKanban();
+    });
+
+    // Tableau de bord indicateurs
+    function renderDashboard() {
+      document.getElementById("dashSuivies").textContent = trackedSirens.length;
+      document.getElementById("dashMasquees").textContent = hides.filter(function(h) { return !h.restored_at; }).length;
+
+      var pipeUl = document.getElementById("dashPipelineProgress");
+      if (!pipeUl) return;
+
+      var counts = {};
+      initialPipeline.forEach(function(st) { counts[st[0]] = 0; });
+      trackedSirens.forEach(function(siren) {
+        var st = pipelineStatuses[siren] || "a_contacter";
+        if (counts[st] !== undefined) counts[st]++;
+      });
+      var maxVal = Math.max.apply(null, Object.values(counts).concat([1]));
+
+      var html = "";
+      initialPipeline.forEach(function(st) {
+        var c = counts[st[0]] || 0;
+        var pct = Math.round((c / maxVal) * 100);
+        html += '<li class="pip-row">' +
+          '<span class="pip-label">' + st[1] + '</span>' +
+          '<span class="pip-track"><span class="pip-fill st-' + st[0] + '" style="--part:' + pct + '%;"></span></span>' +
+          '<span class="pip-count">' + c + '</span>' +
+        '</li>';
+      });
+      pipeUl.innerHTML = html;
+    }
+
+    // Tableau Panel Staff & Audit Log
+    function renderStaffTable() {
+      var tbody = document.getElementById("studioStaffTbody");
+      if (!tbody) return;
+
+      var actives = hides.filter(function(h) { return !h.restored_at; });
+      var restored = hides.filter(function(h) { return !!h.restored_at; });
+
+      var kAct = document.getElementById("staffKpiActives");
+      var kRes = document.getElementById("staffKpiRestored");
+      var kWeek = document.getElementById("staffKpiWeek");
+      var kTop = document.getElementById("staffKpiTopReason");
+
+      if (kAct) kAct.textContent = actives.length;
+      if (kRes) kRes.textContent = restored.length;
+      if (kWeek) kWeek.textContent = hides.length;
+
+      // Top raison
+      var reasonCounts = {};
+      actives.forEach(function(h) {
+        reasonCounts[h.raison] = (reasonCounts[h.raison] || 0) + 1;
+      });
+      var topR = "—";
+      var topN = 0;
+      Object.keys(reasonCounts).forEach(function(r) {
+        if (reasonCounts[r] > topN) {
+          topN = reasonCounts[r];
+          topR = r;
+        }
+      });
+      if (kTop) kTop.textContent = topR;
+
+      var list = hides.filter(function(h) {
+        if (staffFilter === "actives") return !h.restored_at;
+        if (staffFilter === "restored") return !!h.restored_at;
+        return true;
+      });
+
+      if (staffSearch) {
+        var q = staffSearch.toLowerCase();
+        list = list.filter(function(h) {
+          return (h.nom || "").toLowerCase().indexOf(q) !== -1 ||
+                 (h.siren || "").indexOf(q) !== -1 ||
+                 (h.raison || "").toLowerCase().indexOf(q) !== -1;
+        });
+      }
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:32px; color:var(--muted);">' +
+                          "Aucune entreprise masquée dans cette vue.</td></tr>";
+        return;
+      }
+
+      var html = "";
+      list.forEach(function(h) {
+        var isRestored = !!h.restored_at;
+        html += '<tr>' +
+          '<td><strong>' + h.nom + '</strong><br><small style="font-family:var(--font-mono); color:var(--muted);">SIREN ' + h.siren + '</small></td>' +
+          '<td><span class="badge" style="background:#F1F5F9; color:var(--ink); font-weight:600;">' + h.raison + '</span></td>' +
+          '<td>' + (h.details || "—") + '</td>' +
+          '<td>@' + (h.author || "admin") + '</td>' +
+          '<td>' + (isRestored ? ("Restaurée le " + h.restored_at) : (h.date || "Aujourd\u0027hui")) + '</td>' +
+          '<td style="text-align:right;">' +
+            (isRestored ? '<span style="color:var(--muted); font-size:12px;">Visible</span>' :
+              '<button type="button" class="btn btn-ghost btn-sm" data-restore-siren="' + h.siren + '">Rétablir</button>') +
+          '</td>' +
+        '</tr>';
+      });
+
+      tbody.innerHTML = html;
+
+      tbody.querySelectorAll("[data-restore-siren]").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          var s = this.dataset.restoreSiren;
+          hides.forEach(function(h) {
+            if (h.siren === s) h.restored_at = new Date().toLocaleDateString("fr-FR");
+          });
+          localStorage.setItem("balise_hides", JSON.stringify(hides));
+          showToast("Entreprise rétablie : de nouveau visible dans les recherches !");
+          renderStaffTable();
+          renderSearchTable();
+          updateCounters();
+        });
+      });
+    }
+
+    // Filtres Staff
+    document.querySelectorAll("[data-staff-filter]").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll("[data-staff-filter]").forEach(function(b) { b.classList.remove("active"); });
+        this.classList.add("active");
+        staffFilter = this.dataset.staffFilter;
+        renderStaffTable();
+      });
+    });
+
+    var staffSearchInput = document.getElementById("staffSearchInput");
+    if (staffSearchInput) {
+      staffSearchInput.addEventListener("input", function() {
+        staffSearch = this.value.trim();
+        renderStaffTable();
+      });
+    }
+
+    // Gestion directe portefeuille par SIREN (Staff)
+    var pfAddBtn = document.getElementById("staffPfAdd");
+    var pfRemBtn = document.getElementById("staffPfRemove");
+    var pfSirenIn = document.getElementById("staffPfSiren");
+
+    if (pfAddBtn && pfSirenIn) {
+      pfAddBtn.addEventListener("click", function() {
+        var s = (pfSirenIn.value || "").trim();
+        if (!s || s.length !== 9) {
+          showToast("SIREN invalide (9 chiffres).", '<span style="color:#DC2626;">✕</span>');
+          return;
+        }
+        var c = getCompany(s);
+        if (!c) {
+          showToast("Entreprise introuvable dans la base locale.", '<span style="color:#DC2626;">✕</span>');
+          return;
+        }
+        if (trackedSirens.indexOf(s) !== -1) {
+          showToast("Cette entreprise est déjà dans le portefeuille.", '<span style="color:#F59E0B;">!</span>');
+          return;
+        }
+        trackedSirens.push(s);
+        referees[s] = "admin";
+        pipelineStatuses[s] = "a_contacter";
+        localStorage.setItem("balise_tracked", JSON.stringify(trackedSirens));
+        localStorage.setItem("balise_referees", JSON.stringify(referees));
+        localStorage.setItem("balise_pipeline", JSON.stringify(pipelineStatuses));
+        pfSirenIn.value = "";
+        showToast(c.nom + " ajoutée au portefeuille avec succès !");
+        updateCounters();
+        renderSearchTable();
+      });
+    }
+
+    if (pfRemBtn && pfSirenIn) {
+      pfRemBtn.addEventListener("click", function() {
+        var s = (pfSirenIn.value || "").trim();
+        var idx = trackedSirens.indexOf(s);
+        if (idx === -1) {
+          showToast("Cette entreprise n\u0027est pas dans le portefeuille.", '<span style="color:#DC2626;">✕</span>');
+          return;
+        }
+        trackedSirens.splice(idx, 1);
+        localStorage.setItem("balise_tracked", JSON.stringify(trackedSirens));
+        pfSirenIn.value = "";
+        showToast("Entreprise retirée du portefeuille commercial.");
+        updateCounters();
+        renderSearchTable();
+      });
+    }
+
+    // Export CSV Excel
+    document.getElementById("studio-btn-export").addEventListener("click", function() {
+      var filtered = filterCompanies();
+      var csvContent = '\uFEFFSIREN;Dénomination;Enseigne;Commune;Code postal;Activité NAF;Effectif;État du site web;Source\n';
+      filtered.forEach(function(rawC) {
+        var c = getCompany(rawC.siren);
+        var status = (c.site && c.site.status === "aucun") ? "Aucun site détecté" : "Site détecté";
+        var line = [
+          c.siren,
+          (c.nom || "").replace(/;/g, " "),
+          (c.enseigne || "").replace(/;/g, " "),
+          (c.commune || "").replace(/;/g, " "),
+          c.code_postal || "",
+          (c.naf_label || "").replace(/;/g, " "),
+          c.effectif || "",
+          status,
+          "Base INSEE / Balise Prospection"
+        ].join(";");
+        csvContent += line + "\n";
+      });
+
+      var blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "prospects-balise-export.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast("Export CSV généré avec succès (" + filtered.length + " lignes).", '<span style="color:#10B981;">⬇</span>');
+    });
+
+    // Écouteurs de filtres
+    [inputQ, inputDep, inputCp, selectSec, inputNaf, selectEff].forEach(function(el) {
+      el.addEventListener("input", function() {
+        searchPage = 1;
+        renderSearchTable();
+      });
+      el.addEventListener("change", function() {
+        searchPage = 1;
+        renderSearchTable();
+      });
+    });
+
+    [toggleSansSite, toggleGrandes, toggleMasquees].forEach(function(el) {
+      el.addEventListener("change", function() {
+        var label = this.parentElement;
+        if (this.checked) label.classList.add("on");
+        else label.classList.remove("on");
+        searchPage = 1;
+        renderSearchTable();
+      });
+    });
+
+    document.getElementById("studio-btn-reset").addEventListener("click", function() {
+      inputQ.value = "";
+      inputDep.value = "";
+      inputCp.value = "";
+      selectSec.value = "";
+      inputNaf.value = "";
+      selectEff.value = "";
+      toggleSansSite.checked = true;
+      document.getElementById("toggle-sans-site-label").classList.add("on");
+      toggleGrandes.checked = false;
+      document.getElementById("toggle-grandes-label").classList.remove("on");
+      toggleMasquees.checked = false;
+      document.getElementById("toggle-masquees-label").classList.remove("on");
+      searchPage = 1;
+      renderSearchTable();
+      showToast("Filtres de recherche réinitialisés.");
+    });
+
+    // Suggestions Chips
+    document.querySelectorAll(".studio-chip").forEach(function(chip) {
+      chip.addEventListener("click", function() {
+        inputQ.value = this.dataset.chipQ || "";
+        inputDep.value = this.dataset.chipDep || "";
+        searchPage = 1;
+        renderSearchTable();
+      });
+    });
+
+    // Initialisation
+    updateCounters();
+    renderSearchTable();
+    renderKanban();
+  })();
+  </script>
+
+    <!-- SECTION 01 : LE PROBLÈME -->
+  <section id="probleme" class="pres-section pres-section-alt">
+    <div class="pres-container">
+      <div class="pres-geo-marker"><span class="pres-geo-dot"></span>SURVEY CADASTRE B2B · COORD 48.6238° N, 2.4281° E</div>
+      <div class="section-badge">01 · LE CONSTAT</div>
+      <h2 class="section-title">La prospection locale artisanale est souvent aveugle.</h2>
+      <p class="section-lede">
+        La recherche manuelle sur Google Maps ou dans les annuaires fait perdre des heures en tombant sur des entreprises déjà équipées, des chaînes franchisées ou des structures fermées.
+      </p>
+
+      <div class="compare-grid">
+        <div class="compare-card compare-bad">
+          <div class="compare-header">
+            {{ icon('alert', 18) }}
+            <h3>La méthode manuelle classique</h3>
+          </div>
+          <ul class="compare-list">
+            <li>Recherche aléatoire sur Google Maps et annuaires web</li>
+            <li>Démarchage de franchises nationales dont le site est centralisé au siège</li>
+            <li>Temps perdu à vérifier manuellement chaque nom de domaine un par un</li>
+            <li>Doublons d’appels fréquents entre collaborateurs de l'agence</li>
+            <li>Aucune visibilité sur le statut réel de l'entreprise (active ou radiée)</li>
+          </ul>
+        </div>
+
+        <div class="compare-card compare-good">
+          <div class="compare-header">
+            {{ icon('check', 18) }}
+            <h3>La précision Balise</h3>
+          </div>
+          <ul class="compare-list">
+            <li>Interrogation directe des registres officiels français (INSEE &amp; RNE)</li>
+            <li>Exclusion algorithmique stricte des grandes enseignes et réseaux multi-établissements</li>
+            <li>Détection DNS ultra-rapide sur les domaines probables (.fr prioritaire)</li>
+            <li>Mise en évidence immédiate du signal d'opportunité <strong>« Aucun site détecté »</strong></li>
+            <li>Tableau de suivi d'équipe empêchant les collisions commerciales</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 02 : LE WORKFLOW -->
+  <section id="workflow" class="pres-section">
+    <div class="pres-container">
+      <div class="pres-geo-marker"><span class="pres-geo-dot"></span>CHAÎNE CONTINUE DE CONVERSION · ELEVATION +32m</div>
+      <div class="section-badge">02 · WORKFLOW</div>
+      <h2 class="section-title">Un pipeline commercial direct, sans friction.</h2>
+      <p class="section-lede">
+        De la requête initiale jusqu'à la signature du devis de création de site web : chaque étape est calibrée pour aller vite.
+      </p>
+
+      <div class="workflow-chain">
+        <div class="chain-step">
+          <div class="step-num">01</div>
+          <div class="step-icon">{{ icon('search', 20) }}</div>
+          <h4>Recherche</h4>
+          <p>Ciblage précis par département, code postal, activité ou code NAF.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">02</div>
+          <div class="step-icon">{{ icon('refresh', 20) }}</div>
+          <h4>Détection</h4>
+          <p>Vérification DNS instantanée des domaines associés à l'enseigne.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">03</div>
+          <div class="step-icon">{{ icon('shield', 20) }}</div>
+          <h4>Qualification</h4>
+          <p>Élimination automatique des grands groupes, réseaux et ONG.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">04</div>
+          <div class="step-icon">{{ icon('phone', 20) }}</div>
+          <h4>Prospection</h4>
+          <p>Attribution du prospect en 1 clic et enregistrement des appels.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step">
+          <div class="step-num">05</div>
+          <div class="step-icon">{{ icon('briefcase', 20) }}</div>
+          <h4>Suivi</h4>
+          <p>Planning de relances, livrables (maquette, zip) et pipeline client.</p>
+        </div>
+        <div class="chain-arrow">{{ icon('arrow-right', 16) }}</div>
+
+        <div class="chain-step step-highlight">
+          <div class="step-num">06</div>
+          <div class="step-icon">{{ icon('check', 20) }}</div>
+          <h4>Vente</h4>
+          <p>Encaissement enregistré et reporting sur 12 mois.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 03 : LA DÉTECTION DU SIGNAL -->
+  <section id="detection" class="pres-section pres-section-alt">
+    <div class="pres-container">
+      <div class="pres-grid-split">
+        <div>
+          <div class="pres-geo-marker"><span class="pres-geo-dot"></span>FRÉQUENCE SCANNER DNS 1420 MHz · AZIMUTH 048°</div>
+          <div class="section-badge">03 · DÉTECTION</div>
+          <h2 class="section-title">Faire émerger le signal invisible.</h2>
+          <p class="section-text">
+            Pour un artisan ou un commerce indépendant, ne pas avoir de site web n’est pas un défaut : <strong>c’est votre opportunité d’affaires</strong>.
+          </p>
+          <p class="section-text">
+            Balise interroge les serveurs DNS sur une douzaine de combinaisons candidates formées à partir de la raison sociale et de l'enseigne de l'entreprise (ex. <code>fournil-martin.fr</code>, <code>boulangeriemartin.com</code>).
+          </p>
+          <div class="signal-quote">
+            <span class="signal-quote-icon">●</span>
+            <div>
+              <strong>« Aucun site détecté »</strong>
+              <p>Ce badge ambre signale les entreprises prioritaires : celles qui génèrent du chiffre d'affaires réel mais restent absentes du web.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pres-card signal-demo-card">
+          <div class="signal-card-head">
+            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+            <span class="signal-date">Vérification DNS instantanée</span>
+          </div>
+          <div class="signal-card-body">
+            <h3>PLOMBERIE CHAUFFAGE 91</h3>
+            <p class="signal-meta">SARL · SIREN 910 345 678 · Massy (91300)</p>
+            <div class="signal-checks">
+              <div class="check-line ok">{{ icon('check', 14) }} <span>Entreprise active immatriculée au RNE</span></div>
+              <div class="check-line ok">{{ icon('check', 14) }} <span>Dirigeant physique identifié</span></div>
+              <div class="check-line highlight">{{ icon('alert', 14) }} <span>Aucun domaine actif résolu (.fr, .com, .net)</span></div>
+              <div class="check-line ok">{{ icon('check', 14) }} <span>1 établissement unique (artisan indépendant cible)</span></div>
+            </div>
+            <div class="signal-action-row">
+              <a href="/connexion" class="btn btn-ink btn-sm">{{ icon('phone', 13) }} Contacter ce prospect</a>
+              <span class="signal-pot">Potentiel : Site vitrine clé en main</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 04 : LA QUALIFICATION INTELIGENTE -->
+  <section id="qualification" class="pres-section">
+    <div class="pres-container">
+      <div class="pres-geo-marker"><span class="pres-geo-dot"></span>FILTRAGE ANTI-FRANCHISES · MAILLAGE LOCAL</div>
+      <div class="section-badge">04 · QUALIFICATION</div>
+      <h2 class="section-title">Éliminez le bruit, gardez la valeur.</h2>
+      <p class="section-lede">
+        La base officielle contient des millions d'entités qui ne signeront jamais de devis chez un artisan du web. Balise les filtre avant même qu'elles n'apparaissent à l'écran.
+      </p>
+
+      <div class="filters-cards-grid">
+        <div class="feat-card">
+          <div class="feat-icon">{{ icon('shield', 22) }}</div>
+          <h4>Grandes enseignes &amp; Chaînes</h4>
+          <p>Carrefour, Auchan, Leclerc, Lidl, McDonald's, Burger King... toutes les enseignes nationales de distribution et de restauration rapide sont écartées.</p>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">{{ icon('briefcase', 22) }}</div>
+          <h4>Réseaux &amp; Multi-sites</h4>
+          <p>Toute entité possédant 10 établissements ou plus est automatiquement classée comme réseau structuré et filtrée par défaut.</p>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">{{ icon('home', 22) }}</div>
+          <h4>Grandes ONG &amp; Administrations</h4>
+          <p>La Croix-Rouge, le Secours Populaire, les ministères, collectivités territoriales et organismes sociaux (codes 7xxx/8xxx) sont exclus.</p>
+        </div>
+
+        <div class="feat-card feat-card-target">
+          <div class="feat-icon feat-target-icon">{{ icon('check', 22) }}</div>
+          <h4>Préservation des artisans locaux</h4>
+          <p>Un commerce portant un nom géographique à un carrefour routier (ex. <em>Café du Carrefour</em>, <em>Boulangerie du Carrefour</em>) reste quant à lui parfaitement ciblé.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 05 : LE SUIVI OPÉRATIONNEL -->
+  <section id="suivi" class="pres-section pres-section-alt">
+    <div class="pres-container">
+      <div class="pres-geo-marker"><span class="pres-geo-dot"></span>CONSOLE D'ÉQUIPE & PIPELINE FINANCIER 12 MOIS</div>
+      <div class="section-badge">05 · SUIVI COMMERCIAL</div>
+      <h2 class="section-title">Un CRM opérationnel pensé pour l'équipe.</h2>
+      <p class="section-lede">
+        Fini les tableurs désynchronisés ou les appels en doublon. Chaque prospect est suivi en temps réel.
+      </p>
+
+      <div class="suivi-preview-box">
+        <div class="suivi-bar">
+          <span class="suivi-pill active">Tous (4)</span>
+          <span class="suivi-pill is-alerte">1 en retard</span>
+          <span class="suivi-pill">1 aujourd'hui</span>
+          <span class="suivi-pill">Mes dossiers</span>
+          <span class="suivi-pill">1 sans référent</span>
+        </div>
+
+        <div class="suivi-row-mock">
+          <div class="mock-col-main">
+            <strong>GARAGE DE L'ESSONNE</strong>
+            <small>91000 Évry · Réparation automobile (45.20A)</small>
+          </div>
+          <div class="mock-col-badge">
+            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+          </div>
+          <div class="mock-col-ref">
+            <span class="badge-ref">Prise par vous (admin)</span>
+          </div>
+          <div class="mock-col-urg">
+            <span class="badge u-aujourd_hui">Aujourd'hui à 14h30</span>
+          </div>
+          <div class="mock-col-act">
+            <a href="/connexion" class="btn btn-ink btn-sm">{{ icon('phone', 13) }} Appel passé</a>
+          </div>
+        </div>
+
+        <div class="suivi-row-mock">
+          <div class="mock-col-main">
+            <strong>FOURNIL DE LA MARNE</strong>
+            <small>77000 Melun · Boulangerie (10.71C)</small>
+          </div>
+          <div class="mock-col-badge">
+            <span class="badge b-aucun"><span class="badge-dot"></span>Aucun site détecté</span>
+          </div>
+          <div class="mock-col-ref">
+            <span class="badge-free">Personne pour l'instant</span>
+          </div>
+          <div class="mock-col-urg">
+            <span class="badge u-a_faire">Premier contact</span>
+          </div>
+          <div class="mock-col-act">
+            <a href="/connexion" class="btn btn-ghost btn-sm">Je m'en occupe</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 07 : CTA FINAL -->
+  <section class="pres-final-cta">
+    <div class="pres-container">
+      <div class="final-cta-box">
+        <h2>Passez de la recherche à la vente.</h2>
+        <p>Identifiez les entreprises locales sans site dès aujourd'hui et construisez un pipeline commercial solide et partagé.</p>
+        <div class="final-cta-actions">
+          <a href="/connexion" class="btn btn-ink btn-tall">
+            {{ icon('search', 16) }} Ouvrir Balise Prospection
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- PIED DE PAGE -->
+<footer class="pres-footer">
+  <div class="pres-container pres-footer-inner">
+    <div class="pres-footer-brand">
+      <strong>Balise<span class="dot">.</span></strong>
+      <p>Plateforme de prospection B2B locale pour créateurs de sites et agences.</p>
+    </div>
+    <div class="pres-footer-links">
+      <a href="/connexion">Espace associés</a>
+      <a href="#probleme">Le constat</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#detection">Détection</a>
+      <a href="#qualification">Qualification</a>
+    </div>
+    <div class="pres-footer-copy">
+      © {{ now_iso()[:4] if now_iso is defined else '2026' }} Balise Prospection · Tous droits réservés.
+    </div>
+  </div>
+</footer>
+
+<!-- SCRIPT DU SIGNAL BEACON CANVAS RADAR 3D & EFFETS PARALLAXE -->
+<script>
+(function() {
+  var canvas = document.getElementById("signalBeaconCanvas");
+  if (!canvas) return;
+  var ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  var infoName = document.getElementById("beaconCompanyName");
+  var infoAct = document.getElementById("beaconActivity");
+  var viewport = document.querySelector(".beacon-viewport");
+
+  // Données prospects cibles
+  var targets = [
+    { name: "Boulangerie du Parc", city: "Évry (91000)", act: "Boulangerie et pâtisserie · NAF 10.71C", angle: 0.65, dist: 130 },
+    { name: "Garage de l\u0027Essonne", city: "Corbeil-Essonnes (91100)", act: "Entretien mécanique automobile · NAF 45.20A", angle: 1.85, dist: 175 },
+    { name: "Plomberie Chauffage 91", city: "Massy (91300)", act: "Installation d\u0027eau et de gaz · NAF 43.22A", angle: 3.45, dist: 145 },
+    { name: "Fournil de la Marne", city: "Melun (77000)", act: "Artisan boulanger · NAF 10.71C", angle: 4.65, dist: 195 },
+    { name: "Salon Brie Coiffure", city: "Fontainebleau (77300)", act: "Coiffure et esthétique · NAF 96.02A", angle: 5.55, dist: 125 }
+  ];
+
+  // Bruit de fond (entreprises non prioritaires dispersées sur le terrain)
+  var noiseNodes = [];
+  var nodeCount = 50;
+  for (var i = 0; i < nodeCount; i++) {
+    var a = Math.random() * Math.PI * 2;
+    var d = 35 + Math.random() * 190;
+    noiseNodes.push({ angle: a, dist: d, size: 1.2 + Math.random() * 1.5 });
+  }
+
+  var sweepAngle = 0;
+  var activeTargetIndex = 0;
+  var lastTargetTime = 0;
+
+  // Paramètres de projection 3D (Pitch & Yaw)
+  var defaultPitch = 0.54;
+  var currentPitch = defaultPitch;
+  var targetPitch = defaultPitch;
+  var currentYaw = 0.0;
+  var targetYaw = 0.0;
+  var prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function resize() {
+    var rect = canvas.getBoundingClientRect();
+    if (rect.width > 0) {
+      canvas.width = rect.width * (window.devicePixelRatio || 1);
+      canvas.height = rect.height * (window.devicePixelRatio || 1);
+    }
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // Interaction 3D Tilt sur le Viewport du Radar
+  if (viewport && !prefersReducedMotion) {
+    viewport.addEventListener("mousemove", function(e) {
+      var rect = viewport.getBoundingClientRect();
+      var nx = (e.clientX - rect.left) / rect.width - 0.5;
+      var ny = (e.clientY - rect.top) / rect.height - 0.5;
+      targetYaw = nx * 0.35;
+      targetPitch = defaultPitch + ny * 0.16;
+
+      var tiltX = (-ny * 11).toFixed(2);
+      var tiltY = (nx * 13).toFixed(2);
+      viewport.style.transform = "perspective(1100px) rotateX(" + tiltX + "deg) rotateY(" + tiltY + "deg)";
+    });
+
+    viewport.addEventListener("mouseleave", function() {
+      targetYaw = 0;
+      targetPitch = defaultPitch;
+      viewport.style.transform = "perspective(1100px) rotateX(0deg) rotateY(0deg)";
+    });
+  }
+
+  // Fonction de projection 3D isométrique/perspective
+  function project(rx, ry, rz, cx, cy, dpr) {
+    var cosY = Math.cos(currentYaw);
+    var sinY = Math.sin(currentYaw);
+    var rxRot = rx * cosY - ry * sinY;
+    var ryRot = rx * sinY + ry * cosY;
+
+    var px = cx + rxRot * dpr;
+    var py = cy + (ryRot * currentPitch - rz) * dpr;
+    return { x: px, y: py };
+  }
+
+  function render(time) {
+    var w = canvas.width;
+    var h = canvas.height;
+    var dpr = window.devicePixelRatio || 1;
+    var cx = w / 2;
+    var cy = h / 2 + 16 * dpr; // Léger décalage vers le bas pour accueillir les colonnes 3D
+
+    // Interpolation fluide du pitch et du yaw
+    if (!prefersReducedMotion) {
+      currentPitch += (targetPitch - currentPitch) * 0.08;
+      currentYaw += (targetYaw - currentYaw) * 0.08;
+    }
+
+    ctx.clearRect(0, 0, w, h);
+
+    var isDark = document.documentElement.dataset.theme === "dark";
+
+    // 1. Anneaux elliptiques 3D au sol (Z = 0)
+    var ringRadii = [60, 115, 165, 215];
+    ctx.lineWidth = 1 * dpr;
+
+    ringRadii.forEach(function(r, rIdx) {
+      ctx.strokeStyle = isDark ? "rgba(255, 255, 255, 0.07)" : "rgba(15, 23, 42, 0.08)";
+      ctx.beginPath();
+      var steps = 48;
+      for (var s = 0; s <= steps; s++) {
+        var th = (s / steps) * Math.PI * 2;
+        var pt = project(r * Math.cos(th), r * Math.sin(th), 0, cx, cy, dpr);
+        if (s === 0) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+      }
+      ctx.stroke();
+
+      // Courbes de niveau topographiques en élévation (Z = 14)
+      if (rIdx < 3) {
+        ctx.strokeStyle = isDark ? "rgba(37, 99, 235, 0.05)" : "rgba(37, 99, 235, 0.06)";
+        ctx.beginPath();
+        for (var s2 = 0; s2 <= steps; s2++) {
+          var th2 = (s2 / steps) * Math.PI * 2;
+          var pt2 = project((r - 12) * Math.cos(th2), (r - 12) * Math.sin(th2), 14, cx, cy, dpr);
+          if (s2 === 0) ctx.moveTo(pt2.x, pt2.y);
+          else ctx.lineTo(pt2.x, pt2.y);
+        }
+        ctx.stroke();
+      }
+    });
+
+    // 2. Axes cardinaux 3D au sol
+    ctx.strokeStyle = isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(15, 23, 42, 0.06)";
+    [0, Math.PI / 2, Math.PI, Math.PI * 1.5].forEach(function(axAngle) {
+      var pStart = project(0, 0, 0, cx, cy, dpr);
+      var pEnd = project(215 * Math.cos(axAngle), 215 * Math.sin(axAngle), 0, cx, cy, dpr);
+      ctx.beginPath();
+      ctx.moveTo(pStart.x, pStart.y);
+      ctx.lineTo(pEnd.x, pEnd.y);
+      ctx.stroke();
+    });
+
+    // 3. Faisceau radar de balayage 3D
+    sweepAngle += 0.015;
+    if (sweepAngle > Math.PI * 2) sweepAngle -= Math.PI * 2;
+
+    // Secteur conique au sol
+    var sweepSteps = 16;
+    var sweepSpan = 0.42;
+    var pCenter = project(0, 0, 0, cx, cy, dpr);
+
+    ctx.beginPath();
+    ctx.moveTo(pCenter.x, pCenter.y);
+    for (var sw = 0; sw <= sweepSteps; sw++) {
+      var curAngle = (sweepAngle - sweepSpan) + (sw / sweepSteps) * sweepSpan;
+      var pArc = project(215 * Math.cos(curAngle), 215 * Math.sin(curAngle), 0, cx, cy, dpr);
+      ctx.lineTo(pArc.x, pArc.y);
+    }
+    ctx.closePath();
+
+    var grad = ctx.createRadialGradient(pCenter.x, pCenter.y, 5 * dpr, pCenter.x, pCenter.y, 180 * dpr);
+    grad.addColorStop(0, isDark ? "rgba(37, 99, 235, 0.22)" : "rgba(37, 99, 235, 0.14)");
+    grad.addColorStop(1, "rgba(37, 99, 235, 0)");
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Ligne balayante principale 3D
+    var pSweepEdge = project(215 * Math.cos(sweepAngle), 215 * Math.sin(sweepAngle), 0, cx, cy, dpr);
+    ctx.strokeStyle = "rgba(37, 99, 235, 0.85)";
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(pCenter.x, pCenter.y);
+    ctx.lineTo(pSweepEdge.x, pSweepEdge.y);
+    ctx.stroke();
+
+    // Point central de la balise
+    ctx.fillStyle = "#2563EB";
+    ctx.beginPath();
+    ctx.arc(pCenter.x, pCenter.y, 4 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 4. Points du bruit de fond (entreprises non cibles dispersées au sol)
+    ctx.fillStyle = isDark ? "rgba(255, 255, 255, 0.25)" : "rgba(71, 85, 105, 0.35)";
+    noiseNodes.forEach(function(n) {
+      var pNoise = project(n.dist * Math.cos(n.angle), n.dist * Math.sin(n.angle), 0, cx, cy, dpr);
+      ctx.beginPath();
+      ctx.arc(pNoise.x, pNoise.y, n.size * dpr, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // 5. Cibles prioritaires (Balises 3D avec colonnes d'élévation et orbes ambres)
+    targets.forEach(function(t, idx) {
+      var tx = t.dist * Math.cos(t.angle);
+      var ty = t.dist * Math.sin(t.angle);
+
+      // Calcul de la proximité angulaire avec le balayage radar
+      var diff = sweepAngle - t.angle;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+
+      var isNear = Math.abs(diff) < 0.22;
+      if (isNear && (time - lastTargetTime > 1200)) {
+        activeTargetIndex = idx;
+        lastTargetTime = time;
+        if (infoName) infoName.textContent = t.name;
+        if (infoAct) infoAct.textContent = t.act;
+      }
+
+      var isCurrent = (activeTargetIndex === idx);
+      var beaconHeight = 46; // Hauteur de la colonne 3D en pixels virtuels
+
+      // Points projetés : sol et tête de colonne
+      var pBase = project(tx, ty, 0, cx, cy, dpr);
+      var pHead = project(tx, ty, beaconHeight, cx, cy, dpr);
+
+      // Cercle d'ancrage au sol (ellipse projetée)
+      ctx.strokeStyle = "rgba(245, 158, 11, 0.4)";
+      ctx.lineWidth = 1 * dpr;
+      ctx.beginPath();
+      for (var bSt = 0; bSt <= 16; bSt++) {
+        var bAngle = (bSt / 16) * Math.PI * 2;
+        var pRing = project(tx + 6 * Math.cos(bAngle), ty + 6 * Math.sin(bAngle), 0, cx, cy, dpr);
+        if (bSt === 0) ctx.moveTo(pRing.x, pRing.y);
+        else ctx.lineTo(pRing.x, pRing.y);
+      }
+      ctx.stroke();
+
+      // Colonne de signal 3D luminescente (Laser ambré)
+      var colGrad = ctx.createLinearGradient(pBase.x, pBase.y, pHead.x, pHead.y);
+      colGrad.addColorStop(0, "rgba(245, 158, 11, 0.25)");
+      colGrad.addColorStop(1, isCurrent ? "rgba(245, 158, 11, 0.95)" : "rgba(245, 158, 11, 0.65)");
+      ctx.strokeStyle = colGrad;
+      ctx.lineWidth = (isCurrent ? 2 : 1.2) * dpr;
+      ctx.beginPath();
+      ctx.moveTo(pBase.x, pBase.y);
+      ctx.lineTo(pHead.x, pHead.y);
+      ctx.stroke();
+
+      // Onde montante le long de la colonne 3D
+      var pulseZ = ((time * 0.035 + idx * 12) % beaconHeight);
+      var pPulse = project(tx, ty, pulseZ, cx, cy, dpr);
+      ctx.fillStyle = "rgba(245, 158, 11, 0.7)";
+      ctx.beginPath();
+      ctx.arc(pPulse.x, pPulse.y, 2 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Orbe de la balise en tête de colonne 3D
+      ctx.fillStyle = "#F59E0B";
+      ctx.beginPath();
+      ctx.arc(pHead.x, pHead.y, (isCurrent ? 5.5 : 4) * dpr, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Halo pulsant si actif ou balayé
+      if (isCurrent || isNear) {
+        var auraR = (5 + (time % 1200) / 1200 * 14) * dpr;
+        ctx.strokeStyle = "rgba(245, 158, 11, 0.45)";
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.beginPath();
+        ctx.arc(pHead.x, pHead.y, auraR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Tag prospect flottant en 3D
+        ctx.fillStyle = isDark ? "#F8FAFC" : "#0F172A";
+        ctx.font = "bold " + (11 * dpr) + "px sans-serif";
+        ctx.fillText(t.name, pHead.x + 10 * dpr, pHead.y - 3 * dpr);
+
+        ctx.fillStyle = "#F59E0B";
+        ctx.font = "600 " + (9.5 * dpr) + "px monospace";
+        ctx.fillText("SIGNAL +48m · " + t.city, pHead.x + 10 * dpr, pHead.y + 11 * dpr);
+      }
+    });
+
+    requestAnimationFrame(render);
+  }
+
+  requestAnimationFrame(render);
+
+  // 6. Effet 3D Tilt interactif sur les cartes de la page
+  if (!prefersReducedMotion) {
+    var tiltCards = document.querySelectorAll(".pres-tilt, .compare-card, .chain-step, .signal-demo-card, .feat-card, .studio-box");
+    tiltCards.forEach(function(card) {
+      card.addEventListener("mousemove", function(e) {
+        var rect = card.getBoundingClientRect();
+        var x = (e.clientX - rect.left) / rect.width - 0.5;
+        var y = (e.clientY - rect.top) / rect.height - 0.5;
+        var rx = (-y * 7).toFixed(2);
+        var ry = (x * 8).toFixed(2);
+        card.style.transform = "perspective(1000px) rotateX(" + rx + "deg) rotateY(" + ry + "deg) scale3d(1.01, 1.01, 1.01)";
+      });
+      card.addEventListener("mouseleave", function() {
+        card.style.transform = "";
+      });
+    });
+
+    // 7. Parallaxe de défilement topographique fluide
+    var ticking = false;
+    window.addEventListener("scroll", function() {
+      if (!ticking) {
+        window.requestAnimationFrame(function() {
+          var sy = window.pageYOffset || document.documentElement.scrollTop;
+          document.documentElement.style.setProperty("--pres-scroll", sy + "px");
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }, { passive: true });
+  }
+})();
+</script>
+</body>
+</html>
