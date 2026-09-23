@@ -583,7 +583,7 @@ def export_csv():
         ])
     donnees = "\ufeff" + tampon.getvalue()
     marqueur = "-DEMO" if res["demo"] else ""
-    nom_fichier = f"prospection-mbdv{marqueur}-{datetime.now(timezone.utc):%Y%m%d}.csv"
+    nom_fichier = f"prospection-balise{marqueur}-{datetime.now(timezone.utc):%Y%m%d}.csv"
     return Response(
         donnees, mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename={nom_fichier}"},
