@@ -1429,7 +1429,7 @@
       document.getElementById('addSuiviNom').value = '';
       document.getElementById('addSuiviCommune').value = '';
 
-      showToast(n + ' ajoutée avec succès au suivi d'équipe !');
+      showToast(n + ' ajoutée avec succès au suivi d\'équipe !');
       updateCounters();
       renderSuiviTable();
       renderSearchTable();
@@ -1440,7 +1440,7 @@
       var container = document.getElementById('encaissementsList');
       if (!container) return;
       if (encaissements.length === 0) {
-        container.innerHTML = '<span style="font-size:12px; color:var(--muted);">Aucun encaissement enregistré pour l'instant.</span>';
+        container.innerHTML = '<span style="font-size:12px; color:var(--muted);">Aucun encaissement enregistré pour l\'instant.</span>';
         return;
       }
       var html = '';
