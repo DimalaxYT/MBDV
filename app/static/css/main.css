@@ -2325,6 +2325,18 @@ button.compteur.is-alerte.active {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 28px;
+  transform-style: preserve-3d;
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  will-change: transform;
+}
+.compare-card:hover {
+  box-shadow: 0 20px 42px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+.compare-header {
+  transform: translateZ(16px);
+}
+.compare-list {
+  transform: translateZ(8px);
 }
 .compare-header {
   display: flex;
@@ -2359,6 +2371,19 @@ button.compteur.is-alerte.active {
   border-radius: var(--radius);
   padding: 20px 16px;
   text-align: center;
+  transform-style: preserve-3d;
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  will-change: transform;
+}
+.chain-step:hover {
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.09);
+  border-color: var(--accent);
+}
+.step-num, .step-icon {
+  transform: translateZ(20px);
+}
+.chain-step h4, .chain-step p {
+  transform: translateZ(10px);
 }
 .chain-step.step-highlight {
   border-color: var(--ok-line);
@@ -2395,7 +2420,22 @@ button.compteur.is-alerte.active {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 24px;
-  box-shadow: var(--shadow-2);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.1), 0 3px 10px rgba(0, 0, 0, 0.04);
+  transform-style: preserve-3d;
+  transition: transform 0.22s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.22s ease;
+  will-change: transform;
+}
+.signal-card-head {
+  transform: translateZ(18px);
+}
+.signal-card-body h3, .signal-meta {
+  transform: translateZ(22px);
+}
+.signal-checks {
+  transform: translateZ(14px);
+}
+.signal-action-row {
+  transform: translateZ(26px);
 }
 .signal-card-head {
   display: flex;
@@ -2434,6 +2474,47 @@ button.compteur.is-alerte.active {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 24px;
+  transform-style: preserve-3d;
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  will-change: transform;
+}
+.feat-card:hover {
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.08);
+  border-color: var(--accent-line);
+}
+.feat-icon {
+  transform: translateZ(20px);
+}
+.feat-card h4, .feat-card p {
+  transform: translateZ(10px);
+}
+
+/* Marqueurs cartographiques en parallaxe flottants */
+.pres-geo-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+  pointer-events: none;
+  opacity: 0.85;
+  transform: translateY(calc(var(--pres-scroll, 0px) * -0.04));
+  will-change: transform;
+}
+.pres-geo-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--signal);
 }
 .feat-card.feat-card-target {
   border-color: var(--ok-line);

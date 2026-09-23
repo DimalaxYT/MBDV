@@ -2241,6 +2241,7 @@
     <!-- SECTION 01 : LE PROBLÈME -->
   <section id="probleme" class="pres-section pres-section-alt">
     <div class="pres-container">
+      <div class="pres-geo-marker"><span class="pres-geo-dot"></span>SURVEY CADASTRE B2B · COORD 48.6238° N, 2.4281° E</div>
       <div class="section-badge">01 · LE CONSTAT</div>
       <h2 class="section-title">La prospection locale artisanale est souvent aveugle.</h2>
       <p class="section-lede">
@@ -2282,6 +2283,7 @@
   <!-- SECTION 02 : LE WORKFLOW -->
   <section id="workflow" class="pres-section">
     <div class="pres-container">
+      <div class="pres-geo-marker"><span class="pres-geo-dot"></span>CHAÎNE CONTINUE DE CONVERSION · ELEVATION +32m</div>
       <div class="section-badge">02 · WORKFLOW</div>
       <h2 class="section-title">Un pipeline commercial direct, sans friction.</h2>
       <p class="section-lede">
@@ -2344,6 +2346,7 @@
     <div class="pres-container">
       <div class="pres-grid-split">
         <div>
+          <div class="pres-geo-marker"><span class="pres-geo-dot"></span>FRÉQUENCE SCANNER DNS 1420 MHz · AZIMUTH 048°</div>
           <div class="section-badge">03 · DÉTECTION</div>
           <h2 class="section-title">Faire émerger le signal invisible.</h2>
           <p class="section-text">
@@ -2388,6 +2391,7 @@
   <!-- SECTION 04 : LA QUALIFICATION INTELIGENTE -->
   <section id="qualification" class="pres-section">
     <div class="pres-container">
+      <div class="pres-geo-marker"><span class="pres-geo-dot"></span>FILTRAGE ANTI-FRANCHISES · MAILLAGE LOCAL</div>
       <div class="section-badge">04 · QUALIFICATION</div>
       <h2 class="section-title">Éliminez le bruit, gardez la valeur.</h2>
       <p class="section-lede">
@@ -2425,6 +2429,7 @@
   <!-- SECTION 05 : LE SUIVI OPÉRATIONNEL -->
   <section id="suivi" class="pres-section pres-section-alt">
     <div class="pres-container">
+      <div class="pres-geo-marker"><span class="pres-geo-dot"></span>CONSOLE D'ÉQUIPE & PIPELINE FINANCIER 12 MOIS</div>
       <div class="section-badge">05 · SUIVI COMMERCIAL</div>
       <h2 class="section-title">Un CRM opérationnel pensé pour l'équipe.</h2>
       <p class="section-lede">
@@ -2797,7 +2802,7 @@
 
   // 6. Effet 3D Tilt interactif sur les cartes de la page
   if (!prefersReducedMotion) {
-    var tiltCards = document.querySelectorAll(".pres-tilt, .compare-card, .step-card, .studio-box");
+    var tiltCards = document.querySelectorAll(".pres-tilt, .compare-card, .chain-step, .signal-demo-card, .feat-card, .studio-box");
     tiltCards.forEach(function(card) {
       card.addEventListener("mousemove", function(e) {
         var rect = card.getBoundingClientRect();
