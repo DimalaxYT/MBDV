@@ -139,7 +139,22 @@ def _migration_benefices(conn) -> None:
 );
 
 """)
-    if conn.execute("SELECT 1 FROM benefices LIMIT 1").fetchone():
+    # Table des migrations deja faites : sans elle, supprimer tous les
+    # encaissements puis redemarrer faisait rejouer la reprise ci-dessous et
+    # ressuscitait les montants effaces (voir test_des_encaissements_supprimes_ne_reviennent_pas).
+    conn.executescript("""
+CREATE TABLE IF NOT EXISTS migrations (
+    nom      TEXT PRIMARY KEY,
+    faite_le TEXT NOT NULL
+);
+""")
+    reprise = "benefices_reprise"
+    if (conn.execute("SELECT 1 FROM migrations WHERE nom = ?", (reprise,)).fetchone()
+            or conn.execute("SELECT 1 FROM benefices LIMIT 1").fetchone()):
+        # Reprise deja faite, ou base qui a deja ses encaissements : on la marque
+        # pour ne plus jamais la rejouer sur cette base.
+        conn.execute("INSERT OR IGNORE INTO migrations (nom, faite_le) VALUES (?, ?)",
+                     (reprise, now_iso()))
         return
     lignes = conn.execute(
         "SELECT siren, snapshot, montant_cents, signe_le, added_by, added_at"
@@ -155,6 +170,8 @@ def _migration_benefices(conn) -> None:
             " encaisse_par, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("", ligne["siren"], nom, ligne["montant_cents"], quand,
              ligne["added_by"] or "?", now_iso()))
+    conn.execute("INSERT OR IGNORE INTO migrations (nom, faite_le) VALUES (?, ?)",
+                 (reprise, now_iso()))
 
 
 def _migration_tracked(conn) -> None:

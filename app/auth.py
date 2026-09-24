@@ -31,7 +31,6 @@ JETON_DUREE_LONGUE = 60 * 60 * 24 * 30  # "rester connecte" coche : 30 jours
 JETON_DUREE_COURTE = 60 * 60 * 12       # decoche : le temps d'une journee de travail
 JETON_DUREE = JETON_DUREE_LONGUE        # duree maximale acceptee a la lecture
 CSRF_DUREE = 60 * 60 * 12               # validite d'un jeton CSRF signe
-_META_JETON = 'meta name="session-token"'
 
 # 12 tentatives par identifiant et 40 tentatives par adresse IP, toutes les 5 minutes.
 # Les compteurs sont en memoire : ils sont remis a zero au redemarrage du service.

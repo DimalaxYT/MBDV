@@ -86,6 +86,10 @@ def create_app() -> Flask:
         # toucher au code : MBDV_SITE_NAME="Autre nom".
         SITE_NAME=(os.environ.get("MBDV_SITE_NAME") or "Balise").strip(),
         ASSET_VERSION=_empreinte_assets(app.static_folder),
+        # Cadre autorise a afficher le site (anti-clickjacking). Vide par defaut :
+        # l'apercu dans une iframe d'un autre site continue de fonctionner. Sur un
+        # deploiement reel, MBDV_FRAME_ANCESTORS="'self'" ferme l'affichage en cadre.
+        FRAME_ANCESTORS=(os.environ.get("MBDV_FRAME_ANCESTORS") or "").strip(),
     )
 
     @app.context_processor
@@ -168,6 +172,25 @@ def create_app() -> Flask:
     def _en_tetes(reponse):
         reponse.headers.setdefault("X-Content-Type-Options", "nosniff")
         reponse.headers.setdefault("X-XSS-Protection", "1; mode=block")
+        # Tout est servi par l'application (polices, icones, styles compris) : une
+        # politique restrictive ne casse rien. 'unsafe-inline' reste necessaire pour
+        # les scripts et styles poses dans les pages (compteurs animes, theme).
+        # frame-ancestors n'est pose que si MBDV_FRAME_ANCESTORS est defini, pour ne
+        # pas casser l'apercu en iframe.
+        csp = [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data:",
+            "font-src 'self'",
+            "connect-src 'self'",
+            "form-action 'self'",
+            "base-uri 'none'",
+            "object-src 'none'",
+        ]
+        if app.config.get("FRAME_ANCESTORS"):
+            csp.append(f"frame-ancestors {app.config['FRAME_ANCESTORS']}")
+        reponse.headers.setdefault("Content-Security-Policy", "; ".join(csp))
         if embarque:
             # Le jeton de session circule dans l'URL : pas de fuite par Referer,
             # pas de mise en cache par un intermediaire.
@@ -175,6 +198,11 @@ def create_app() -> Flask:
             reponse.headers.setdefault("Cache-Control", "no-store")
         else:
             reponse.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if app.config["SESSION_COOKIE_SECURE"]:
+            # Le site est servi en HTTPS (MBDV_COOKIE_SECURE=1) : on demande alors
+            # au navigateur de ne plus jamais revenir en clair.
+            reponse.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return reponse
 
     @app.errorhandler(HTTPException)

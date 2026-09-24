@@ -15,14 +15,13 @@ Variables d'environnement reconnues :
 """
 import os
 
-if os.environ.get("MBDV_EMBEDDED_SESSION") is None:
-    os.environ["MBDV_EMBEDDED_SESSION"] = "1"
-if os.environ.get("MBDV_DEMO") is None:
-    os.environ["MBDV_DEMO"] = "1"
-if os.environ.get("MBDV_DEJA_CONNECTE") is None:
-    os.environ["MBDV_DEJA_CONNECTE"] = "1"
-
 from app import create_app
+
+# Aucun reglage n'est force ici. En particulier, l'ouverture de session sans mot
+# de passe (MBDV_DEJA_CONNECTE) et le jeu de demonstration (MBDV_DEMO) doivent
+# rester des choix explicites : poses par defaut, ils ouvraient la session du
+# dirigeant a quiconque connait l'adresse, y compris sur un deploiement reel.
+# Pour un apercu, les definir a la main (voir README, section « Apercu »).
 
 app = create_app()
 

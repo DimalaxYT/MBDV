@@ -139,11 +139,13 @@
   <!-- SECTION 06 : STUDIO OPÉRATIONNEL COMPLET -->
   <section id="studio" class="pres-section">
     <div class="pres-container">
-      <div class="section-badge">06 · STUDIO OPÉRATIONNEL INTERACTIF</div>
-      <h2 class="section-title">L'outil complet, disponible directement sur ce visuel.</h2>
+      <div class="section-badge">06 · STUDIO DE DÉMONSTRATION</div>
+      <h2 class="section-title">Les écrans de l'outil, en libre essai.</h2>
       <p class="section-lede">
-        Recherche en direct, détection de sites, suivi commercial d'équipe, portefeuille CRM et panel staff :
-        toutes les fonctions de Balise Prospection sont intégrées et immédiatement opérationnelles.
+        Recherche, détection de sites, suivi commercial d'équipe, portefeuille CRM et panel staff :
+        ce studio reprend les écrans de Balise Prospection et fonctionne sur des
+        <strong>fiches d'exemple</strong>, enregistrées dans votre navigateur. L'outil déployé, lui,
+        interroge la base officielle INSEE / RNE et partage ses données entre les associés.
       </p>
 
       <div class="studio-box">
@@ -174,6 +176,12 @@
             </button>
           </div>
         </div>
+
+        <p style="margin:0; padding:9px 18px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--line); background:var(--paper-2);">
+          {{ icon('info', 13) }}
+          Démonstration : les entreprises, compteurs et encaissements affichés dans ce studio sont
+          des exemples conservés dans votre navigateur. Aucune donnée réelle n'est envoyée.
+        </p>
 
         <div class="studio-body">
           <!-- VOLET 1 : RECHERCHE & DÉTECTION -->
@@ -214,6 +222,8 @@
                 <label for="studio-dep">Département</label>
                 <input id="studio-dep" type="text" class="studio-mini-input" list="studio-dep-list" placeholder="91, 75, 77..." spellcheck="false">
                 <datalist id="studio-dep-list">
+                  <option value="2A">2A - Corse-du-Sud</option>
+                  <option value="2B">2B - Haute-Corse</option>
                   <option value="91">91 - Essonne</option>
                   <option value="77">77 - Seine-et-Marne</option>
                   <option value="75">75 - Paris</option>

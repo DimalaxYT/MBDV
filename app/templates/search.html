@@ -37,6 +37,9 @@
       <input id="f-dep" type="text" name="departement" value="{{ p.departement }}"
              list="dep-suggestions" placeholder="91, 75, Essonne..." spellcheck="false">
       <datalist id="dep-suggestions">
+        <!-- La Corse a deux departements (2A / 2B) : « 20 » n'existe pas. -->
+        <option value="2A">2A - Corse-du-Sud</option>
+        <option value="2B">2B - Haute-Corse</option>
         <option value="91">91 - Essonne</option>
         <option value="77">77 - Seine-et-Marne</option>
         <option value="75">75 - Paris</option>
@@ -181,9 +184,16 @@
           {% if resultats.suite_possible %}Au moins{% endif %}
           <strong>{{ resultats.total_results }}</strong> entreprise{{ 's' if resultats.total_results > 1 else '' }}
           sans site détecté{{ 's' if resultats.total_results > 1 else '' }}
-          <span class="results-note">sur {{ resultats.analysees }} analysees</span>
+          <span class="results-note">sur {{ resultats.analysees }} analysées</span>
         {% else %}
           <strong>{{ resultats.total_results }}</strong> entreprise{{ 's' if resultats.total_results > 1 else '' }}
+          trouvée{{ 's' if resultats.total_results > 1 else '' }}
+          {% if resultats['items'] %}
+          <span class="results-note">{{ resultats['items']|length }} ligne{{ 's' if resultats['items']|length > 1 else '' }} sur cette page</span>
+          {% endif %}
+        {% endif %}
+        {% if resultats.ecartes_texte %}
+        <span class="results-note">&middot; écartés par les filtres : {{ resultats.ecartes_texte }}</span>
         {% endif %}
       </div>
       <div class="results-actions">
