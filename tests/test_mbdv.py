@@ -2501,3 +2501,230 @@ def test_page_presentation_vitrine(client):
     assert "Aucun site détecté" in page
     assert "Workflow" in page or "WORKFLOW" in page
 
+
+# --------------------------------------------------------------------------
+# Correctifs : acces anonyme, Corse, liste noire, DNS borne, instantanes, reprise
+# --------------------------------------------------------------------------
+
+def test_run_py_n_ouvre_aucune_session_ni_demonstration(tmp_path, monkeypatch):
+    """`python run.py` ne force plus aucun reglage d'apercu.
+
+    Le point d'entree livrait MBDV_DEJA_CONNECTE / MBDV_EMBEDDED_SESSION / MBDV_DEMO
+    quand ces variables etaient absentes : sur un deploiement reel, un simple GET
+    ouvrait alors la session du dirigeant, sans mot de passe, et le jeton de session
+    circulait dans l'URL.
+    """
+    import runpy
+    monkeypatch.setenv("MBDV_DATA_DIR", str(tmp_path / "data"))
+    for variable in ("MBDV_DEJA_CONNECTE", "MBDV_EMBEDDED_SESSION",
+                     "MBDV_EMBEDDED_COOKIES", "MBDV_DEMO"):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setattr(detect, "_resout", lambda host: False)
+
+    racine = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    module = runpy.run_path(os.path.join(racine, "run.py"), run_name="mbdv_test")
+    application = module["app"]
+    assert application.config["DEJA_CONNECTE"] is False
+    assert application.config["EMBEDDED_SESSION"] is False
+    assert application.config["DEMO_ALLOWED"] is False
+
+    vierge = application.test_client()                 # aucun cookie, aucun identifiant
+    reponse = vierge.get("/")
+    assert reponse.status_code == 302
+    assert "/connexion" in reponse.headers["Location"]
+    assert "_s=" not in reponse.headers["Location"]    # aucune session transportee
+    assert "Comptes des associés" not in vierge.get("/staff").get_data(as_text=True)
+
+
+def test_code_postal_corse_deduit_le_bon_departement(client, monkeypatch):
+    """« coiffeur 20200 » cherche en Haute-Corse (2B), jamais dans un « departement 20 »."""
+    assert gov_api.departement_depuis_code_postal("20200") == "2B"
+    assert gov_api.departement_depuis_code_postal("20100") == "2A"
+    assert gov_api.departement_depuis_code_postal("97400") == "974"
+    assert gov_api.departement_depuis_code_postal("91000") == "91"
+    assert gov_api.departement_depuis_code_postal("") == ""
+    assert gov_api.departement_depuis_code_postal("2B") == ""
+
+    vus = {}
+
+    def espion_search(q="", page=1, departement="", code_postal="", **kwargs):
+        vus.update({"q": q, "departement": departement, "code_postal": code_postal})
+        return {"items": [], "total_results": 0, "page": page, "total_pages": 1}
+
+    monkeypatch.setattr(gov_api, "search", espion_search)
+    connexion(client)
+
+    client.get("/?q=coiffeur+20200")
+    assert vus == {"q": "coiffeur", "departement": "2B", "code_postal": "20200"}
+
+    client.get("/?q=boulangerie+20100")
+    assert vus["departement"] == "2A"
+
+    client.get("/?q=plombier+20200&code_postal=20100")
+    assert vus["departement"] == "2B"           # le code postal du filtre prime
+
+
+def test_marques_a_mot_courant_ne_sont_pas_exclues(client, monkeypatch):
+    """« AVIS IMMOBILIER » ou « CRIT'ERRE » sont des PME locales, pas des enseignes.
+
+    La liste noire matchait le mot « avis » et le sigle « crit » au milieu d'une
+    denomination : ces entreprises disparaissaient de la prospection, en silence.
+    """
+    assert not gov_api.est_grande_entreprise({"nom": "AVIS IMMOBILIER"})
+    assert not gov_api.est_grande_entreprise({"nom": "CRIT'ERRE", "naf_code": "43.21A"})
+    assert not gov_api.est_grande_entreprise({"nom": "L'AVISE CONSEIL"})
+    # Les vraies enseignes restent ecartees
+    assert gov_api.est_grande_entreprise({"nom": "AVIS BUDGET"})
+    assert gov_api.est_grande_entreprise({"nom": "CRIT FRANCE"})
+    assert gov_api.est_grande_entreprise({"nom": "CRIT INTERIM"})
+
+    # Et elles apparaissent bien dans les resultats, sans option particuliere
+    monkeypatch.setattr(gov_api, "search", faux_search(
+        lambda page: [entreprise("111111111", "AVIS IMMOBILIER"),
+                      entreprise("222222222", "CRIT'ERRE")] if page == 1 else []))
+    connexion(client)
+    html = client.get("/?q=immobilier").get_data(as_text=True)
+    assert "AVIS IMMOBILIER" in html
+    assert "222222222" in html          # CRIT'ERRE : l'apostrophe est echappee en HTML
+    assert "CRIT&#39;ERRE" in html
+
+
+def test_resultats_ecartes_annonces_dans_la_recherche(client, monkeypatch):
+    """Masquees, grandes enseignes et hors-zone sont comptes et annonces.
+
+    Elles disparaissaient du tableau sans un mot : impossible de savoir combien de
+    resultats officiels n'etaient pas affiches, ni pourquoi.
+    """
+    pme = entreprise("111111111", "COIFFURE A", departement="91", code_postal="91000")
+    ge = entreprise("222222222", "HYPERMARCHE GE", categorie="GE", effectif_code="52",
+                    departement="91", code_postal="91000")
+    ailleurs = entreprise("333333333", "COIFFURE B", departement="77", code_postal="77000")
+    monkeypatch.setattr(gov_api, "search", faux_search(
+        lambda page: [pme, ge, ailleurs] if page == 1 else []))
+    connexion(client)
+
+    client.post("/api/masquer", json={"siren": "111111111", "nom": "COIFFURE A",
+                                      "raison": "Doublon", "snapshot": pme},
+                headers={"X-CSRF-Token": jeton(client)})
+
+    html = client.get("/?q=coiffure&departement=91").get_data(as_text=True)
+    assert "1 masquée, 1 grande enseigne, 1 hors zone" in html
+    assert "écartés par les filtres" in html
+    for nom in ("COIFFURE A", "HYPERMARCHE GE", "COIFFURE B"):
+        assert nom not in html
+
+    # L'option « inclure les masquees » les fait revenir, et le compteur disparait
+    html_masquees = client.get("/?q=coiffure&departement=91&inclure_masquees=1").get_data(as_text=True)
+    assert "COIFFURE A" in html_masquees
+    assert "1 masquée" not in html_masquees
+
+
+def test_instantane_envoye_par_le_client_est_nettoye(client):
+    """Le serveur ne stocke d'un instantane que des champs connus, bornes et types."""
+    connexion(client)
+    entete = {"X-CSRF-Token": jeton(client)}
+    charge = {
+        "siren": "123456789",
+        "nom": "N" * 900,                     # texte trop long
+        "champ_inconnu": "valeur injectee",   # champ hors contrat
+        "complements": {"bio": True},
+        "dirigeants": [{"nom": "Alice"}],
+        "actif": True,
+    }
+    assert client.post("/api/suivre", json={"snapshot": charge}, headers=entete).status_code == 200
+    with base(client) as b:
+        stocke = json.loads(b.one("SELECT snapshot FROM tracked WHERE siren = '123456789'")["snapshot"])
+    assert "champ_inconnu" not in stocke
+    assert len(stocke["nom"]) == 500          # tronque a la taille maximale
+    assert stocke["complements"] == {"bio": True}
+
+    # Meme nettoyage pour l'instantane conserve avec un masquage
+    masque = dict(charge, siren="987654321", raison="Doublon")
+    masque["champ_inconnu"] = "valeur injectee"
+    assert client.post("/api/masquer", json=masque, headers=entete).status_code == 200
+    with base(client) as b:
+        conserve = json.loads(b.one("SELECT snapshot FROM hides WHERE siren = '987654321'")["snapshot"])
+    assert "champ_inconnu" not in conserve
+
+
+def test_les_encaissements_supprimes_ne_reviennent_pas_au_redemarrage(tmp_path, monkeypatch):
+    """La reprise des anciens montants ne se rejoue pas : supprimer ne ressuscite rien."""
+    dossier = tmp_path / "data"
+    dossier.mkdir()
+    conn = sqlite3.connect(dossier / "mbdv.sqlite3")
+    conn.executescript(
+        "CREATE TABLE tracked ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " siren TEXT UNIQUE NOT NULL, snapshot TEXT NOT NULL,"
+        " status TEXT NOT NULL DEFAULT 'a_contacter', note TEXT NOT NULL DEFAULT '',"
+        " added_by TEXT NOT NULL, added_at TEXT NOT NULL,"
+        " status_updated_by TEXT, status_updated_at TEXT,"
+        " montant_cents INTEGER NOT NULL DEFAULT 0, signe_le TEXT);")
+    conn.execute("INSERT INTO tracked (siren, snapshot, added_by, added_at, montant_cents,"
+                 " signe_le) VALUES ('111111111', ?, 'admin', '2026-01-01T00:00:00Z',"
+                 " 450000, '2026-09-10T14:30')",
+                 (json.dumps(entreprise("111111111", "Alpha")),))
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("MBDV_DATA_DIR", str(dossier))
+    monkeypatch.setattr(detect, "_resout", lambda host: False)
+    application = create_app()
+    with application.app_context():
+        assert db.one("SELECT COUNT(*) n FROM benefices")["n"] == 1     # reprise faite
+        db.execute("DELETE FROM benefices")                             # suppression assumee
+        db.init_app(application)                                        # redemarrage
+        assert db.one("SELECT COUNT(*) n FROM benefices")["n"] == 0
+
+
+def test_resolution_dns_bornee_meme_si_le_dns_ne_repond_pas(monkeypatch):
+    """Une resolution qui ne repond pas est arretee a l'echeance (sous-processus).
+
+    `socket.getaddrinfo` ignore `socket.setdefaulttimeout` : sans cette echeance,
+    un domaine muet occupait un thread du pool indefiniment.
+    """
+    import subprocess as sp
+    vus = {}
+
+    def faux_run(commande, **kwargs):
+        vus["timeout"] = kwargs.get("timeout")
+        raise sp.TimeoutExpired(commande, kwargs.get("timeout"))
+
+    monkeypatch.setattr(detect.subprocess, "run", faux_run)
+    assert detect._resout("domaine-qui-ne-repond-pas.fr") is False
+    assert vus["timeout"] == detect.TIMEOUT_RESOLUTION
+
+    # Un domaine .fr trouve arrete la recherche : les autres candidats ne sont pas testes
+    tests = []
+    def resout_espion(host):
+        tests.append(host)
+        return host.endswith(".fr")
+    monkeypatch.setattr(detect, "_resout", resout_espion)
+    domaine = detect._verifie_domaines("BOULANGERIE DUPONT")
+    assert domaine and domaine.endswith(".fr")
+
+    # Budget epuise sans rien trouver : « on ne sait pas », donc rien de mis en cache
+    monkeypatch.setattr(detect, "_resout", lambda host: False)
+    monkeypatch.setattr(detect, "LOOKUP_TIMEOUT_TOTAL", 0)
+    assert detect._verifie_domaines("BOULANGERIE DUPONT") == "TIMEOUT"
+
+    with create_app().app_context():
+        etat = detect.verifie({"siren": "123456789", "nom": "BOULANGERIE DUPONT"})
+    assert etat["status"] == "inconnu"
+    with create_app().app_context():
+        assert not db.query("SELECT * FROM site_cache")
+
+
+def test_la_vitrine_annonce_qu_elle_fonctionne_sur_des_exemples(client):
+    """« /presentation » ne presente plus un studio en direct : c'est une demonstration."""
+    page = client.get("/presentation").get_data(as_text=True)
+    assert "STUDIO DE DÉMONSTRATION" in page
+    assert "exemples conservés dans votre navigateur" in page
+    assert "Aucune donnée réelle n'est envoyée" in page
+
+
+def test_comptage_tolerant_sur_table_absente(app):
+    """Un indicateur lis sur une table absente vaut zero, jamais une erreur 500."""
+    with app.app_context():
+        assert views._compte("SELECT COUNT(*) n FROM table_qui_n_existe_pas") == 0
+        assert views._compte("SELECT COUNT(*) n FROM tracked") >= 0

@@ -229,6 +229,34 @@ def naf_label(code):
     return NAF_LABELS.get(code)
 
 
+def departement_depuis_code_postal(code_postal) -> str:
+    """Deduit le departement d'un code postal, Corse et outre-mer compris.
+
+    Les deux premiers chiffres ne suffisent pas : « 20200 » donne « 2A » (et non
+    « 20 », qui n'existe pas), « 20600 » donne « 2B », « 97400 » donne « 974 ».
+    Toute la deduction passe par ici, pour que la recherche filtree sur le texte
+    saisi et la normalisation des fiches officielles donnent le meme resultat.
+    """
+    cp = _clean(code_postal) or ""
+    if not re.fullmatch(r"\d{5}", cp):
+        return ""
+    if cp.startswith("20"):
+        return "2A" if cp < "20200" else "2B"
+    if cp.startswith(("97", "98")):
+        return cp[:3]
+    return cp[:2]
+
+
+# Marques dont le nom est aussi un mot francais courant : « AVIS IMMOBILIER »
+# (agence locale) ou « CRIT'ERRE » (electricien) sont de vraies PME, pas des
+# enseignes nationales. Ces marques ne comptent donc que sous leur forme complete
+# d'enseigne, jamais quand le mot apparait au milieu d'une denomination.
+MARQUES_MOTS_COURANTS = (
+    r"AVIS\s+(?:BUDGET|LOCATION|RENT\s+A\s+CAR)",
+    r"CRIT\s+(?:FRANCE|INTERIM|INT[ÉE]RIM|BTP|A[ÉE]ROPORT|JOBS|MARITIME|TRAVAUX|CDD)",
+)
+
+
 def _est_marque_carrefour(nom: str, enseigne: str, naf: str) -> bool:
     texte = slug_ascii(f"{nom} {enseigne}").upper()
     if "CARREFOUR" not in texte:
@@ -334,9 +362,12 @@ def est_grande_entreprise(c: dict) -> bool:
         return True
     if re.search(
         r"\b(?:TOTALENERGIES|NORAUTO|FEU\s+VERT|MIDAS|SPEEDY|POINT\s+S|CARGLASS|"
-        r"EUROPCAR|SIXT|HERTZ|AVIS)\b",
+        r"EUROPCAR|SIXT|HERTZ)\b",
         texte,
     ):
+        return True
+    # Marques a mot courant (AVIS, CRIT...) : voir MARQUES_MOTS_COURANTS.
+    if re.search("|".join(MARQUES_MOTS_COURANTS), texte):
         return True
     if re.search(
         r"\b(?:BNP\s+PARIBAS|SOCIETE\s+GENERALE|CREDIT\s+AGRICOLE|CREDIT\s+MUTUEL|"
@@ -345,7 +376,7 @@ def est_grande_entreprise(c: dict) -> bool:
         texte,
     ):
         return True
-    if re.search(r"\b(?:ADECCO|MANPOWER|RANDSTAD|CRIT|PROMAN|SYNERGIE)\b", texte):
+    if re.search(r"\b(?:ADECCO|MANPOWER|RANDSTAD|PROMAN|SYNERGIE)\b", texte):
         return True
     return bool(
         re.search(
@@ -395,15 +426,8 @@ def normalize_result(r: dict, filter_departement: str = "", filter_code_postal: 
     region_code = _clean(etab_choisi.get("region"))
 
     # Secours departement si non fourni directement dans l'etablissement mais deduisible du code postal
-    if not dept and etab_choisi.get("code_postal"):
-        cp_val = _clean(etab_choisi.get("code_postal"))
-        if cp_val and len(cp_val) == 5 and cp_val[:2].isdigit():
-            if cp_val.startswith("20"):
-                dept = "2A" if cp_val < "20200" else "2B"
-            elif cp_val.startswith(("97", "98")):
-                dept = cp_val[:3]
-            else:
-                dept = cp_val[:2]
+    if not dept:
+        dept = departement_depuis_code_postal(etab_choisi.get("code_postal")) or None
 
     # Enseigne : denomination usuelle de l'etablissement (source SIRENE). Utile a la
     # detection de site : "SARL DUPONT" peut exercer sous "Le Fournil d'Alice".
@@ -417,6 +441,11 @@ def normalize_result(r: dict, filter_departement: str = "", filter_code_postal: 
         enseigne = None
 
     nature = _clean(r.get("nature_juridique"))
+    # Libelle officiel de l'API en secours : la table locale ne couvre que les
+    # formes les plus courantes, et « Forme 6903 » n'apprend rien a personne.
+    forme = (NATURE_JURIDIQUE.get(nature)
+             or _clean(r.get("libelle_nature_juridique"))
+             or (f"Forme {nature}" if nature else None))
 
     dirigeants = []
     for d in (r.get("dirigeants") or [])[:8]:
@@ -440,14 +469,15 @@ def normalize_result(r: dict, filter_departement: str = "", filter_code_postal: 
         "siren": r.get("siren"),
         "nom": nom_principal,
         "sigle": _clean(r.get("sigle")),
-        "forme": NATURE_JURIDIQUE.get(nature, f"Forme {nature}" if nature else None),
+        "forme": forme,
         "nature_code": nature,
         "date_creation": r.get("date_creation"),
         "date_fermeture": r.get("date_fermeture"),
         "categorie": _clean(r.get("categorie_entreprise")),
         "actif": (r.get("etat_administratif") or "A") == "A",
         "naf_code": r.get("activite_principale"),
-        "naf_label": naf_label(r.get("activite_principale")),
+        "naf_label": naf_label(r.get("activite_principale"))
+                     or _clean(r.get("libelle_activite_principale")),
         "section": r.get("section_activite_principale") or section_de(r.get("activite_principale")),
         "effectif_code": r.get("tranche_effectif_salarie"),
         "effectif": EFFECTIFS.get(r.get("tranche_effectif_salarie") or "NN", "Non renseigné"),

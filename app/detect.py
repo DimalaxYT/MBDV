@@ -9,9 +9,12 @@ La methode est volontairement prudente : les resultats restent des indices, et
 chaque associe peut corriger manuellement depuis la fiche entreprise.
 """
 import logging
+import os
 import re
-import socket
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait
+import subprocess
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 from . import db
@@ -20,8 +23,10 @@ from .gov_api import slug_ascii
 LOGGER = logging.getLogger(__name__)
 
 CACHE_TTL_JOURS = 30
-LOOKUP_TIMEOUT_TOTAL = 2.5   # budget global par entreprise (secondes)
+LOOKUP_TIMEOUT_TOTAL = 2.5    # budget par entreprise (secondes)
+TIMEOUT_RESOLUTION = 1.5      # echeance d'une resolution DNS (voir _resolveur_dns.py)
 TLD_CHOICES = ["fr", "com", "net"]
+_RESOLVEUR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_resolveur_dns.py")
 
 MOTS_FORME_JURIDIQUE = {
     "SARL", "SAS", "SASU", "EURL", "SCI", "SNC", "SA", "SCP", "SCM", "SELARL",
@@ -32,8 +37,10 @@ MOTS_FORME_JURIDIQUE = {
 MOTS_LIAISON = {"DE", "DU", "DES", "LA", "LE", "LES", "L", "D", "A", "AU", "AUX",
                 "ET", "EN", "SUR", "SOUS", "PAR", "POUR"}
 
-_dns_pool = ThreadPoolExecutor(max_workers=64)
-_pool = ThreadPoolExecutor(max_workers=32)
+# Chaque verification occupe un processus de resolution : on garde peu de
+# verifications simultanees (memoire du serveur) et un delai par resolution, ce
+# qui borne la duree de la page de resultats.
+_pool = ThreadPoolExecutor(max_workers=12)
 
 
 def _tokens(nom: str):
@@ -78,56 +85,56 @@ def _variantes(nom: str, enseigne=None):
 
 
 def _resout(host: str) -> bool:
+    """Vrai si le nom resout, avec une echeance reellement applicable.
+
+    `socket.getaddrinfo` ignore `socket.setdefaulttimeout` : dans un thread, une
+    resolution qui ne repond pas l'occupe indefiniment. La resolution est donc
+    faite dans un processus separe (app/_resolveur_dns.py), tue a l'echeance :
+    le thread est toujours rendu, meme face a un DNS muet.
+    """
     try:
-        socket.setdefaulttimeout(1.5)
-        socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
-        return True
-    except (socket.gaierror, OSError):
+        # Commande fixe (interpreteur courant + resolveur du projet) : `host` est
+        # transmis en argument, jamais interprete par un shell.
+        resultat = subprocess.run(  # noqa: S603
+            [sys.executable, _RESOLVEUR, host],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=TIMEOUT_RESOLUTION,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError):
         return False
+    return resultat.returncode == 0
 
 
 def _verifie_domaines(nom: str, enseigne=None):
-    """Resout jusqu'a ~12 domaines candidats dans un budget de temps fixe."""
+    """Resout les domaines candidats, .fr d'abord, dans un budget de temps fixe.
+
+    Renvoie le domaine trouve, None si aucun ne repond, ou "TIMEOUT" si le budget
+    est epuise avant d'avoir pu tester tous les candidats sans rien trouver : dans
+    ce dernier cas l'appelant ne met rien en cache, la question restant ouverte.
+    """
     candidats = []
-    bases = _variantes(nom, enseigne)
-    # On teste en priorite les extensions .fr (la cible prioritaire en France)
     for tld in TLD_CHOICES:
-        for base in bases:
-            c = f"{base}.{tld}"
-            if c not in candidats:
-                candidats.append(c)
+        for base in _variantes(nom, enseigne):
+            candidat = f"{base}.{tld}"
+            if candidat not in candidats:
+                candidats.append(candidat)
     candidats = candidats[:12]
 
-    futures = {_dns_pool.submit(_resout, c): c for c in candidats}
+    debut = time.monotonic()
     trouve = None
-    try:
-        for f in as_completed(futures.keys(), timeout=LOOKUP_TIMEOUT_TOTAL):
-            try:
-                res = f.result()
-            except (socket.gaierror, OSError):
-                continue
-            if res:
-                c = futures[f]
-                if c.endswith(".fr"):
-                    return c
-                if not trouve:
-                    trouve = c
-                    fr_futures = [fut for fut, host in futures.items()
-                                  if host.endswith(".fr") and not fut.done()]
-                    if fr_futures:
-                        done_fr, _ = wait(fr_futures, timeout=0.15)
-                        fr_matches = [futures[df] for df in done_fr
-                                      if not df.cancelled() and not df.exception() and df.result()]
-                        if fr_matches:
-                            return fr_matches[0]
-                    return trouve
-    except TimeoutError:
-        return trouve if trouve else "TIMEOUT"
-    finally:
-        for rem in futures:
-            rem.cancel()
-
+    for domaine in candidats:
+        if _resout(domaine):
+            if domaine.endswith(".fr"):
+                return domaine            # la cible prioritaire en France
+            if not trouve:
+                trouve = domaine
+        if time.monotonic() - debut >= LOOKUP_TIMEOUT_TOTAL:
+            # Budget epuise : on repond avec ce qu'on a, ou « on ne sait pas ».
+            return trouve or "TIMEOUT"
     return trouve
+
 
 
 # --------------------------------------------------------------------------
@@ -211,7 +218,10 @@ def verifie_lot(companies: list, budget_total: float = 3.0) -> None:
     """Verifie en parallele un lot d'entreprises (page de resultats).
 
     Reste volontairement borne dans le temps : cette fonction bloque la requete
-    HTTP en cours (a terme, la detection meriterait une tache de fond).
+    HTTP en cours (a terme, la detection meriterait une tache de fond). Les
+    verifications lancées et non terminees a l'echeance continuent en arriere-plan
+    puis s'arretent d'elles-memes (chaque resolution a son propre delai) ; leur
+    resultat n'est simplement pas mis en cache pour cette requete.
     """
     if not companies:
         return

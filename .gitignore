@@ -14,3 +14,8 @@ node_modules/
 # Outils de qualite (caches)
 .ruff_cache/
 .pytest_cache/
+
+# Cle de signature des sessions : ne doit jamais etre commitee, meme par erreur
+# (MBDV_DATA_DIR pointe ailleurs en production, mais un test local la laisse ici).
+secret.key
+app/secret.key

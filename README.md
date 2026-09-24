@@ -51,7 +51,7 @@ par les variables d'environnement `MBDV_ADMIN_USER`, `MBDV_ADMIN_PASSWORD`,
 - **Aucune donnee inventee par defaut.** Si la base officielle est injoignable,
   la recherche echoue en le disant (et l'export CSV est refuse) au lieu d'afficher
   des entreprises fictives.
-- Un jeu de **demonstration** (39 entreprises fictives, 24 departements) existe
+- Un jeu de **demonstration** (48 entreprises fictives, 26 departements) existe
   pour tester l'interface : il n'est servi que sur demande explicite
   (`?demo=1`) et seulement si l'option est active (`MBDV_DEMO=1`). Il est alors
   annonce en bandeau (« ces resultats ne sont pas reels ») et le fichier exporte
@@ -72,8 +72,16 @@ par les variables d'environnement `MBDV_ADMIN_USER`, `MBDV_ADMIN_PASSWORD`,
   - un domaine peut resoudre sans heberger de site.
   Chaque fiche propose donc de **revérifier** et de **confirmer manuellement**
   l'absence de site. Les resultats sont conserves en cache local 30 jours.
+  Chaque resolution DNS est faite dans un processus separe et **arretee a
+  l'echeance** (1,5 seconde) : un domaine qui ne repond pas ne peut pas immobiliser
+  un thread du serveur. Quand le budget de temps d'une page est depasse, la
+  reponse reste « a verifier » et n'est pas mise en cache.
 - Le filtre "sans site detecte" analyse jusqu'a 6 pages de resultats et ne
   garde que les entreprises sans domaine verifiable.
+- **Resultats ecartes annonces** : entreprises masquees, grandes enseignes et
+  resultats hors de la zone demandee sont comptes et affiches sous le total
+  (« ecartes par les filtres : 12 masquees, 8 grandes enseignes ») ; les cases
+  a cocher les font revenir dans la liste.
 - Export CSV de la page de resultats (format Excel francais, separateur `;`).
   La derniere colonne `Source des donnees` indique l'origine (base officielle ou
   jeu de demonstration) et le nom du fichier porte le suffixe `-DEMO` lorsque
@@ -179,7 +187,9 @@ eventuellement `MBDV_ADMIN_USER` / `MBDV_ASSOCIE_USER`,
 `MBDV_COOKIE_SECURE=1` (cookie de session uniquement en HTTPS : a activer des
 que le site est servi en HTTPS), `MBDV_TRUST_PROXY=1` (faire confiance a
 `X-Forwarded-For` / `X-Forwarded-Proto`, uniquement derriere un reverse proxy
-de confiance), `MBDV_EMBEDDED_SESSION=1` ou `MBDV_EMBEDDED_COOKIES=1` (apercu
+de confiance), `MBDV_FRAME_ANCESTORS="'self'"` (interdire l'affichage du site
+dans un cadre d'un autre site — a poser sur un site reel, a laisser vide pour un
+apercu en iframe), `MBDV_EMBEDDED_SESSION=1` ou `MBDV_EMBEDDED_COOKIES=1` (apercu
 affiche dans une iframe d'un autre site : cookie de session en
 `SameSite=None; Secure; Partitioned` et jeton de session dans l'URL si le cookie
 est malgre tout refuse — voir la section suivante).
@@ -216,11 +226,23 @@ serverless JS sans processus Python ni disque persistant).
 
 ## Note sur l'environnement d'apercu
 
-L'environnement d'execution fourni avec ce projet filtre le reseau sortant et
-ne peut joindre ni l'API officielle ni l'exterieur. Dans ce cas, l'outil bascule
-sur un **jeu de donnees de demonstration** (entreprises fictives) et l'indique
-clairement dans un bandeau. Sur une machine ou un serveur avec un reseau normal,
-la recherche interroge la base INSEE en direct, sans aucune configuration.
+Certains environnements d'execution (apercus heberges) filtrent le reseau sortant
+et ne peuvent joindre ni l'API officielle ni l'exterieur. La recherche echoue
+alors en le disant, et propose un lien vers le **jeu de donnees de demonstration**
+(entreprises fictives), servi uniquement si `MBDV_DEMO=1` a ete defini.
+
+Aucun jeu de donnees fictif n'est donc active par defaut : `python run.py` ne
+force **aucun** reglage d'apercu (`MBDV_DEMO`, `MBDV_EMBEDDED_SESSION`,
+`MBDV_DEJA_CONNECTE`). Pour obtenir un apercu pret a cliquer sans mot de passe :
+
+```bash
+MBDV_EMBEDDED_SESSION=1 MBDV_DEMO=1 MBDV_DEJA_CONNECTE=1 python run.py
+```
+
+Ces trois variables doivent rester reservees a un environnement de
+demonstration : `MBDV_DEJA_CONNECTE=1` ouvre la session du dirigeant sans mot de
+passe, et `MBDV_EMBEDDED_SESSION=1` fait voyager la session dans l'URL. Sur un
+serveur, la connexion reste exigee.
 
 ## Structure
 
@@ -232,6 +254,7 @@ app/
   auth.py               sessions, CSRF, anti brute-force, filtres de rendu
   gov_api.py            client API officielle + normalisation des donnees
   detect.py             detection heuristique de site web + cache
+  _resolveur_dns.py     resolution DNS isolee en sous-processus (arretee a l'echeance)
   demo_data.py          jeu de demonstration (reseau filtre uniquement)
   icons.py              icones SVG inline
   views.py              routes recherche / fiche / portefeuille / staff / API

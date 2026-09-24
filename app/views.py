@@ -149,22 +149,6 @@ def presentation():
         c["tracked"] = False
         c["statut"] = "a_contacter"
 
-    def compte(sql, params=()):
-        try:
-            return db.one(sql, params)["n"]
-        except (sqlite3.Error, KeyError, TypeError):
-            return 0
-
-    stats = {
-        "suivies": max(compte("SELECT COUNT(*) n FROM tracked"), 18),
-        "a_contacter": max(compte("SELECT COUNT(*) n FROM tracked WHERE status = 'a_contacter'"), 7),
-        "masquees": max(compte("SELECT COUNT(*) n FROM hides WHERE restored_at IS NULL"), 5),
-        "sans_site": max(compte("SELECT COUNT(*) n FROM site_cache WHERE status = 'aucun'"), 32),
-        "avec_site": max(compte("SELECT COUNT(*) n FROM site_cache WHERE status = 'site'"), 16),
-        "analysees": max(compte("SELECT COUNT(*) n FROM site_cache"), 48),
-        "clients": max(compte("SELECT COUNT(*) n FROM tracked WHERE status = 'client'"), 4),
-    }
-
     sections_activite = [
         ("A", "Agriculture, sylviculture et pêche"),
         ("B", "Industries extractives"),
@@ -208,9 +192,21 @@ def presentation():
         statuts_pipeline=STATUTS_PIPELINE,
         sections_activite=sections_activite,
         tranches_effectif=tranches_effectif,
-        stats=stats,
         est_connecte=bool(session.get("uid")),
     )
+
+
+def _compte(sql: str, params=()) -> int:
+    """Compte en base, tolerant : une table absente ne doit pas casser une page.
+
+    Utilise par les pages d'accueil et de presentation, qui affichent des
+    indicateurs : mieux vaut un zero explique qu'une erreur 500 (et jamais un
+    chiffre invente, qui ne serait pas une mesure).
+    """
+    try:
+        return db.one(sql, params)["n"]
+    except (sqlite3.Error, KeyError, TypeError):
+        return 0
 
 
 # --------------------------------------------------------------------------
@@ -222,7 +218,7 @@ def presentation():
 def accueil():
     """Page d'accueil : explication de l'outil et indicateurs reels de l'equipe."""
     def compte(sql, params=()):
-        return db.one(sql, params)["n"]
+        return _compte(sql, params)
 
     suivies = compte("SELECT COUNT(*) n FROM tracked")
     par_statut = {r["status"]: r["n"] for r in db.query(
@@ -295,7 +291,10 @@ def _parse_geo_dans_requete(q: str, dep: str, cp: str):
         if not cp:
             cp = trouve_cp
         if not dep:
-            dep = trouve_cp[:3] if trouve_cp.startswith(("97", "98")) else trouve_cp[:2]
+            # Meme deduction que pour les fiches officielles : « 20200 » vaut 2A
+            # (le departement 20 n'existe pas) et non « 20 », qui ne renvoyait
+            # aucun resultat sans explication.
+            dep = gov_api.departement_depuis_code_postal(trouve_cp)
         q = (q[:m_cp.start()] + " " + q[m_cp.end():]).strip()
         q = re.sub(r"\s+", " ", q)
 
@@ -367,15 +366,51 @@ def _a_des_criteres(p) -> bool:
                 or p["section"] or p["effectif"])
 
 
+# Motifs pour lesquels un resultat officiel n'est pas affiche : chacun est compte
+# et annonce a l'utilisateur, pour qu'un resultat ecarte ne soit jamais invisible.
+ECART_MASQUEE = "masquees"
+ECART_GRANDE = "grandes"
+ECART_ZONE = "hors_zone"
+LIBELLES_ECART = {
+    ECART_MASQUEE: ("masquée", "masquées"),
+    ECART_GRANDE: ("grande enseigne", "grandes enseignes"),
+    ECART_ZONE: ("hors zone", "hors zone"),
+}
+
+
+def _raison_exclusion(c, p, masquees) -> str:
+    """Pourquoi ce prospect est ecarte, ou None s'il est affichable.
+
+    Masquage, grandes entreprises et localisation etaient jusqu'ici melanges dans
+    un simple booleen : impossible de dire a l'utilisateur combien de resultats
+    avaient disparu, ni pourquoi.
+    """
+    if not p["inclure_masquees"] and c["siren"] in masquees:
+        return ECART_MASQUEE
+    if not p.get("inclure_grandes") and gov_api.est_grande_entreprise(c):
+        return ECART_GRANDE
+    if p["departement"] and c.get("departement") != p["departement"]:
+        return ECART_ZONE
+    if p["code_postal"] and c.get("code_postal") != p["code_postal"]:
+        return ECART_ZONE
+    return None
+
+
+def _synthese_ecartes(comptes: dict) -> str:
+    """« 12 masquées, 8 grandes enseignes » (ou chaine vide si rien n'est ecarte)."""
+    morceaux = []
+    for code in (ECART_MASQUEE, ECART_GRANDE, ECART_ZONE):
+        n = comptes.get(code, 0)
+        if not n:
+            continue
+        singulier, pluriel = LIBELLES_ECART[code]
+        morceaux.append(f"{n} {singulier if n == 1 else pluriel}")
+    return ", ".join(morceaux)
+
+
 def _valide_entreprise(c, p, masquees):
     """Controle la validite d'un prospect (masquage, grandes entreprises, localisation)."""
-    if not p["inclure_masquees"] and c["siren"] in masquees:
-        return False
-    if not p.get("inclure_grandes") and gov_api.est_grande_entreprise(c):
-        return False
-    if p["departement"] and c.get("departement") != p["departement"]:
-        return False
-    return not (p["code_postal"] and c.get("code_postal") != p["code_postal"])
+    return _raison_exclusion(c, p, masquees) is None
 
 
 def _chercher(p, max_pages: int):
@@ -412,15 +447,24 @@ def _chercher(p, max_pages: int):
                 inclure_grandes=p.get("inclure_grandes", False),
             ), True
 
+    ecartes: dict = {}
+
+    def compte_ecartes(lot):
+        for c in lot:
+            raison = _raison_exclusion(c, p, masquees)
+            if raison:
+                ecartes[raison] = ecartes.get(raison, 0) + 1
+
     if not p["sans_site"]:
         premier, demo = recherche_source(p["page"])
+        compte_ecartes(premier["items"])
         items = [c for c in premier["items"] if _valide_entreprise(c, p, masquees)]
         detect.verifie_lot(items)
         return {
             "items": items, "total_results": premier["total_results"],
             "page": premier["page"], "total_pages": premier["total_pages"],
             "demo": demo, "analysees": len(premier["items"]),
-            "suite_possible": False,
+            "suite_possible": False, "ecartes": ecartes,
         }
 
     # Filtre "sans site" actif : on analyse toujours depuis la premiere page de
@@ -431,6 +475,7 @@ def _chercher(p, max_pages: int):
     epuise = False
     batch, demo = recherche_source(1)
     while True:
+        compte_ecartes(batch["items"])
         candidats = [c for c in batch["items"] if _valide_entreprise(c, p, masquees)]
         detect.verifie_lot(candidats)
         analysees += len(batch["items"])
@@ -462,6 +507,7 @@ def _chercher(p, max_pages: int):
         "demo": demo,
         "analysees": analysees,
         "suite_possible": not epuise,
+        "ecartes": ecartes,
     }
 
 
@@ -525,6 +571,7 @@ def recherche():
         try:
             resultats = _chercher(p, MAX_PAGES_EXPANSION)
             resultats["items"] = _attache_etats(resultats["items"])
+            resultats["ecartes_texte"] = _synthese_ecartes(resultats.get("ecartes") or {})
             ctx["resultats"] = resultats
         except BaseIndisponible as exc:
             ctx["erreur"] = ("La base officielle (recherche-entreprises.api.gouv.fr) est "
@@ -544,7 +591,6 @@ def export_csv():
     p = _params_recherche()
     if not _a_des_criteres(p):
         abort(400)
-    p["sans_site"] = request.args.get("sans_site") == "1"
     try:
         res = _chercher(p, MAX_PAGES_EXPORT)
     except BaseIndisponible as exc:
@@ -658,6 +704,59 @@ def _json():
     return data
 
 
+# Champs d'une fiche que le serveur accepte de conserver dans un instantane. Le
+# navigateur renvoie la ligne qu'il a recue ; le filtrage ci-dessous fait que
+# c'est le serveur, et non le client, qui decide ce qui entre en base.
+CHAMPS_SNAPSHOT = (
+    "siren", "nom", "sigle", "forme", "nature_code", "date_creation", "date_fermeture",
+    "categorie", "actif", "naf_code", "naf_label", "section", "effectif_code", "effectif",
+    "nb_etablissements", "adresse", "rue", "code_postal", "commune", "departement",
+    "region", "siret_siege", "siret_etab", "date_debut_activite", "enseigne", "lat", "lng",
+    "dirigeants", "finances", "tva", "complements", "source", "site", "tracked", "statut",
+)
+LONGUEUR_TEXTE_SNAPSHOT = 500      # longueur maximale d'un champ texte
+TAILLE_SNAPSHOT_MAX = 32_000       # taille maximale de l'instantane conserve (octets)
+
+
+def _valeur_snapshot(valeur):
+    """Valeur d'instantane nettoyee : texte tronque, conteneur borne, type verifie."""
+    if isinstance(valeur, bool) or valeur is None or isinstance(valeur, (int, float)):
+        return valeur
+    if isinstance(valeur, str):
+        return valeur[:LONGUEUR_TEXTE_SNAPSHOT]
+    if isinstance(valeur, list):
+        return [_valeur_snapshot(v) for v in valeur[:12]]
+    if isinstance(valeur, dict):
+        return {str(cle)[:60]: _valeur_snapshot(v)
+                for cle, v in list(valeur.items())[:20]}
+    return None
+
+
+def _nettoie_snapshot(brut) -> dict:
+    """Ne conserve d'un instantane que des champs connus, bornes et bien types.
+
+    L'instantane vient du navigateur (ligne du tableau, panneau fiche) : il etait
+    jusqu'ici stocke tel quel, si bien que le client choisissait le contenu de la
+    base. Un instantane trop volumineux est ignore : la fiche sera relue depuis la
+    base officielle, ce qui vaut mieux que de stocker n'importe quoi.
+    """
+    if not isinstance(brut, dict):
+        return {}
+    propre = {cle: _valeur_snapshot(brut[cle])
+              for cle in CHAMPS_SNAPSHOT if cle in brut}
+    if len(json.dumps(propre, ensure_ascii=False)) > TAILLE_SNAPSHOT_MAX:
+        current_app.logger.warning(
+            "Instantane refuse (au-dela de %s octets) : la fiche sera relue a l'ouverture.",
+            TAILLE_SNAPSHOT_MAX)
+        return {}
+    return propre
+
+
+def _texte_court(valeur, longueur: int = 200) -> str:
+    """Champ texte libre envoye par le client, borne avant enregistrement."""
+    return str(valeur or "").strip()[:longueur]
+
+
 def _badge_site(c):
     return render_template("partials/badge_site.html", c=c).strip()
 
@@ -667,9 +766,9 @@ def _badge_site(c):
 def api_masquer():
     d = _json()
     siren = str(d.get("siren") or "")
-    nom = str(d.get("nom") or "").strip()
+    nom = _texte_court(d.get("nom"))
     raison = str(d.get("raison") or "").strip()
-    details = str(d.get("details") or "").strip()
+    details = _texte_court(d.get("details"), 500)
     if not re.fullmatch(r"\d{9}", siren) or not nom:
         return jsonify({"ok": False, "error": "Entreprise invalide."}), 400
     if raison not in RAISONS_MASQUAGE:
@@ -683,7 +782,7 @@ def api_masquer():
             "INSERT INTO hides (siren, nom, raison, details, snapshot, hidden_by, hidden_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
             (siren, nom, raison, details,
-             json.dumps(d.get("snapshot") or {}, ensure_ascii=False),
+             json.dumps(_nettoie_snapshot(d.get("snapshot")), ensure_ascii=False),
              current_user()["username"], db.now_iso()),
         ))
     # Masquage et retrait du portefeuille dans la meme transaction : jamais
@@ -715,7 +814,7 @@ def api_retablir():
 @login_required
 def api_suivre():
     d = _json()
-    snapshot = d.get("snapshot") or {}
+    snapshot = _nettoie_snapshot(d.get("snapshot"))
     siren = str(snapshot.get("siren") or "")
     if not re.fullmatch(r"\d{9}", siren) or not snapshot.get("nom"):
         return jsonify({"ok": False, "error": "Entreprise invalide."}), 400
@@ -763,7 +862,8 @@ def api_recheck():
     siren = str(d.get("siren") or "")
     if not re.fullmatch(r"\d{9}", siren):
         return jsonify({"ok": False, "error": "SIREN invalide."}), 400
-    company = {"siren": siren, "nom": d.get("nom") or "", "enseigne": d.get("enseigne")}
+    company = {"siren": siren, "nom": _texte_court(d.get("nom")),
+               "enseigne": _texte_court(d.get("enseigne"))}
     etat = detect.verifie(company, force=True)
     c = {"siren": siren, "site": etat}
     return jsonify({"ok": True, "site": etat, "badge_html": _badge_site(c)})
@@ -786,7 +886,8 @@ def api_site_override():
         )
     else:
         db.execute("DELETE FROM overrides WHERE siren = ?", (siren,))
-    company = {"siren": siren, "nom": d.get("nom") or "", "enseigne": d.get("enseigne")}
+    company = {"siren": siren, "nom": _texte_court(d.get("nom")),
+               "enseigne": _texte_court(d.get("enseigne"))}
     etat = detect.etat_effectif(company)
     c = {"siren": siren, "site": etat or {"status": "inconnu", "domain": None,
                                           "source": "dns", "checked_at": None}}
