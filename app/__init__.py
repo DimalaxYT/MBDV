@@ -191,9 +191,11 @@ def create_app() -> Flask:
         if app.config.get("FRAME_ANCESTORS"):
             csp.append(f"frame-ancestors {app.config['FRAME_ANCESTORS']}")
         reponse.headers.setdefault("Content-Security-Policy", "; ".join(csp))
-        if embarque:
+        if auth.embarque():
             # Le jeton de session circule dans l'URL : pas de fuite par Referer,
-            # pas de mise en cache par un intermediaire.
+            # pas de mise en cache par un intermediaire. Vrai aussi quand le
+            # navigateur refuse le cookie : la session passe alors par l'URL sans
+            # que le mode ait ete force au demarrage.
             reponse.headers.setdefault("Referrer-Policy", "same-origin")
             reponse.headers.setdefault("Cache-Control", "no-store")
         else:

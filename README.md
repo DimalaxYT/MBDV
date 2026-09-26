@@ -146,6 +146,19 @@ libelles deja calcules, le navigateur se contente de les afficher.
 
 Les archives deposees sont rangees dans `data/livrables/` (hors Git), sous le nom
 `<siren>.zip`.
+
+### Connexion instable (partage de connexion, reseau mobile)
+
+- Les **lectures** (fiche entreprise, annuaire) sont rejouees une fois en cas de
+  coupure reseau ; les ecritures ne le sont jamais, pour ne pas risquer un
+  doublon.
+- `static/js/app.js` affiche « Connexion perdue. Réessayez dès que le réseau
+  revient. » puis « Connexion rétablie. » : l'incident se voit au lieu de passer
+  pour une panne de l'outil.
+- La connexion echouee faute de cookie n'oblige plus a rouvrir un onglet (voir
+  « Apercu affiche dans une iframe ») : c'est le principal echec observe sur un
+  telephone en partage de connexion.
+
 ## Donnees locales
 
 Tout est stocke dans `data/` (base SQLite + cle de sessions), hors Git :
@@ -189,26 +202,41 @@ que le site est servi en HTTPS), `MBDV_TRUST_PROXY=1` (faire confiance a
 `X-Forwarded-For` / `X-Forwarded-Proto`, uniquement derriere un reverse proxy
 de confiance), `MBDV_FRAME_ANCESTORS="'self'"` (interdire l'affichage du site
 dans un cadre d'un autre site — a poser sur un site reel, a laisser vide pour un
-apercu en iframe), `MBDV_EMBEDDED_SESSION=1` ou `MBDV_EMBEDDED_COOKIES=1` (apercu
-affiche dans une iframe d'un autre site : cookie de session en
-`SameSite=None; Secure; Partitioned` et jeton de session dans l'URL si le cookie
-est malgre tout refuse — voir la section suivante).
+apercu en iframe), `MBDV_EMBEDDED_SESSION=1` ou `MBDV_EMBEDDED_COOKIES=1` (force
+le transport de la session par jeton d'URL et le cookie de session en
+`SameSite=None; Secure; Partitioned`). Sans ces variables, une connexion depuis
+un cadre qui refuse le cookie fonctionne deja (voir la section suivante).
 
 ### Apercu affiche dans une iframe
 
 Si l'application est ouverte dans un cadre appartenant a un autre site (apercus
 heberges type e2b / Codespaces), le navigateur traite le cookie de session comme
-un cookie tiers et le refuse : le POST de connexion echoue avec « Session
-expiree ou requete non autorisee ». Deux solutions :
+un cookie tiers et le refuse. L'application s'en apercoit toute seule et
+continue de fonctionner : **rien a configurer**.
 
-1. **Ouvrir l'apercu dans un onglet dedie** (les cookies redeviennent des cookies
-   de premiere partie) ;
-2. **Demarrer le service avec `MBDV_EMBEDDED_SESSION=1`** : le cookie passe en
-   `SameSite=None; Secure; Partitioned` et, meme s'il reste refuse, l'application
-   fonctionne sans cookie — la session est transportee par un jeton signe dans
-   l'URL (`_s`), propage automatiquement aux liens, aux formulaires et aux
-   appels AJAX par `static/js/app.js`. Les pages sont alors servies avec
-   `Referrer-Policy: same-origin` et `Cache-Control: no-store`.
+- Chaque page porte un **jeton CSRF signe** au lieu d'une simple valeur de
+  session, et le formulaire de connexion part avec un marqueur `_emb=1` quand la
+  page est affichee dans un cadre (`static/js/app.js`).
+- Si le POST de connexion arrive **sans cookie de session** mais avec un jeton
+  signe emis par ce site et une provenance de meme origine (`Sec-Fetch-Site`,
+  sinon `Origin` / `Referer`), la connexion est acceptee et la session est
+  transportee par un **jeton signe dans l'URL** (`_s`), propage automatiquement
+  aux liens, aux formulaires et aux appels AJAX. Les pages sont alors servies
+  avec `Referrer-Policy: same-origin` et `Cache-Control: no-store`.
+- Des qu'un cookie revient (navigateur normal, onglet dedie), le mode cookie
+  reprend : aucun jeton ne figure dans les adresses.
+
+Une requete envoyee depuis un autre site ne beneficie jamais de ce repli, meme
+avec un jeton valide et `_emb=1` : la provenance est verifiee avant d'ouvrir une
+session sans cookie.
+
+Trois reglages restent utiles pour un apercu :
+
+1. **Ouvrir l'apercu dans un onglet dedie** : les cookies redeviennent des
+   cookies de premiere partie, c'est le mode le plus econome ;
+2. **`MBDV_EMBEDDED_SESSION=1`** : force le transport par jeton d'URL pour tous
+   les clients (le cookie passe en `SameSite=None; Secure; Partitioned`) ;
+3. **`MBDV_COOKIE_SECURE=1`** des que le site est servi en HTTPS.
 
 Pour un apercu ou l'on veut juger l'affichage sans ressaisir de mot de passe,
 `MBDV_DEJA_CONNECTE=1` ouvre la session du dirigeant au premier chargement (la
@@ -217,9 +245,9 @@ racine redirige vers `/accueil`). Ce reglage n'est pris en compte qu'avec
 de connexion reste exigee, et la page `/connexion` reste servie dans tous les
 cas.
 
-Dans les deux cas, un refus d'ecriture est journalise avec le contexte de la
-requete (mode apercu, cookie recu ou non, en-tetes `Sec-Fetch-*`) pour identifier
-la cause en une ligne.
+Un refus d'ecriture reste journalise avec le contexte de la requete (mode apercu,
+cookie recu ou non, en-tetes `Sec-Fetch-*`) pour identifier la cause en une
+ligne ; il ne reste produit que si le jeton CSRF manque ou vient d'un autre site.
 
 Note : Netlify et Vercel ne conviennent pas tels quels (sites statiques /
 serverless JS sans processus Python ni disque persistant).

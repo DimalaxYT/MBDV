@@ -6,10 +6,20 @@
   // Mode apercu embarque : la session voyage dans l'URL (cookies tiers refuses).
   var SESSION = (document.querySelector('meta[name="session-token"]') || {}).content || "";
   var DEMO = document.body.dataset.demo === "1";
+  // Page affichee dans un cadre (apercu heberge) : le navigateur refuse alors le
+  // cookie de session. On le signale au serveur (_emb=1) pour que la session
+  // passe par l'URL au lieu du cookie, sinon la connexion est refusee.
+  var CADRE = false;
+  try {
+    CADRE = window.top !== window.self;
+  } catch (e) {
+    CADRE = true;   // acces a la fenetre du haut refuse : page bien encadree
+  }
 
   function withSession(url) {
     var ajouts = [];
     if (SESSION && url.indexOf("_s=") < 0) ajouts.push("_s=" + encodeURIComponent(SESSION));
+    if (CADRE && url.indexOf("_emb=") < 0 && url.indexOf("_s=") < 0) ajouts.push("_emb=1");
     if (DEMO && url.indexOf("demo=") < 0) ajouts.push("demo=1");
     if (!ajouts.length) return url;
     return url + (url.indexOf("?") >= 0 ? "&" : "?") + ajouts.join("&");
@@ -36,9 +46,30 @@
     });
   }
 
+  // Lecture (jamais d'ecriture) : une coupure de reseau est rejouee une fois.
+  // Sur une connexion mobile instable, cela evite de tout recommencer pour un
+  // paquet perdu.
+  function get(url) {
+    var entetes = { "X-CSRF-Token": CSRF };
+    return fetch(withSession(url), { headers: entetes }).catch(function (erreur) {
+      if (!navigator.onLine) throw erreur;
+      // Courte pause avant la seconde tentative : sur un reseau mobile, la
+      // connexion revient souvent en moins d'une seconde.
+      return new Promise(function (resoudre) {
+        setTimeout(function () { resoudre(fetch(withSession(url), { headers: entetes })); }, 700);
+      });
+    });
+  }
+
   function toast(message, type) {
     var root = document.getElementById("toast-root");
-    if (!root) return;
+    if (!root) {
+      // La page de connexion n'a pas de zone de messages : on la cree.
+      root = document.createElement("div");
+      root.id = "toast-root";
+      root.setAttribute("aria-live", "polite");
+      document.body.appendChild(root);
+    }
     var el = document.createElement("div");
     el.className = "toast" + (type ? " toast-" + type : "");
     el.textContent = message;
@@ -48,6 +79,15 @@
       setTimeout(function () { el.remove(); }, 280);
     }, 3800);
   }
+
+  // Connexion mobile qui va et vient : mieux vaut le dire que laisser croire a
+  // une panne de l'application.
+  window.addEventListener("offline", function () {
+    toast("Connexion perdue. Réessayez dès que le réseau revient.", "error");
+  });
+  window.addEventListener("online", function () {
+    toast("Connexion rétablie.");
+  });
 
   function getRow(siren) {
     return document.querySelector('tr[data-siren="' + siren + '"]');
@@ -86,9 +126,7 @@
   }
 
   function loadDetail(siren) {
-    return fetch(withSession("/entreprise/" + siren + "/detail"), {
-      headers: { "X-CSRF-Token": CSRF },
-    })
+    return get("/entreprise/" + siren + "/detail")
       .then(function (r) {
         if (!r.ok) throw new Error("http");
         return r.text();
@@ -356,7 +394,7 @@
     zone.innerHTML = '<p class="row-sub">Recherche dans la base officielle…</p>';
     var url = withSession("/api/annuaire") + (withSession("/api/annuaire").indexOf("?") >= 0 ? "&" : "?")
       + "q=" + encodeURIComponent(q);
-    fetch(url, { headers: { "X-CSRF-Token": CSRF } })
+    get(url)
       .then(function (r) { return r.json(); })
       .then(function (body) {
         if (!body.ok) {
@@ -603,6 +641,16 @@
       champ.value = SESSION;
       form.appendChild(champ);
     }
+    // Page encadree : on previent le serveur que le cookie de session ne
+    // reviendra pas (formulaire de connexion compris, d'ou l'ouverture de
+    // session par jeton d'URL des la reponse suivante).
+    if (CADRE && !SESSION && !form.querySelector('input[name="_emb"]')) {
+      var marque = document.createElement("input");
+      marque.type = "hidden";
+      marque.name = "_emb";
+      marque.value = "1";
+      form.appendChild(marque);
+    }
     if (DEMO && !form.querySelector('input[name="demo"]')) {
       var marqueur = document.createElement("input");
       marqueur.type = "hidden";
@@ -617,7 +665,7 @@
   }, true);
 
   document.addEventListener("click", function (ev) {
-    if ((!SESSION && !DEMO) || !ev.target || !ev.target.closest) return;
+    if ((!SESSION && !DEMO && !CADRE) || !ev.target || !ev.target.closest) return;
     var lien = ev.target.closest("a[href]");
     if (!lien) return;
     var href = lien.getAttribute("href") || "";

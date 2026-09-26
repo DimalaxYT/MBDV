@@ -229,6 +229,88 @@ def test_api_sans_cookie_repond_en_json(client):
     assert reponse.is_json and reponse.get_json()["ok"] is False
 
 
+# --------------------------------------------------------------------------
+# Session sans cookie : apercu affiche dans un cadre, sans aucun reglage
+# --------------------------------------------------------------------------
+
+_ENTETES_CADRE = {"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Dest": "iframe"}
+
+
+def _connexion_cadre_sans_cookie(app, formulaire=None, entetes=None):
+    """Connexion depuis un navigateur qui ne garde aucun cookie.
+
+    La page est lue par un premier client (le navigateur qui charge le
+    formulaire) ; le POST part d'un client vierge, donc sans le cookie de
+    session : c'est ce que fait un apercu affiche dans un cadre tiers.
+    """
+    page = app.test_client().get("/connexion", headers={"Sec-Fetch-Dest": "iframe"})
+    corps = page.get_data(as_text=True)
+    jeton = re.search(r'name="_csrf" value="([^"]+)"', corps).group(1)
+    donnees = {"username": "admin", "password": "MBDV-admin-2026", "_csrf": jeton}
+    donnees.update(formulaire or {})
+    return app.test_client().post("/connexion", data=donnees,
+                                  headers=entetes or _ENTETES_CADRE)
+
+
+def test_connexion_sans_cookie_ouvre_la_session_dans_l_url(app):
+    """Sans variable d'environnement : le cadre qui refuse le cookie passe par l'URL."""
+    reponse = _connexion_cadre_sans_cookie(app, formulaire={"_emb": "1"})
+    assert reponse.status_code == 302                     # et non un refus CSRF
+    cible = reponse.headers["Location"]
+    assert cible.startswith("/accueil") and "_s=" in cible
+
+    # La page suivante est demandee par un client toujours vierge de cookies.
+    page = app.test_client().get(cible, headers=_ENTETES_CADRE)
+    corps = page.get_data(as_text=True)
+    assert page.status_code == 200
+    assert 'action="/deconnexion"' in corps               # session reconnue
+    assert 'name="session-token" content=""' not in corps  # jeton propage au JS
+    # Jeton dans l'URL : ni fuite par Referer, ni copie chez un intermediaire.
+    assert page.headers["Referrer-Policy"] == "same-origin"
+    assert page.headers["Cache-Control"] == "no-store"
+
+
+def test_connexion_sans_cookie_ecriture_autorisee(app):
+    """Le jeton d'URL ouvre aussi les ecritures (sinon la session serait inutile)."""
+    reponse = _connexion_cadre_sans_cookie(app, formulaire={"_emb": "1"})
+    jeton = reponse.headers["Location"].split("_s=")[1]
+    client = app.test_client()
+    corps = client.get("/?_s=" + jeton + "&q=coiffure", headers=_ENTETES_CADRE).get_data(as_text=True)
+    jeton_csrf = re.search(r'<meta name="csrf" content="([^"]+)"', corps).group(1)
+    ecriture = client.post("/api/suivre?_s=" + jeton,
+                           json={"snapshot": entreprise("848902672", "CARACOLE COIFFURE")},
+                           headers={"X-CSRF-Token": jeton_csrf, **_ENTETES_CADRE})
+    assert ecriture.status_code == 200, ecriture.get_data(as_text=True)
+    assert ecriture.get_json()["tracked"] is True
+
+
+def test_connexion_sans_cookie_page_deja_servie(app):
+    """Page chargee avant la perte du cookie (sans _emb) : le jeton signe suffit."""
+    reponse = _connexion_cadre_sans_cookie(app)
+    assert reponse.status_code == 302
+    assert "_s=" in reponse.headers["Location"]
+
+
+def test_connexion_sans_cookie_refusee_depuis_un_autre_site(app):
+    """Un site tiers ne peut pas faire poster le jeton : pas de connexion CSRF."""
+    reponse = _connexion_cadre_sans_cookie(
+        app, formulaire={"_emb": "1"},
+        entetes={"Sec-Fetch-Site": "cross-site", "Origin": "https://mechant.example"})
+    assert reponse.status_code == 400
+    assert "cookie de session" in reponse.get_data(as_text=True)
+
+
+def test_connexion_avec_cookie_garde_le_mode_cookie(client):
+    """Un navigateur qui garde ses cookies n'embarque aucun jeton dans l'URL."""
+    reponse = connexion(client)
+    assert reponse.status_code == 302
+    assert reponse.headers["Location"] == "/accueil"
+    assert "_s=" not in reponse.headers["Location"]
+    page = client.get("/accueil")
+    assert page.status_code == 200
+    assert "no-store" not in (page.headers.get("Cache-Control") or "")
+
+
 def test_page_erreur_soignee(client):
     reponse = client.get("/inexistant")
     assert reponse.status_code == 404
