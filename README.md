@@ -77,11 +77,24 @@ par les variables d'environnement `MBDV_ADMIN_USER`, `MBDV_ADMIN_PASSWORD`,
   un thread du serveur. Quand le budget de temps d'une page est depasse, la
   reponse reste « a verifier » et n'est pas mise en cache.
 - Le filtre "sans site detecte" analyse jusqu'a 6 pages de resultats et ne
-  garde que les entreprises sans domaine verifiable.
+  garde que les entreprises sans domaine verifiable. S'il ne garde rien, la page
+  distingue les deux causes : tous les resultats ont un domaine qui repond, ou
+  bien la verification n'a pas abouti dans le temps imparti (serveur lent) — la
+  verification se poursuivant en arriere-plan, une relance de la recherche
+  recupere alors les fiches deja verifiees.
 - **Resultats ecartes annonces** : entreprises masquees, grandes enseignes et
   resultats hors de la zone demandee sont comptes et affiches sous le total
   (« ecartes par les filtres : 12 masquees, 8 grandes enseignes ») ; les cases
   a cocher les font revenir dans la liste.
+- **Une page entierement ecartee n'affiche plus « aucun resultat »** : la
+  recherche poursuit sur les pages suivantes de l'API (6 au maximum) jusqu'a
+  remplir la page demandee, et l'en-tete annonce alors « au moins N resultats
+  sur X analyses ». Si vraiment tout est ecarte, la page dit pourquoi
+  (nombre de masquees, de grandes enseignes, de hors zone) et quoi faire.
+- Une entreprise dont le **siege est hors de la zone demandee** mais qui possede
+  un etablissement dans cette zone est rattachee a cet etablissement (adresse,
+  commune, departement) : l'API ne fournit le departement que sur le siege, il
+  est deduit du code postal pour les autres etablissements.
 - Export CSV de la page de resultats (format Excel francais, separateur `;`).
   La derniere colonne `Source des donnees` indique l'origine (base officielle ou
   jeu de demonstration) et le nom du fichier porte le suffixe `-DEMO` lorsque

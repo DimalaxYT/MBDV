@@ -1528,6 +1528,31 @@ def test_page_hors_limites_ramenee_a_la_derniere(client, monkeypatch):
     assert "Page 1 sur 1" in html
 
 
+def test_sans_site_verification_inaboutie_explique_le_delai(client, monkeypatch):
+    """Verification non terminee (reseau lent) : la page le dit, et quoi faire."""
+    monkeypatch.setattr(gov_api, "search", faux_search(_catalogue, total_results=25, total_pages=1))
+    monkeypatch.setattr(detect, "verifie_lot", lambda items, budget_total=3.0: None)
+    monkeypatch.setattr(detect, "etats_effectifs_lot", lambda items: {})
+    connexion(client)
+    html = client.get("/?q=coiffure&sans_site=1").get_data(as_text=True)
+    assert snapshots(html) == []
+    assert "25 n'ont" in html and "temps imparti" in html
+    assert "relancez la recherche" in html.lower()
+
+
+def test_sans_site_tous_ont_un_site(client, monkeypatch):
+    """Tous les resultats ont un domaine qui repond : dit clairement, sans vide muet."""
+    monkeypatch.setattr(gov_api, "search", faux_search(_catalogue, total_results=25, total_pages=1))
+    monkeypatch.setattr(detect, "verifie_lot", lambda items, budget_total=3.0: None)
+    monkeypatch.setattr(detect, "etats_effectifs_lot", lambda items: {
+        c["siren"]: {"status": "site", "domain": "exemple.fr", "source": "dns",
+                     "checked_at": "2026-09-26T10:00:00Z"} for c in items})
+    connexion(client)
+    html = client.get("/?q=coiffure&sans_site=1").get_data(as_text=True)
+    assert snapshots(html) == []
+    assert "25 ont un domaine qui répond" in html
+
+
 # --------------------------------------------------------------------------
 # Mode demonstration et export
 # --------------------------------------------------------------------------
@@ -1705,6 +1730,46 @@ def test_recherche_geo_extraction_et_filtrage_91_vs_77(client, monkeypatch):
     assert recherche_params["q"] == "coiffure"
 
 
+def test_recherche_page_ecartee_poursuit_sur_les_suivantes(client, monkeypatch):
+    """Une page entierement ecartee ne doit pas se lire « aucun resultat ».
+
+    L'API trie par pertinence : la premiere page d'une recherche large est
+    souvent faite de chaines nationales, toutes ecartees. Sans suite, la page
+    annoncait zero entreprise alors que la base en renvoyait des milliers.
+    """
+    def faux(q="", page=1, **kwargs):
+        if page == 1:
+            items = [entreprise(f"1{i:08d}", f"CHAINE NATIONALE {i}", categorie="GE")
+                     for i in range(25)]
+        else:
+            items = [entreprise(f"2{page}{i:07d}", f"BOULANGERIE ARTISANALE {page}-{i}")
+                     for i in range(25)]
+        return {"items": items, "total_results": 500, "page": page, "total_pages": 6}
+
+    monkeypatch.setattr(gov_api, "search", faux)
+    connexion(client)
+    html = client.get("/?q=boulangerie").get_data(as_text=True)
+    snaps = snapshots(html)
+    assert len(snaps) == 25                                   # la page est remplie
+    assert all(s["nom"].startswith("BOULANGERIE ARTISANALE") for s in snaps)
+    assert "Au moins" in html                                 # plafond de pages annonce
+    assert "sur 50 résultats analysés" in html
+    assert "grandes enseignes" in html                        # ecartes toujours comptes
+
+
+def test_recherche_tout_ecarte_explique_les_filtres(client, monkeypatch):
+    """Rien d'affichable du tout : la page dit pourquoi, au lieu d'un vide muet."""
+    monkeypatch.setattr(gov_api, "search", faux_search(
+        lambda page: [entreprise(f"9{page}{i:07d}", f"CHAINE {page}-{i}", categorie="GE")
+                      for i in range(25)], total_results=900, total_pages=8))
+    connexion(client)
+    html = client.get("/?q=restaurant").get_data(as_text=True)
+    assert snapshots(html) == []
+    assert "Aucune entreprise ne correspond" in html
+    assert "grandes enseignes" in html
+    assert "Inclure les grandes entreprises" in html
+
+
 def test_normalisation_champ_departement(client, monkeypatch):
     """Le champ departement accepte le nom (Essonne) ou un code avec 0 (091)."""
     recherche_params = {}
@@ -1820,6 +1885,43 @@ def test_etablissement_matching_selectionne_selon_departement():
     }
     norm_sans_dep = gov_api.normalize_result(brut_sans_dep)
     assert norm_sans_dep["departement"] == "91"
+
+
+def test_etablissement_matching_departement_deduit_du_code_postal():
+    """Forme reelle de l'API : pas de champ « departement » hors du siege.
+
+    Verifie sur recherche-entreprises.api.gouv.fr : les entrees de
+    matching_etablissements ne portent que le code postal. Sans deduction, une
+    entreprise dont le siege est ailleurs etait classee « hors zone » et
+    disparaissait des recherches par departement.
+    """
+    brut = {
+        "siren": "478455793",
+        "nom_complet": "BOULANGERIE ORMOY",
+        "categorie_entreprise": "PME",
+        # Siege reel hors du departement demande (etranger a la recherche)
+        "siege": {
+            "adresse": "615 AVENUE DE LA CHAFFINE 13160 CHATEAURENARD",
+            "code_postal": "13160", "departement": "13",
+            "libelle_commune": "CHATEAURENARD", "siret": "47845579305205",
+        },
+        # Etablissement dans le 91, sans champ "departement"
+        "matching_etablissements": [{
+            "adresse": "BATIMENT C RUE DU SAULE 91540 ORMOY",
+            "code_postal": "91540", "libelle_commune": "ORMOY",
+            "siret": "47845579300867",
+        }],
+    }
+    norm = gov_api.normalize_result(brut, filter_departement="91")
+    assert norm["departement"] == "91"
+    assert norm["code_postal"] == "91540"
+    assert norm["commune"] == "ORMOY"
+    assert norm["siret_etab"] == "47845579300867"
+    # Corse : meme deduction par code postal (20000 Ajaccio -> 2A, 20200 Bastia -> 2B).
+    assert gov_api.normalize_result(
+        {"siren": "1", "siege": {"code_postal": "20000"}})["departement"] == "2A"
+    assert gov_api.normalize_result(
+        {"siren": "1", "siege": {"code_postal": "20200"}})["departement"] == "2B"
 
 
 def test_api_cache_et_performance():
