@@ -137,6 +137,27 @@ def deconnexion():
 # Vitrine officielle de presentation (accessible publiquement)
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# Point de controle public (maintien en vie, supervision)
+# --------------------------------------------------------------------------
+
+@bp.route("/sante")
+def sante():
+    """Etat du service : reponse minuscule, sans session ni base de donnees.
+
+    Sert au bot de maintien en vie (`app/keepalive.py`) et a un moniteur
+    d'uptime : la page reste accessible sans compte, et ne touche a rien - une
+    supervision ne doit ni ouvrir de session ni reveiller la base.
+    """
+    reponse = jsonify({
+        "ok": True,
+        "service": current_app.config["SITE_NAME"],
+        "heure": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+    reponse.headers["Cache-Control"] = "no-store"
+    return reponse
+
+
 @bp.route("/presentation")
 def presentation():
     """Page vitrine officielle et espace interactif complet de la plateforme Balise Prospection."""

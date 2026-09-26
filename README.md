@@ -205,6 +205,42 @@ Creer un site de type « Application Python », commande de demarrage :
 persistant (le home du compte, ex. `/home/<compte>/data`). alwaysdata utilise
 le port qu'il fournit via l'interface, fixer `MBDV_PORT` en consequence.
 
+### Garder le service eveille (hebergements gratuits)
+
+Les offres gratuites (Render, par exemple) **endorment un service qui n'a recu
+aucune requete entrante pendant 15 minutes** : la visite suivante attend alors
+30 a 60 secondes de redemarrage. Deux pieces s'en occupent :
+
+- **Point de controle public `GET /sante`** : reponse JSON minuscule, sans
+  session ni base de donnees (utilisable aussi par une supervision).
+- **Bot de maintien en vie** (`app/keepalive.py`) : un fil discret appelle
+  `/sante` **toutes les 10 minutes** sur l'adresse **publique** du site - pas
+  `localhost`, sinon la requete ne passe pas par le proxy de l'hebergeur et ne
+  compte pas comme trafic. Il s'active tout seul des qu'une adresse est connue :
+  `RENDER_EXTERNAL_URL` (Render) ou `RAILWAY_PUBLIC_DOMAIN` (Railway), fournies
+  par la plateforme, sinon `MBDV_KEEPALIVE_URL` (ou `MBDV_SITE_URL`). En local,
+  il ne se passe rien.
+
+| Variable | Effet |
+|---|---|
+| `MBDV_KEEPALIVE_URL` | adresse publique a solliciter (ex. `https://balise.onrender.com`) |
+| `MBDV_SITE_URL` | meme role, si elle est deja definie pour d'autres usages |
+| `MBDV_KEEPALIVE` | `1` force, `0` coupe ; sans valeur : actif si une adresse est connue |
+| `MBDV_KEEPALIVE_INTERVAL` | periode entre deux pings : `600` (10 min) par defaut, `10m` / `90s` acceptes, bornee a 14 min |
+
+**Limite a connaitre** : un service **deja endormi** ne peut pas se reveiller
+lui-meme (son fil dort avec lui). Le bot empeche l'endormissement tant qu'il
+tourne ; apres un arret (redemarrage de la plateforme, plantage), la premiere
+visite rallume le service, puis le bot reprend. Pour supprimer aussi les
+reveils a froid, faites appeler `/sante` **de l'exterieur** par un moniteur
+gratuit (UptimeRobot toutes les 5 min, cron-job.org toutes les 5 a 10 min) :
+c'est la seule solution qui agit aussi sur un service endormi. GitHub Actions
+convient mal (minimum 5 min, taches souvent retardees, et minutes facturees sur
+un depot prive).
+
+Sur alwaysdata ou un serveur persistant, rien de tout cela n'est utile : le
+processus ne s'endort pas.
+
 ### Variables d'environnement utiles en production
 
 `MBDV_ADMIN_PASSWORD`, `MBDV_ASSOCIE_PASSWORD` (mots de passe initiaux),
@@ -218,7 +254,9 @@ dans un cadre d'un autre site — a poser sur un site reel, a laisser vide pour 
 apercu en iframe), `MBDV_EMBEDDED_SESSION=1` ou `MBDV_EMBEDDED_COOKIES=1` (force
 le transport de la session par jeton d'URL et le cookie de session en
 `SameSite=None; Secure; Partitioned`). Sans ces variables, une connexion depuis
-un cadre qui refuse le cookie fonctionne deja (voir la section suivante).
+un cadre qui refuse le cookie fonctionne deja (voir la section suivante),
+et `MBDV_KEEPALIVE` / `MBDV_KEEPALIVE_URL` / `MBDV_KEEPALIVE_INTERVAL` reglent
+le maintien en vie du service (voir la section precedente).
 
 ### Apercu affiche dans une iframe
 

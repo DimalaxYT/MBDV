@@ -303,7 +303,9 @@ def admin_required(view):
     return wrapped
 
 
-_PAGES_SANS_CONNEXION_AUTO = ("/connexion", "/deconnexion", "/static/", "/presentation")
+# Le point de controle /sante reste joignable sans session, meme en mode apercu :
+# c'est lui que sollicitent le bot de maintien en vie et les moniteurs d'uptime.
+_PAGES_SANS_CONNEXION_AUTO = ("/connexion", "/deconnexion", "/static/", "/presentation", "/sante")
 
 
 def _apercu_deja_connecte() -> None:

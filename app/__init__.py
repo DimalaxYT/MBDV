@@ -168,6 +168,11 @@ def create_app() -> Flask:
     from . import views
     app.register_blueprint(views.bp)
 
+    # Maintien en vie (hebergements gratuits qui s'endorment) : actif seulement
+    # quand l'adresse publique du site est connue. Voir app/keepalive.py.
+    from . import keepalive
+    keepalive.init_app(app)
+
     @app.after_request
     def _en_tetes(reponse):
         reponse.headers.setdefault("X-Content-Type-Options", "nosniff")

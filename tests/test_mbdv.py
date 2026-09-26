@@ -8,13 +8,14 @@ import json
 import os
 import re
 import sqlite3
+import threading
 from contextlib import contextmanager
 from html.parser import HTMLParser
 
 import pytest
 import requests
 
-from app import auth, create_app, db, detect, gov_api, views
+from app import auth, create_app, db, detect, gov_api, keepalive, views
 
 # --------------------------------------------------------------------------
 # Garde-fou reseau : la suite doit rester entierement hors ligne.
@@ -2912,3 +2913,171 @@ def test_comptage_tolerant_sur_table_absente(app):
     with app.app_context():
         assert views._compte("SELECT COUNT(*) n FROM table_qui_n_existe_pas") == 0
         assert views._compte("SELECT COUNT(*) n FROM tracked") >= 0
+
+
+# --------------------------------------------------------------------------
+# Point de controle et maintien en vie (hebergements qui s'endorment)
+# --------------------------------------------------------------------------
+
+def test_sante_accessible_sans_session(client):
+    """Le point de controle repond sans compte : c'est lui que les moniteurs appellent."""
+    reponse = client.get("/sante")
+    assert reponse.status_code == 200
+    corps = reponse.get_json()
+    assert corps["ok"] is True and corps["service"]
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", corps["heure"])
+    assert reponse.headers["Cache-Control"] == "no-store"
+    assert "Espace associés" not in reponse.get_data(as_text=True)
+
+
+def test_sante_toujours_joignable_en_apercu(app_deja_connecte):
+    """Meme en apercu « deja connecte », /sante n'est pas redirige vers la connexion."""
+    reponse = app_deja_connecte.test_client().get("/sante")
+    assert reponse.status_code == 200
+    assert reponse.get_json()["ok"] is True
+
+
+def test_keepalive_adresse_publique(monkeypatch):
+    """L'adresse est deduite, nettoyee, et completee par le chemin de controle."""
+    for nom in ("MBDV_KEEPALIVE_URL", "MBDV_SITE_URL", "RENDER_EXTERNAL_URL",
+                "RAILWAY_PUBLIC_DOMAIN"):
+        monkeypatch.delenv(nom, raising=False)
+    assert keepalive.url_publique() == ""            # rien a pinguer en local
+
+    monkeypatch.setenv("RENDER_EXTERNAL_URL", "https://balise.onrender.com")
+    assert keepalive.url_publique() == "https://balise.onrender.com"
+    assert keepalive.cible("https://balise.onrender.com") == "https://balise.onrender.com/sante"
+
+    # Un reglage explicite l'emporte, meme saisi sans schema ni sans barre finale.
+    monkeypatch.setenv("MBDV_KEEPALIVE_URL", "mon-site.example.com/")
+    assert keepalive.url_publique() == "https://mon-site.example.com"
+    assert keepalive.cible(keepalive.url_publique()) == "https://mon-site.example.com/sante"
+
+    monkeypatch.delenv("MBDV_KEEPALIVE_URL")
+    monkeypatch.setenv("MBDV_SITE_URL", "http://interne.local:5050")
+    assert keepalive.url_publique() == "http://interne.local:5050"
+
+    # Railway ne fournit qu'un nom d'hote : le schema est ajoute.
+    monkeypatch.delenv("MBDV_SITE_URL")
+    monkeypatch.delenv("RENDER_EXTERNAL_URL")
+    monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "balise.up.railway.app")
+    assert keepalive.url_publique() == "https://balise.up.railway.app"
+
+
+def test_keepalive_intervalle_borne(monkeypatch):
+    """10 minutes par defaut ; jamais au-dela du seuil qui endort les hebergements."""
+    monkeypatch.delenv("MBDV_KEEPALIVE_INTERVAL", raising=False)
+    assert keepalive.intervalle() == 600 == keepalive.INTERVALLE_DEFAUT
+    monkeypatch.setenv("MBDV_KEEPALIVE_INTERVAL", "10m")
+    assert keepalive.intervalle() == 600
+    monkeypatch.setenv("MBDV_KEEPALIVE_INTERVAL", "90s")
+    assert keepalive.intervalle() == 90
+    monkeypatch.setenv("MBDV_KEEPALIVE_INTERVAL", "3600")   # pingerait trop tard
+    assert keepalive.intervalle() == keepalive.INTERVALLE_MAX
+    monkeypatch.setenv("MBDV_KEEPALIVE_INTERVAL", "5")
+    assert keepalive.intervalle() == keepalive.INTERVALLE_MIN
+    monkeypatch.setenv("MBDV_KEEPALIVE_INTERVAL", "bientot")
+    assert keepalive.intervalle() == keepalive.INTERVALLE_DEFAUT
+
+
+def test_keepalive_rien_ne_demarre_sans_adresse(app, monkeypatch):
+    """Sur un poste de travail, aucun fil ne se lance : rien a solliciter."""
+    for nom in ("MBDV_KEEPALIVE_URL", "MBDV_SITE_URL", "RENDER_EXTERNAL_URL"):
+        monkeypatch.delenv(nom, raising=False)
+    keepalive.arreter()
+    try:
+        keepalive.init_app(app)
+        assert keepalive.actif() is False
+        assert "mbdv_keepalive" not in app.extensions
+    finally:
+        keepalive.arreter()
+
+
+def test_keepalive_demarre_avec_adresse_et_un_seul_fil(app, monkeypatch):
+    monkeypatch.setenv("MBDV_KEEPALIVE_URL", "https://balise.example.com")
+    monkeypatch.setattr(keepalive, "ping", lambda url, timeout=None: (True, "HTTP 200"))
+    keepalive.arreter()
+    try:
+        keepalive.init_app(app)
+        assert keepalive.actif() is True
+        assert app.extensions["mbdv_keepalive"]["url"] == "https://balise.example.com/sante"
+        # Une seconde activation ne doit pas doubler les requetes.
+        thread = keepalive.demarrer(app, "https://balise.example.com/sante", 600)
+        assert keepalive.demarrer(app, "https://balise.example.com/sante", 600) is thread
+    finally:
+        keepalive.arreter()
+    assert keepalive.actif() is False
+
+
+def test_keepalive_desactive_par_reglage(app, monkeypatch):
+    """MBDV_KEEPALIVE=0 coupe le bot meme si l'adresse est connue."""
+    monkeypatch.setenv("MBDV_KEEPALIVE_URL", "https://balise.example.com")
+    monkeypatch.setenv("MBDV_KEEPALIVE", "0")
+    keepalive.arreter()
+    try:
+        keepalive.init_app(app)
+        assert keepalive.actif() is False
+    finally:
+        keepalive.arreter()
+
+
+def test_keepalive_ping_ne_leve_jamais(monkeypatch):
+    """Un incident reseau est rendu, jamais propage : le bot ne doit pas mourir."""
+    class Reponse:
+        status_code = 200
+
+    class ClientTiede:
+        def get(self, url, **kwargs):
+            return Reponse()
+
+    monkeypatch.setattr(keepalive, "_client", lambda: ClientTiede())
+    assert keepalive.ping("https://exemple.test/sante") == (True, "HTTP 200")
+
+    class ClientEnPanne:
+        def get(self, url, **kwargs):
+            raise requests.ConnectionError("coupure")
+
+    monkeypatch.setattr(keepalive, "_client", lambda: ClientEnPanne())
+    ok, detail = keepalive.ping("https://exemple.test/sante")
+    assert ok is False and detail == "ConnectionError"
+
+    class ClientEnErreur:
+        def get(self, url, **kwargs):
+            return type("R", (), {"status_code": 503})()
+
+    monkeypatch.setattr(keepalive, "_client", lambda: ClientEnErreur())
+    assert keepalive.ping("https://exemple.test/sante") == (False, "HTTP 503")
+
+
+def test_keepalive_boucle_pingue_et_s_arrete(app, monkeypatch):
+    """La boucle sollicite le site a intervalle regulier, puis rend la main a l'arret."""
+    monkeypatch.setattr(keepalive, "PREMIER_PING", 0)
+    appels = []
+    arret = threading.Event()
+
+    def faux_ping(url, timeout=None):
+        appels.append(url)
+        if len(appels) >= 3:
+            arret.set()
+        return True, "HTTP 200"
+
+    monkeypatch.setattr(keepalive, "ping", faux_ping)
+    keepalive._boucle(app, "https://balise.example.com/sante", 0.01, arret)
+    assert appels == ["https://balise.example.com/sante"] * 3
+
+
+def test_keepalive_boucle_survit_a_une_panne(app, monkeypatch):
+    """Une panne repetee ne tue pas le fil : il continue de solliciter le site."""
+    monkeypatch.setattr(keepalive, "PREMIER_PING", 0)
+    appels = []
+    arret = threading.Event()
+
+    def faux_ping(url, timeout=None):
+        appels.append(url)
+        if len(appels) >= 4:
+            arret.set()
+        return False, "SSLError"
+
+    monkeypatch.setattr(keepalive, "ping", faux_ping)
+    keepalive._boucle(app, "https://balise.example.com/sante", 0.01, arret)
+    assert len(appels) == 4
