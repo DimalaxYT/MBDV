@@ -387,6 +387,18 @@ def est_grande_entreprise(c: dict) -> bool:
     )
 
 
+def _departement_etab(etab: dict):
+    """Departement d'un etablissement : champ direct, sinon deduit du code postal.
+
+    L'API ne remplit le champ "departement" que sur le siege : les entrees de
+    matching_etablissements n'ont que le code postal. Sans cette deduction, une
+    entreprise dont le siege est ailleurs etait consideree « hors zone » et
+    disparaissait des recherches par departement, alors que l'API l'avait bien
+    renvoyee pour un etablissement local.
+    """
+    return _clean(etab.get("departement")) or departement_depuis_code_postal(etab.get("code_postal"))
+
+
 def normalize_result(r: dict, filter_departement: str = "", filter_code_postal: str = "") -> dict:
     """Transforme une entree API brute en dictionnaire homogene pour les vues."""
     siege = r.get("siege") or {}
@@ -400,9 +412,9 @@ def normalize_result(r: dict, filter_departement: str = "", filter_code_postal: 
             if _clean(etab.get("code_postal")) == filter_code_postal:
                 etab_choisi = etab
                 break
-    elif filter_departement and _clean(siege.get("departement")) != filter_departement:
+    elif filter_departement and _departement_etab(siege) != filter_departement:
         for etab in matching:
-            if _clean(etab.get("departement")) == filter_departement:
+            if _departement_etab(etab) == filter_departement:
                 etab_choisi = etab
                 break
 
@@ -422,7 +434,7 @@ def normalize_result(r: dict, filter_departement: str = "", filter_code_postal: 
         rue = f"{rue}, {complement}" if rue else complement
 
     commune = _clean(etab_choisi.get("libelle_commune"))
-    dept = _clean(etab_choisi.get("departement"))
+    dept = _departement_etab(etab_choisi)
     region_code = _clean(etab_choisi.get("region"))
 
     # Secours departement si non fourni directement dans l'etablissement mais deduisible du code postal

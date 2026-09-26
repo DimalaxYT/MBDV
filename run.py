@@ -12,6 +12,9 @@ Variables d'environnement reconnues :
     MBDV_ADMIN_PASSWORD   mot de passe initial du compte admin
     MBDV_ASSOCIE_USER     identifiant du second compte (associe)
     MBDV_ASSOCIE_PASSWORD mot de passe initial du compte associe
+    MBDV_KEEPALIVE_URL    adresse publique du site (maintien en vie, /sante)
+    MBDV_KEEPALIVE        1 force le maintien en vie, 0 le coupe
+    MBDV_KEEPALIVE_INTERVAL  periode des pings (600 s par defaut, 10 min)
 """
 import os
 

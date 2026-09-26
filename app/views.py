@@ -137,6 +137,27 @@ def deconnexion():
 # Vitrine officielle de presentation (accessible publiquement)
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# Point de controle public (maintien en vie, supervision)
+# --------------------------------------------------------------------------
+
+@bp.route("/sante")
+def sante():
+    """Etat du service : reponse minuscule, sans session ni base de donnees.
+
+    Sert au bot de maintien en vie (`app/keepalive.py`) et a un moniteur
+    d'uptime : la page reste accessible sans compte, et ne touche a rien - une
+    supervision ne doit ni ouvrir de session ni reveiller la base.
+    """
+    reponse = jsonify({
+        "ok": True,
+        "service": current_app.config["SITE_NAME"],
+        "heure": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+    reponse.headers["Cache-Control"] = "no-store"
+    return reponse
+
+
 @bp.route("/presentation")
 def presentation():
     """Page vitrine officielle et espace interactif complet de la plateforme Balise Prospection."""
@@ -413,6 +434,43 @@ def _valide_entreprise(c, p, masquees):
     return _raison_exclusion(c, p, masquees) is None
 
 
+def _collecte_filtree(p, max_pages, recherche_source, compte_ecartes, ecartes, masquees):
+    """Remplit la page demandee en poursuivant sur les pages suivantes de l'API.
+
+    Utilise quand une page officielle ne contient plus rien d'affichable : les
+    resultats etaient alors comptes (« 25 grandes enseignes ecartees ») mais la
+    page restait vide, ce qui se lit « aucun resultat » alors que la recherche a
+    des milliers de reponses. Le parcours repart de la premiere page pour que
+    deux requetes successives renvoient la meme liste, et s'arrete au plafond de
+    pages pour que la reponse HTTP garde une duree bornee ; `suite_possible`
+    previent alors qu'il reste des resultats au-dela.
+    """
+    collectees: list = []
+    analysees = 0
+    demo = False
+    epuise = False
+    api_page = 1
+    while True:
+        batch, demo = recherche_source(api_page)
+        compte_ecartes(batch["items"])
+        collectees.extend(c for c in batch["items"] if _valide_entreprise(c, p, masquees))
+        analysees += len(batch["items"])
+        epuise = not batch.get("items") or api_page >= batch["total_pages"]
+        if len(collectees) >= p["page"] * PER_PAGE or epuise or api_page >= max_pages:
+            break
+        api_page += 1
+    total = len(collectees)
+    total_pages = max(1, math.ceil(total / PER_PAGE))
+    page = min(p["page"], total_pages)
+    debut = (page - 1) * PER_PAGE
+    return {
+        "items": collectees[debut:debut + PER_PAGE],
+        "total_results": total, "page": page, "total_pages": total_pages,
+        "demo": demo, "analysees": analysees, "suite_possible": not epuise,
+        "ecartes": ecartes, "elargi": True, "trouves": 0, "inconnus": 0,
+    }
+
+
 def _chercher(p, max_pages: int):
     """Recherche avec detection, filtre 'sans site' et exclusion des masquees.
 
@@ -457,14 +515,20 @@ def _chercher(p, max_pages: int):
 
     if not p["sans_site"]:
         premier, demo = recherche_source(p["page"])
-        compte_ecartes(premier["items"])
         items = [c for c in premier["items"] if _valide_entreprise(c, p, masquees)]
+        if not items and premier.get("items"):
+            # Page entierement ecartee : on va chercher les suivantes. Le comptage
+            # des ecartes repart de zero dans la collecte, page 1 comprise.
+            return _collecte_filtree(p, max_pages, recherche_source, compte_ecartes,
+                                     ecartes, masquees)
+        compte_ecartes(premier["items"])
         detect.verifie_lot(items)
         return {
             "items": items, "total_results": premier["total_results"],
             "page": premier["page"], "total_pages": premier["total_pages"],
             "demo": demo, "analysees": len(premier["items"]),
-            "suite_possible": False, "ecartes": ecartes,
+            "suite_possible": False, "ecartes": ecartes, "elargi": False,
+            "trouves": 0, "inconnus": 0,
         }
 
     # Filtre "sans site" actif : on analyse toujours depuis la premiere page de
@@ -473,6 +537,11 @@ def _chercher(p, max_pages: int):
     api_page = 1
     analysees = 0
     epuise = False
+    # Deux causes possibles pour une liste vide : tous les resultats ont un site,
+    # ou bien la verification n'a pas abouti dans le temps imparti (reseau lent,
+    # serveur charge). Les distinguer evite un « aucun resultat » muet.
+    trouves = 0
+    inconnus = 0
     batch, demo = recherche_source(1)
     while True:
         compte_ecartes(batch["items"])
@@ -484,6 +553,10 @@ def _chercher(p, max_pages: int):
             etat = etats.get(c["siren"])
             if etat and etat["status"] == "aucun":
                 collectees.append(c)
+            elif etat and etat["status"] == "site":
+                trouves += 1
+            else:
+                inconnus += 1
         epuise = api_page >= batch["total_pages"]
         if len(collectees) >= p["page"] * PER_PAGE or epuise:
             break
@@ -508,6 +581,9 @@ def _chercher(p, max_pages: int):
         "analysees": analysees,
         "suite_possible": not epuise,
         "ecartes": ecartes,
+        "elargi": False,
+        "trouves": trouves,
+        "inconnus": inconnus,
     }
 
 

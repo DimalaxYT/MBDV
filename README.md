@@ -77,11 +77,24 @@ par les variables d'environnement `MBDV_ADMIN_USER`, `MBDV_ADMIN_PASSWORD`,
   un thread du serveur. Quand le budget de temps d'une page est depasse, la
   reponse reste « a verifier » et n'est pas mise en cache.
 - Le filtre "sans site detecte" analyse jusqu'a 6 pages de resultats et ne
-  garde que les entreprises sans domaine verifiable.
+  garde que les entreprises sans domaine verifiable. S'il ne garde rien, la page
+  distingue les deux causes : tous les resultats ont un domaine qui repond, ou
+  bien la verification n'a pas abouti dans le temps imparti (serveur lent) — la
+  verification se poursuivant en arriere-plan, une relance de la recherche
+  recupere alors les fiches deja verifiees.
 - **Resultats ecartes annonces** : entreprises masquees, grandes enseignes et
   resultats hors de la zone demandee sont comptes et affiches sous le total
   (« ecartes par les filtres : 12 masquees, 8 grandes enseignes ») ; les cases
   a cocher les font revenir dans la liste.
+- **Une page entierement ecartee n'affiche plus « aucun resultat »** : la
+  recherche poursuit sur les pages suivantes de l'API (6 au maximum) jusqu'a
+  remplir la page demandee, et l'en-tete annonce alors « au moins N resultats
+  sur X analyses ». Si vraiment tout est ecarte, la page dit pourquoi
+  (nombre de masquees, de grandes enseignes, de hors zone) et quoi faire.
+- Une entreprise dont le **siege est hors de la zone demandee** mais qui possede
+  un etablissement dans cette zone est rattachee a cet etablissement (adresse,
+  commune, departement) : l'API ne fournit le departement que sur le siege, il
+  est deduit du code postal pour les autres etablissements.
 - Export CSV de la page de resultats (format Excel francais, separateur `;`).
   La derniere colonne `Source des donnees` indique l'origine (base officielle ou
   jeu de demonstration) et le nom du fichier porte le suffixe `-DEMO` lorsque
@@ -146,6 +159,19 @@ libelles deja calcules, le navigateur se contente de les afficher.
 
 Les archives deposees sont rangees dans `data/livrables/` (hors Git), sous le nom
 `<siren>.zip`.
+
+### Connexion instable (partage de connexion, reseau mobile)
+
+- Les **lectures** (fiche entreprise, annuaire) sont rejouees une fois en cas de
+  coupure reseau ; les ecritures ne le sont jamais, pour ne pas risquer un
+  doublon.
+- `static/js/app.js` affiche « Connexion perdue. Réessayez dès que le réseau
+  revient. » puis « Connexion rétablie. » : l'incident se voit au lieu de passer
+  pour une panne de l'outil.
+- La connexion echouee faute de cookie n'oblige plus a rouvrir un onglet (voir
+  « Apercu affiche dans une iframe ») : c'est le principal echec observe sur un
+  telephone en partage de connexion.
+
 ## Donnees locales
 
 Tout est stocke dans `data/` (base SQLite + cle de sessions), hors Git :
@@ -179,6 +205,42 @@ Creer un site de type « Application Python », commande de demarrage :
 persistant (le home du compte, ex. `/home/<compte>/data`). alwaysdata utilise
 le port qu'il fournit via l'interface, fixer `MBDV_PORT` en consequence.
 
+### Garder le service eveille (hebergements gratuits)
+
+Les offres gratuites (Render, par exemple) **endorment un service qui n'a recu
+aucune requete entrante pendant 15 minutes** : la visite suivante attend alors
+30 a 60 secondes de redemarrage. Deux pieces s'en occupent :
+
+- **Point de controle public `GET /sante`** : reponse JSON minuscule, sans
+  session ni base de donnees (utilisable aussi par une supervision).
+- **Bot de maintien en vie** (`app/keepalive.py`) : un fil discret appelle
+  `/sante` **toutes les 10 minutes** sur l'adresse **publique** du site - pas
+  `localhost`, sinon la requete ne passe pas par le proxy de l'hebergeur et ne
+  compte pas comme trafic. Il s'active tout seul des qu'une adresse est connue :
+  `RENDER_EXTERNAL_URL` (Render) ou `RAILWAY_PUBLIC_DOMAIN` (Railway), fournies
+  par la plateforme, sinon `MBDV_KEEPALIVE_URL` (ou `MBDV_SITE_URL`). En local,
+  il ne se passe rien.
+
+| Variable | Effet |
+|---|---|
+| `MBDV_KEEPALIVE_URL` | adresse publique a solliciter (ex. `https://balise.onrender.com`) |
+| `MBDV_SITE_URL` | meme role, si elle est deja definie pour d'autres usages |
+| `MBDV_KEEPALIVE` | `1` force, `0` coupe ; sans valeur : actif si une adresse est connue |
+| `MBDV_KEEPALIVE_INTERVAL` | periode entre deux pings : `600` (10 min) par defaut, `10m` / `90s` acceptes, bornee a 14 min |
+
+**Limite a connaitre** : un service **deja endormi** ne peut pas se reveiller
+lui-meme (son fil dort avec lui). Le bot empeche l'endormissement tant qu'il
+tourne ; apres un arret (redemarrage de la plateforme, plantage), la premiere
+visite rallume le service, puis le bot reprend. Pour supprimer aussi les
+reveils a froid, faites appeler `/sante` **de l'exterieur** par un moniteur
+gratuit (UptimeRobot toutes les 5 min, cron-job.org toutes les 5 a 10 min) :
+c'est la seule solution qui agit aussi sur un service endormi. GitHub Actions
+convient mal (minimum 5 min, taches souvent retardees, et minutes facturees sur
+un depot prive).
+
+Sur alwaysdata ou un serveur persistant, rien de tout cela n'est utile : le
+processus ne s'endort pas.
+
 ### Variables d'environnement utiles en production
 
 `MBDV_ADMIN_PASSWORD`, `MBDV_ASSOCIE_PASSWORD` (mots de passe initiaux),
@@ -189,26 +251,43 @@ que le site est servi en HTTPS), `MBDV_TRUST_PROXY=1` (faire confiance a
 `X-Forwarded-For` / `X-Forwarded-Proto`, uniquement derriere un reverse proxy
 de confiance), `MBDV_FRAME_ANCESTORS="'self'"` (interdire l'affichage du site
 dans un cadre d'un autre site — a poser sur un site reel, a laisser vide pour un
-apercu en iframe), `MBDV_EMBEDDED_SESSION=1` ou `MBDV_EMBEDDED_COOKIES=1` (apercu
-affiche dans une iframe d'un autre site : cookie de session en
-`SameSite=None; Secure; Partitioned` et jeton de session dans l'URL si le cookie
-est malgre tout refuse — voir la section suivante).
+apercu en iframe), `MBDV_EMBEDDED_SESSION=1` ou `MBDV_EMBEDDED_COOKIES=1` (force
+le transport de la session par jeton d'URL et le cookie de session en
+`SameSite=None; Secure; Partitioned`). Sans ces variables, une connexion depuis
+un cadre qui refuse le cookie fonctionne deja (voir la section suivante),
+et `MBDV_KEEPALIVE` / `MBDV_KEEPALIVE_URL` / `MBDV_KEEPALIVE_INTERVAL` reglent
+le maintien en vie du service (voir la section precedente).
 
 ### Apercu affiche dans une iframe
 
 Si l'application est ouverte dans un cadre appartenant a un autre site (apercus
 heberges type e2b / Codespaces), le navigateur traite le cookie de session comme
-un cookie tiers et le refuse : le POST de connexion echoue avec « Session
-expiree ou requete non autorisee ». Deux solutions :
+un cookie tiers et le refuse. L'application s'en apercoit toute seule et
+continue de fonctionner : **rien a configurer**.
 
-1. **Ouvrir l'apercu dans un onglet dedie** (les cookies redeviennent des cookies
-   de premiere partie) ;
-2. **Demarrer le service avec `MBDV_EMBEDDED_SESSION=1`** : le cookie passe en
-   `SameSite=None; Secure; Partitioned` et, meme s'il reste refuse, l'application
-   fonctionne sans cookie — la session est transportee par un jeton signe dans
-   l'URL (`_s`), propage automatiquement aux liens, aux formulaires et aux
-   appels AJAX par `static/js/app.js`. Les pages sont alors servies avec
-   `Referrer-Policy: same-origin` et `Cache-Control: no-store`.
+- Chaque page porte un **jeton CSRF signe** au lieu d'une simple valeur de
+  session, et le formulaire de connexion part avec un marqueur `_emb=1` quand la
+  page est affichee dans un cadre (`static/js/app.js`).
+- Si le POST de connexion arrive **sans cookie de session** mais avec un jeton
+  signe emis par ce site et une provenance de meme origine (`Sec-Fetch-Site`,
+  sinon `Origin` / `Referer`), la connexion est acceptee et la session est
+  transportee par un **jeton signe dans l'URL** (`_s`), propage automatiquement
+  aux liens, aux formulaires et aux appels AJAX. Les pages sont alors servies
+  avec `Referrer-Policy: same-origin` et `Cache-Control: no-store`.
+- Des qu'un cookie revient (navigateur normal, onglet dedie), le mode cookie
+  reprend : aucun jeton ne figure dans les adresses.
+
+Une requete envoyee depuis un autre site ne beneficie jamais de ce repli, meme
+avec un jeton valide et `_emb=1` : la provenance est verifiee avant d'ouvrir une
+session sans cookie.
+
+Trois reglages restent utiles pour un apercu :
+
+1. **Ouvrir l'apercu dans un onglet dedie** : les cookies redeviennent des
+   cookies de premiere partie, c'est le mode le plus econome ;
+2. **`MBDV_EMBEDDED_SESSION=1`** : force le transport par jeton d'URL pour tous
+   les clients (le cookie passe en `SameSite=None; Secure; Partitioned`) ;
+3. **`MBDV_COOKIE_SECURE=1`** des que le site est servi en HTTPS.
 
 Pour un apercu ou l'on veut juger l'affichage sans ressaisir de mot de passe,
 `MBDV_DEJA_CONNECTE=1` ouvre la session du dirigeant au premier chargement (la
@@ -217,9 +296,9 @@ racine redirige vers `/accueil`). Ce reglage n'est pris en compte qu'avec
 de connexion reste exigee, et la page `/connexion` reste servie dans tous les
 cas.
 
-Dans les deux cas, un refus d'ecriture est journalise avec le contexte de la
-requete (mode apercu, cookie recu ou non, en-tetes `Sec-Fetch-*`) pour identifier
-la cause en une ligne.
+Un refus d'ecriture reste journalise avec le contexte de la requete (mode apercu,
+cookie recu ou non, en-tetes `Sec-Fetch-*`) pour identifier la cause en une
+ligne ; il ne reste produit que si le jeton CSRF manque ou vient d'un autre site.
 
 Note : Netlify et Vercel ne conviennent pas tels quels (sites statiques /
 serverless JS sans processus Python ni disque persistant).

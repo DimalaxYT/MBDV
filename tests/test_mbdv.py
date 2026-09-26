@@ -8,13 +8,14 @@ import json
 import os
 import re
 import sqlite3
+import threading
 from contextlib import contextmanager
 from html.parser import HTMLParser
 
 import pytest
 import requests
 
-from app import auth, create_app, db, detect, gov_api, views
+from app import auth, create_app, db, detect, gov_api, keepalive, views
 
 # --------------------------------------------------------------------------
 # Garde-fou reseau : la suite doit rester entierement hors ligne.
@@ -227,6 +228,88 @@ def test_api_sans_cookie_repond_en_json(client):
     reponse = client.post("/api/masquer", json={"siren": "123456789"})
     assert reponse.status_code == 400
     assert reponse.is_json and reponse.get_json()["ok"] is False
+
+
+# --------------------------------------------------------------------------
+# Session sans cookie : apercu affiche dans un cadre, sans aucun reglage
+# --------------------------------------------------------------------------
+
+_ENTETES_CADRE = {"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Dest": "iframe"}
+
+
+def _connexion_cadre_sans_cookie(app, formulaire=None, entetes=None):
+    """Connexion depuis un navigateur qui ne garde aucun cookie.
+
+    La page est lue par un premier client (le navigateur qui charge le
+    formulaire) ; le POST part d'un client vierge, donc sans le cookie de
+    session : c'est ce que fait un apercu affiche dans un cadre tiers.
+    """
+    page = app.test_client().get("/connexion", headers={"Sec-Fetch-Dest": "iframe"})
+    corps = page.get_data(as_text=True)
+    jeton = re.search(r'name="_csrf" value="([^"]+)"', corps).group(1)
+    donnees = {"username": "admin", "password": "MBDV-admin-2026", "_csrf": jeton}
+    donnees.update(formulaire or {})
+    return app.test_client().post("/connexion", data=donnees,
+                                  headers=entetes or _ENTETES_CADRE)
+
+
+def test_connexion_sans_cookie_ouvre_la_session_dans_l_url(app):
+    """Sans variable d'environnement : le cadre qui refuse le cookie passe par l'URL."""
+    reponse = _connexion_cadre_sans_cookie(app, formulaire={"_emb": "1"})
+    assert reponse.status_code == 302                     # et non un refus CSRF
+    cible = reponse.headers["Location"]
+    assert cible.startswith("/accueil") and "_s=" in cible
+
+    # La page suivante est demandee par un client toujours vierge de cookies.
+    page = app.test_client().get(cible, headers=_ENTETES_CADRE)
+    corps = page.get_data(as_text=True)
+    assert page.status_code == 200
+    assert 'action="/deconnexion"' in corps               # session reconnue
+    assert 'name="session-token" content=""' not in corps  # jeton propage au JS
+    # Jeton dans l'URL : ni fuite par Referer, ni copie chez un intermediaire.
+    assert page.headers["Referrer-Policy"] == "same-origin"
+    assert page.headers["Cache-Control"] == "no-store"
+
+
+def test_connexion_sans_cookie_ecriture_autorisee(app):
+    """Le jeton d'URL ouvre aussi les ecritures (sinon la session serait inutile)."""
+    reponse = _connexion_cadre_sans_cookie(app, formulaire={"_emb": "1"})
+    jeton = reponse.headers["Location"].split("_s=")[1]
+    client = app.test_client()
+    corps = client.get("/?_s=" + jeton + "&q=coiffure", headers=_ENTETES_CADRE).get_data(as_text=True)
+    jeton_csrf = re.search(r'<meta name="csrf" content="([^"]+)"', corps).group(1)
+    ecriture = client.post("/api/suivre?_s=" + jeton,
+                           json={"snapshot": entreprise("848902672", "CARACOLE COIFFURE")},
+                           headers={"X-CSRF-Token": jeton_csrf, **_ENTETES_CADRE})
+    assert ecriture.status_code == 200, ecriture.get_data(as_text=True)
+    assert ecriture.get_json()["tracked"] is True
+
+
+def test_connexion_sans_cookie_page_deja_servie(app):
+    """Page chargee avant la perte du cookie (sans _emb) : le jeton signe suffit."""
+    reponse = _connexion_cadre_sans_cookie(app)
+    assert reponse.status_code == 302
+    assert "_s=" in reponse.headers["Location"]
+
+
+def test_connexion_sans_cookie_refusee_depuis_un_autre_site(app):
+    """Un site tiers ne peut pas faire poster le jeton : pas de connexion CSRF."""
+    reponse = _connexion_cadre_sans_cookie(
+        app, formulaire={"_emb": "1"},
+        entetes={"Sec-Fetch-Site": "cross-site", "Origin": "https://mechant.example"})
+    assert reponse.status_code == 400
+    assert "cookie de session" in reponse.get_data(as_text=True)
+
+
+def test_connexion_avec_cookie_garde_le_mode_cookie(client):
+    """Un navigateur qui garde ses cookies n'embarque aucun jeton dans l'URL."""
+    reponse = connexion(client)
+    assert reponse.status_code == 302
+    assert reponse.headers["Location"] == "/accueil"
+    assert "_s=" not in reponse.headers["Location"]
+    page = client.get("/accueil")
+    assert page.status_code == 200
+    assert "no-store" not in (page.headers.get("Cache-Control") or "")
 
 
 def test_page_erreur_soignee(client):
@@ -1446,6 +1529,31 @@ def test_page_hors_limites_ramenee_a_la_derniere(client, monkeypatch):
     assert "Page 1 sur 1" in html
 
 
+def test_sans_site_verification_inaboutie_explique_le_delai(client, monkeypatch):
+    """Verification non terminee (reseau lent) : la page le dit, et quoi faire."""
+    monkeypatch.setattr(gov_api, "search", faux_search(_catalogue, total_results=25, total_pages=1))
+    monkeypatch.setattr(detect, "verifie_lot", lambda items, budget_total=3.0: None)
+    monkeypatch.setattr(detect, "etats_effectifs_lot", lambda items: {})
+    connexion(client)
+    html = client.get("/?q=coiffure&sans_site=1").get_data(as_text=True)
+    assert snapshots(html) == []
+    assert "25 n'ont" in html and "temps imparti" in html
+    assert "relancez la recherche" in html.lower()
+
+
+def test_sans_site_tous_ont_un_site(client, monkeypatch):
+    """Tous les resultats ont un domaine qui repond : dit clairement, sans vide muet."""
+    monkeypatch.setattr(gov_api, "search", faux_search(_catalogue, total_results=25, total_pages=1))
+    monkeypatch.setattr(detect, "verifie_lot", lambda items, budget_total=3.0: None)
+    monkeypatch.setattr(detect, "etats_effectifs_lot", lambda items: {
+        c["siren"]: {"status": "site", "domain": "exemple.fr", "source": "dns",
+                     "checked_at": "2026-09-26T10:00:00Z"} for c in items})
+    connexion(client)
+    html = client.get("/?q=coiffure&sans_site=1").get_data(as_text=True)
+    assert snapshots(html) == []
+    assert "25 ont un domaine qui répond" in html
+
+
 # --------------------------------------------------------------------------
 # Mode demonstration et export
 # --------------------------------------------------------------------------
@@ -1623,6 +1731,46 @@ def test_recherche_geo_extraction_et_filtrage_91_vs_77(client, monkeypatch):
     assert recherche_params["q"] == "coiffure"
 
 
+def test_recherche_page_ecartee_poursuit_sur_les_suivantes(client, monkeypatch):
+    """Une page entierement ecartee ne doit pas se lire « aucun resultat ».
+
+    L'API trie par pertinence : la premiere page d'une recherche large est
+    souvent faite de chaines nationales, toutes ecartees. Sans suite, la page
+    annoncait zero entreprise alors que la base en renvoyait des milliers.
+    """
+    def faux(q="", page=1, **kwargs):
+        if page == 1:
+            items = [entreprise(f"1{i:08d}", f"CHAINE NATIONALE {i}", categorie="GE")
+                     for i in range(25)]
+        else:
+            items = [entreprise(f"2{page}{i:07d}", f"BOULANGERIE ARTISANALE {page}-{i}")
+                     for i in range(25)]
+        return {"items": items, "total_results": 500, "page": page, "total_pages": 6}
+
+    monkeypatch.setattr(gov_api, "search", faux)
+    connexion(client)
+    html = client.get("/?q=boulangerie").get_data(as_text=True)
+    snaps = snapshots(html)
+    assert len(snaps) == 25                                   # la page est remplie
+    assert all(s["nom"].startswith("BOULANGERIE ARTISANALE") for s in snaps)
+    assert "Au moins" in html                                 # plafond de pages annonce
+    assert "sur 50 résultats analysés" in html
+    assert "grandes enseignes" in html                        # ecartes toujours comptes
+
+
+def test_recherche_tout_ecarte_explique_les_filtres(client, monkeypatch):
+    """Rien d'affichable du tout : la page dit pourquoi, au lieu d'un vide muet."""
+    monkeypatch.setattr(gov_api, "search", faux_search(
+        lambda page: [entreprise(f"9{page}{i:07d}", f"CHAINE {page}-{i}", categorie="GE")
+                      for i in range(25)], total_results=900, total_pages=8))
+    connexion(client)
+    html = client.get("/?q=restaurant").get_data(as_text=True)
+    assert snapshots(html) == []
+    assert "Aucune entreprise ne correspond" in html
+    assert "grandes enseignes" in html
+    assert "Inclure les grandes entreprises" in html
+
+
 def test_normalisation_champ_departement(client, monkeypatch):
     """Le champ departement accepte le nom (Essonne) ou un code avec 0 (091)."""
     recherche_params = {}
@@ -1738,6 +1886,43 @@ def test_etablissement_matching_selectionne_selon_departement():
     }
     norm_sans_dep = gov_api.normalize_result(brut_sans_dep)
     assert norm_sans_dep["departement"] == "91"
+
+
+def test_etablissement_matching_departement_deduit_du_code_postal():
+    """Forme reelle de l'API : pas de champ « departement » hors du siege.
+
+    Verifie sur recherche-entreprises.api.gouv.fr : les entrees de
+    matching_etablissements ne portent que le code postal. Sans deduction, une
+    entreprise dont le siege est ailleurs etait classee « hors zone » et
+    disparaissait des recherches par departement.
+    """
+    brut = {
+        "siren": "478455793",
+        "nom_complet": "BOULANGERIE ORMOY",
+        "categorie_entreprise": "PME",
+        # Siege reel hors du departement demande (etranger a la recherche)
+        "siege": {
+            "adresse": "615 AVENUE DE LA CHAFFINE 13160 CHATEAURENARD",
+            "code_postal": "13160", "departement": "13",
+            "libelle_commune": "CHATEAURENARD", "siret": "47845579305205",
+        },
+        # Etablissement dans le 91, sans champ "departement"
+        "matching_etablissements": [{
+            "adresse": "BATIMENT C RUE DU SAULE 91540 ORMOY",
+            "code_postal": "91540", "libelle_commune": "ORMOY",
+            "siret": "47845579300867",
+        }],
+    }
+    norm = gov_api.normalize_result(brut, filter_departement="91")
+    assert norm["departement"] == "91"
+    assert norm["code_postal"] == "91540"
+    assert norm["commune"] == "ORMOY"
+    assert norm["siret_etab"] == "47845579300867"
+    # Corse : meme deduction par code postal (20000 Ajaccio -> 2A, 20200 Bastia -> 2B).
+    assert gov_api.normalize_result(
+        {"siren": "1", "siege": {"code_postal": "20000"}})["departement"] == "2A"
+    assert gov_api.normalize_result(
+        {"siren": "1", "siege": {"code_postal": "20200"}})["departement"] == "2B"
 
 
 def test_api_cache_et_performance():
@@ -2728,3 +2913,171 @@ def test_comptage_tolerant_sur_table_absente(app):
     with app.app_context():
         assert views._compte("SELECT COUNT(*) n FROM table_qui_n_existe_pas") == 0
         assert views._compte("SELECT COUNT(*) n FROM tracked") >= 0
+
+
+# --------------------------------------------------------------------------
+# Point de controle et maintien en vie (hebergements qui s'endorment)
+# --------------------------------------------------------------------------
+
+def test_sante_accessible_sans_session(client):
+    """Le point de controle repond sans compte : c'est lui que les moniteurs appellent."""
+    reponse = client.get("/sante")
+    assert reponse.status_code == 200
+    corps = reponse.get_json()
+    assert corps["ok"] is True and corps["service"]
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", corps["heure"])
+    assert reponse.headers["Cache-Control"] == "no-store"
+    assert "Espace associés" not in reponse.get_data(as_text=True)
+
+
+def test_sante_toujours_joignable_en_apercu(app_deja_connecte):
+    """Meme en apercu « deja connecte », /sante n'est pas redirige vers la connexion."""
+    reponse = app_deja_connecte.test_client().get("/sante")
+    assert reponse.status_code == 200
+    assert reponse.get_json()["ok"] is True
+
+
+def test_keepalive_adresse_publique(monkeypatch):
+    """L'adresse est deduite, nettoyee, et completee par le chemin de controle."""
+    for nom in ("MBDV_KEEPALIVE_URL", "MBDV_SITE_URL", "RENDER_EXTERNAL_URL",
+                "RAILWAY_PUBLIC_DOMAIN"):
+        monkeypatch.delenv(nom, raising=False)
+    assert keepalive.url_publique() == ""            # rien a pinguer en local
+
+    monkeypatch.setenv("RENDER_EXTERNAL_URL", "https://balise.onrender.com")
+    assert keepalive.url_publique() == "https://balise.onrender.com"
+    assert keepalive.cible("https://balise.onrender.com") == "https://balise.onrender.com/sante"
+
+    # Un reglage explicite l'emporte, meme saisi sans schema ni sans barre finale.
+    monkeypatch.setenv("MBDV_KEEPALIVE_URL", "mon-site.example.com/")
+    assert keepalive.url_publique() == "https://mon-site.example.com"
+    assert keepalive.cible(keepalive.url_publique()) == "https://mon-site.example.com/sante"
+
+    monkeypatch.delenv("MBDV_KEEPALIVE_URL")
+    monkeypatch.setenv("MBDV_SITE_URL", "http://interne.local:5050")
+    assert keepalive.url_publique() == "http://interne.local:5050"
+
+    # Railway ne fournit qu'un nom d'hote : le schema est ajoute.
+    monkeypatch.delenv("MBDV_SITE_URL")
+    monkeypatch.delenv("RENDER_EXTERNAL_URL")
+    monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "balise.up.railway.app")
+    assert keepalive.url_publique() == "https://balise.up.railway.app"
+
+
+def test_keepalive_intervalle_borne(monkeypatch):
+    """10 minutes par defaut ; jamais au-dela du seuil qui endort les hebergements."""
+    monkeypatch.delenv("MBDV_KEEPALIVE_INTERVAL", raising=False)
+    assert keepalive.intervalle() == 600 == keepalive.INTERVALLE_DEFAUT
+    monkeypatch.setenv("MBDV_KEEPALIVE_INTERVAL", "10m")
+    assert keepalive.intervalle() == 600
+    monkeypatch.setenv("MBDV_KEEPALIVE_INTERVAL", "90s")
+    assert keepalive.intervalle() == 90
+    monkeypatch.setenv("MBDV_KEEPALIVE_INTERVAL", "3600")   # pingerait trop tard
+    assert keepalive.intervalle() == keepalive.INTERVALLE_MAX
+    monkeypatch.setenv("MBDV_KEEPALIVE_INTERVAL", "5")
+    assert keepalive.intervalle() == keepalive.INTERVALLE_MIN
+    monkeypatch.setenv("MBDV_KEEPALIVE_INTERVAL", "bientot")
+    assert keepalive.intervalle() == keepalive.INTERVALLE_DEFAUT
+
+
+def test_keepalive_rien_ne_demarre_sans_adresse(app, monkeypatch):
+    """Sur un poste de travail, aucun fil ne se lance : rien a solliciter."""
+    for nom in ("MBDV_KEEPALIVE_URL", "MBDV_SITE_URL", "RENDER_EXTERNAL_URL"):
+        monkeypatch.delenv(nom, raising=False)
+    keepalive.arreter()
+    try:
+        keepalive.init_app(app)
+        assert keepalive.actif() is False
+        assert "mbdv_keepalive" not in app.extensions
+    finally:
+        keepalive.arreter()
+
+
+def test_keepalive_demarre_avec_adresse_et_un_seul_fil(app, monkeypatch):
+    monkeypatch.setenv("MBDV_KEEPALIVE_URL", "https://balise.example.com")
+    monkeypatch.setattr(keepalive, "ping", lambda url, timeout=None: (True, "HTTP 200"))
+    keepalive.arreter()
+    try:
+        keepalive.init_app(app)
+        assert keepalive.actif() is True
+        assert app.extensions["mbdv_keepalive"]["url"] == "https://balise.example.com/sante"
+        # Une seconde activation ne doit pas doubler les requetes.
+        thread = keepalive.demarrer(app, "https://balise.example.com/sante", 600)
+        assert keepalive.demarrer(app, "https://balise.example.com/sante", 600) is thread
+    finally:
+        keepalive.arreter()
+    assert keepalive.actif() is False
+
+
+def test_keepalive_desactive_par_reglage(app, monkeypatch):
+    """MBDV_KEEPALIVE=0 coupe le bot meme si l'adresse est connue."""
+    monkeypatch.setenv("MBDV_KEEPALIVE_URL", "https://balise.example.com")
+    monkeypatch.setenv("MBDV_KEEPALIVE", "0")
+    keepalive.arreter()
+    try:
+        keepalive.init_app(app)
+        assert keepalive.actif() is False
+    finally:
+        keepalive.arreter()
+
+
+def test_keepalive_ping_ne_leve_jamais(monkeypatch):
+    """Un incident reseau est rendu, jamais propage : le bot ne doit pas mourir."""
+    class Reponse:
+        status_code = 200
+
+    class ClientTiede:
+        def get(self, url, **kwargs):
+            return Reponse()
+
+    monkeypatch.setattr(keepalive, "_client", lambda: ClientTiede())
+    assert keepalive.ping("https://exemple.test/sante") == (True, "HTTP 200")
+
+    class ClientEnPanne:
+        def get(self, url, **kwargs):
+            raise requests.ConnectionError("coupure")
+
+    monkeypatch.setattr(keepalive, "_client", lambda: ClientEnPanne())
+    ok, detail = keepalive.ping("https://exemple.test/sante")
+    assert ok is False and detail == "ConnectionError"
+
+    class ClientEnErreur:
+        def get(self, url, **kwargs):
+            return type("R", (), {"status_code": 503})()
+
+    monkeypatch.setattr(keepalive, "_client", lambda: ClientEnErreur())
+    assert keepalive.ping("https://exemple.test/sante") == (False, "HTTP 503")
+
+
+def test_keepalive_boucle_pingue_et_s_arrete(app, monkeypatch):
+    """La boucle sollicite le site a intervalle regulier, puis rend la main a l'arret."""
+    monkeypatch.setattr(keepalive, "PREMIER_PING", 0)
+    appels = []
+    arret = threading.Event()
+
+    def faux_ping(url, timeout=None):
+        appels.append(url)
+        if len(appels) >= 3:
+            arret.set()
+        return True, "HTTP 200"
+
+    monkeypatch.setattr(keepalive, "ping", faux_ping)
+    keepalive._boucle(app, "https://balise.example.com/sante", 0.01, arret)
+    assert appels == ["https://balise.example.com/sante"] * 3
+
+
+def test_keepalive_boucle_survit_a_une_panne(app, monkeypatch):
+    """Une panne repetee ne tue pas le fil : il continue de solliciter le site."""
+    monkeypatch.setattr(keepalive, "PREMIER_PING", 0)
+    appels = []
+    arret = threading.Event()
+
+    def faux_ping(url, timeout=None):
+        appels.append(url)
+        if len(appels) >= 4:
+            arret.set()
+        return False, "SSLError"
+
+    monkeypatch.setattr(keepalive, "ping", faux_ping)
+    keepalive._boucle(app, "https://balise.example.com/sante", 0.01, arret)
+    assert len(appels) == 4
